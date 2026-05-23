@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "BitLut"
+include(":app")
