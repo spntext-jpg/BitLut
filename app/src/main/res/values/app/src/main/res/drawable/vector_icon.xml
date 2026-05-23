@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <!-- Белый фон -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 0,0 H 512 V 512 H 0 Z" />
+    <!-- Лаймовая пиктограмма -->
+    <path
+        android:fillColor="#A3E635"
+        android:pathData="M 280,90 m -30,0 a 30,30 0,1 1,60 0 a 30,30 0,1 1,-60 0 M 320,150 l -50,30 v 70 l 60,70 l -25,20 l -65,-75 v -60 l -50,30 l -20,-40 l 80,-50 z M 270,250 l -30,80 l -60,10 l 10,-30 l 40,-10 l 25,-60 z" />
+</vector>
