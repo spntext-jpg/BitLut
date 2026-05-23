@@ -3,3 +3,9 @@ build/
 android-sdk/
 local.properties
 *.apk
+.gradle/
+build/
+android-sdk/
+local.properties
+*.apk
+embedded-jdk/
