@@ -13,5 +13,5 @@ interface HuaweiApiService {
         @Field("client_secret") clientSecret: String,
         @Field("code") code: String,
         @Field("redirect_uri") redirectUri: String
-    ): Any // Заменим Any на конкретный DTO при рефакторинге маппинга
+    ): HuaweiAuthResponse
 }
