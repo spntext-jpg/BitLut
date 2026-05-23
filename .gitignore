@@ -9,3 +9,7 @@ android-sdk/
 local.properties
 *.apk
 embedded-jdk/
+
+# Local JDK and embedded environments
+embedded-jdk/
+.gradle/
