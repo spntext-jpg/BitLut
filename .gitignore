@@ -1,15 +1,27 @@
-.gradle/
+# Build outputs
 build/
-android-sdk/
-local.properties
+app/build/
 *.apk
+*.aab
+
+# Gradle
 .gradle/
-build/
-android-sdk/
 local.properties
-*.apk
+
+# Android SDK (never commit the SDK itself)
+android-sdk/
 embedded-jdk/
 
-# Local JDK and embedded environments
-embedded-jdk/
-.gradle/
+# IDE files
+.idea/
+*.iml
+*.iws
+.DS_Store
+Thumbs.db
+
+# Sensitive config — put real Huawei keys here, NEVER commit this file
+# After cloning: copy huawei.properties.example → huawei.properties and fill in values
+huawei.properties
+
+# Repomix output (analysis artifact, not source)
+repomix-output.xml
