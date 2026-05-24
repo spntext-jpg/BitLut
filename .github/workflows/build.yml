@@ -31,19 +31,53 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Verify Java version
-        run: java -version
+      - name: Build APK
+        id: build
+        run: |
+          BUILD_TYPE=${{ github.event.inputs.build_type }}
+          TASK="assemble$(echo ${BUILD_TYPE^})"
+          ./gradlew $TASK --stacktrace --build-cache 2>&1 | tee build_output.txt
+          exit ${PIPESTATUS[0]}
 
-      - name: Build Debug APK
-        if: github.event.inputs.build_type == 'debug'
-        run: ./gradlew assembleDebug --stacktrace --build-cache
+      - name: Parse and summarize errors
+        if: failure()
+        run: |
+          echo "## ❌ Build Failed — Error Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: Build Release APK
-        if: github.event.inputs.build_type == 'release'
-        run: ./gradlew assembleRelease --stacktrace --build-cache
+          echo "### Kotlin compilation errors:" >> $GITHUB_STEP_SUMMARY
+          grep -E "^e: file://|Unresolved reference|is not defined|None of the candidates" build_output.txt \
+            | sed 's|/home/runner/work/BitLut/BitLut/||' \
+            | sort -u >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Resource / AAPT errors:" >> $GITHUB_STEP_SUMMARY
+          grep -E "AAPT: error:|ERROR:.*AndroidManifest|not found\." build_output.txt \
+            | sed 's|/home/runner/work/BitLut/BitLut/||' \
+            | sort -u >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Failed Gradle tasks:" >> $GITHUB_STEP_SUMMARY
+          grep -E "> Task .* FAILED" build_output.txt \
+            | sort -u >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Top-level exception:" >> $GITHUB_STEP_SUMMARY
+          grep -A 3 "What went wrong:" build_output.txt \
+            | head -20 >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
+
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-log
+          path: build_output.txt
+          retention-days: 7
 
       - name: Upload Debug APK
-        if: github.event.inputs.build_type == 'debug'
+        if: success() && github.event.inputs.build_type == 'debug'
         uses: actions/upload-artifact@v4
         with:
           name: BitLut-debug
@@ -51,7 +85,7 @@ jobs:
           retention-days: 14
 
       - name: Upload Release APK
-        if: github.event.inputs.build_type == 'release'
+        if: success() && github.event.inputs.build_type == 'release'
         uses: actions/upload-artifact@v4
         with:
           name: BitLut-release
