@@ -7,9 +7,9 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@drawable/vector_icon"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/vector_icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.BitLut"
         tools:targetApi="34">
