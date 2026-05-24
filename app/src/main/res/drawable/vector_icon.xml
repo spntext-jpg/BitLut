@@ -1,10 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="512dp"
     android:height="512dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
-    <path android:fillColor="#FFFFFF"
-        android:pathData="M0,0H512V512H0Z"/>
-    <path android:fillColor="#A3E635"
-        android:pathData="M280,90m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0M320,150l-50,30v70l60,70l-25,20l-65,-75v-60l-50,30l-20,-40l80,-50zM270,250l-30,80l-60,10l10,-30l40,-10l25,-60z"/>
+
+    <!-- Background circle -->
+    <path
+        android:fillColor="#0D0D0D"
+        android:pathData="M0,0 L512,0 L512,512 L0,512 Z"/>
+
+    <!-- Outer sync ring — left arc -->
+    <path
+        android:strokeColor="#A3E635"
+        android:strokeWidth="28"
+        android:fillColor="#00000000"
+        android:pathData="M140,256 A116,116 0 1,1 256,372"/>
+
+    <!-- Outer sync ring — right arc -->
+    <path
+        android:strokeColor="#A3E635"
+        android:strokeWidth="28"
+        android:fillColor="#00000000"
+        android:pathData="M372,256 A116,116 0 1,1 256,140"/>
+
+    <!-- Arrow head top-right -->
+    <path
+        android:fillColor="#A3E635"
+        android:pathData="M256,110 L290,155 L222,155 Z"/>
+
+    <!-- Arrow head bottom-left -->
+    <path
+        android:fillColor="#A3E635"
+        android:pathData="M256,402 L222,357 L290,357 Z"/>
+
+    <!-- Center heart -->
+    <path
+        android:fillColor="#A3E635"
+        android:pathData="M256,296
+            C256,296 204,260 204,228
+            C204,210 218,198 234,200
+            C244,201 252,208 256,214
+            C260,208 268,201 278,200
+            C294,198 308,210 308,228
+            C308,260 256,296 256,296 Z"/>
 </vector>

@@ -8,53 +8,49 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
-import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.lifecycleScope
 import androidx.work.*
 import com.openhealth.sync.data.GoogleHealthManager
+import com.openhealth.sync.data.HealthConnectStatus
 import com.openhealth.sync.data.HuaweiAuthManager
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.ui.main.MainScreen
 import com.openhealth.sync.ui.main.MainUiState
 import com.openhealth.sync.ui.theme.OpenHealthSyncTheme
+import com.openhealth.sync.util.AppLogger
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-/**
- * Main entry point.
- *
- * UI state is owned here (single Activity app — ViewModel would be the next
- * step when complexity grows, but this is correct for current scope).
- *
- * Key fixes vs previous version:
- * - isSyncing is reset when WorkManager reports a finished state
- * - isHuaweiConnected reads from HuaweiAuthManager (SSOT), not a toggle
- * - onResume() refreshes both connection statuses after OAuth browser returns
- */
+private const val TAG = "MainActivity"
+private const val HC_PLAY_URI =
+    "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata"
+
 class MainActivity : ComponentActivity() {
 
     private val googleHealthManager by lazy { GoogleHealthManager(this) }
     private val huaweiAuthManager   by lazy { HuaweiAuthManager(this) }
 
+    // mutableStateOf at class level — survives recomposition
     private var uiState by mutableStateOf(MainUiState())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLogger.i(TAG, "App started — ${android.os.Build.MODEL} API${android.os.Build.VERSION.SDK_INT}")
 
         setContent {
-            // Health Connect permission launcher
-            val requestPermissionsLauncher = rememberLauncherForActivityResult(
+            val permLauncher = rememberLauncherForActivityResult(
                 PermissionController.createRequestPermissionResultContract()
             ) { granted ->
                 val allGranted = granted.containsAll(googleHealthManager.permissions)
+                AppLogger.i(TAG, "HC permissions granted=$allGranted")
                 uiState = uiState.copy(
                     isGoogleConnected = allGranted,
-                    syncStatus = if (allGranted)
-                        "Google Health Connect подключен"
-                    else
-                        "Доступ к Health Connect отклонен"
+                    syncStatus = if (allGranted) "Google Health подключён" else "Доступ отклонён"
                 )
                 if (allGranted) setupPeriodicSync()
             }
@@ -65,104 +61,121 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     uiState = uiState,
 
-                    onConnectHuawei = {
-                        if (huaweiAuthManager.isAuthorized()) {
-                            Toast.makeText(this, "Huawei уже подключен", Toast.LENGTH_SHORT).show()
-                        } else {
-                            // Open system browser for OAuth2 login — HuaweiCallbackActivity intercepts return
-                            val intent = Intent(Intent.ACTION_VIEW,
-                                Uri.parse(huaweiAuthManager.getAuthUrl()))
-                            startActivity(intent)
-                        }
-                    },
-
                     onConnectGoogle = {
-                        when (googleHealthManager.getSdkStatus()) {
-                            HealthConnectClient.SDK_AVAILABLE ->
-                                requestPermissionsLauncher.launch(googleHealthManager.permissions)
-                            HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED ->
+                        AppLogger.i(TAG, "onConnectGoogle: hcStatus=${uiState.healthConnectStatus}")
+                        when (uiState.healthConnectStatus) {
+                            HealthConnectStatus.AVAILABLE ->
+                                permLauncher.launch(googleHealthManager.permissions)
+                            HealthConnectStatus.NOT_INSTALLED,
+                            HealthConnectStatus.NEEDS_UPDATE -> {
+                                AppLogger.i(TAG, "Opening Play Store for Health Connect")
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(HC_PLAY_URI)))
+                            }
+                            HealthConnectStatus.NOT_SUPPORTED ->
                                 Toast.makeText(this,
-                                    "Обновите Google Health Connect", Toast.LENGTH_LONG).show()
-                            else ->
-                                Toast.makeText(this,
-                                    "Health Connect недоступен на этом устройстве",
+                                    "Health Connect не поддерживается на этом устройстве",
                                     Toast.LENGTH_LONG).show()
                         }
                     },
 
-                    onSyncNow = {
-                        triggerManualSync()
+                    onConnectHuawei = {
+                        // NOTE: no early return — use explicit branching
+                        val configured = HuaweiConfig.CLIENT_ID != "YOUR_HUAWEI_CLIENT_ID"
+                        AppLogger.i(TAG, "onConnectHuawei: configured=$configured authorized=${huaweiAuthManager.isAuthorized()}")
+                        if (!configured) {
+                            Toast.makeText(
+                                this,
+                                "Huawei API не настроен.\nЗамените CLIENT_ID в HuaweiConfig.kt",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } else if (huaweiAuthManager.isAuthorized()) {
+                            Toast.makeText(this, "Huawei Health уже подключён", Toast.LENGTH_SHORT).show()
+                        } else {
+                            AppLogger.i(TAG, "Launching Huawei OAuth")
+                            startActivity(Intent(Intent.ACTION_VIEW,
+                                Uri.parse(huaweiAuthManager.getAuthUrl())))
+                        }
+                    },
+
+                    onSyncNow = { triggerManualSync() },
+
+                    onToggleLogs = {
+                        uiState = uiState.copy(showLogs = !uiState.showLogs)
+                        AppLogger.d(TAG, "Log viewer toggled: ${uiState.showLogs}")
                     }
                 )
             }
         }
     }
 
-    // Refresh connection statuses when returning from the OAuth browser tab
     override fun onResume() {
         super.onResume()
         refreshStatuses()
     }
 
-    /** Reads real auth state from both managers and updates UI. */
     private fun refreshStatuses() {
         lifecycleScope.launch {
-            val isGoogleOk  = googleHealthManager.hasAllPermissions()
-            val isHuaweiOk  = huaweiAuthManager.isAuthorized()
+            val hcStatus  = googleHealthManager.getStatus()
+            val googleOk  = if (hcStatus == HealthConnectStatus.AVAILABLE)
+                                googleHealthManager.hasAllPermissions()
+                            else false
+            val huaweiOk  = huaweiAuthManager.isAuthorized()
+            val configured = HuaweiConfig.CLIENT_ID != "YOUR_HUAWEI_CLIENT_ID"
+
+            AppLogger.i(TAG, "Refresh: hcStatus=$hcStatus googleOk=$googleOk huaweiOk=$huaweiOk configured=$configured")
+
             uiState = uiState.copy(
-                isGoogleConnected = isGoogleOk,
-                isHuaweiConnected = isHuaweiOk,
+                healthConnectStatus = hcStatus,
+                isGoogleConnected   = googleOk,
+                isHuaweiConnected   = huaweiOk,
+                isHuaweiConfigured  = configured,
                 syncStatus = when {
-                    isGoogleOk && isHuaweiOk -> "Все системы в норме"
-                    !isHuaweiOk              -> "Требуется вход в Huawei"
-                    else                     -> "Требуется доступ к Health Connect"
+                    googleOk && huaweiOk          -> "Готово к синхронизации"
+                    hcStatus == HealthConnectStatus.NOT_INSTALLED -> "Установите Google Health Connect"
+                    hcStatus == HealthConnectStatus.NEEDS_UPDATE  -> "Обновите Google Health Connect"
+                    !googleOk                     -> "Подключите Google Health"
+                    else                          -> "Подключите Huawei Health"
                 }
             )
-            if (isGoogleOk && isHuaweiOk) setupPeriodicSync()
+            if (googleOk && huaweiOk) setupPeriodicSync()
         }
     }
 
-    /**
-     * Enqueues a one-time SyncWorker and observes its result to correctly
-     * reset isSyncing back to false when done.
-     */
     private fun triggerManualSync() {
+        AppLogger.i(TAG, "Manual sync triggered")
         uiState = uiState.copy(isSyncing = true, syncStatus = "Синхронизация...")
-
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build())
+                .setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
-
-        val workManager = WorkManager.getInstance(this)
-        workManager.enqueue(request)
-
-        workManager.getWorkInfoByIdLiveData(request.id)
-            .observe(this) { info ->
-                if (info != null && info.state.isFinished) {
-                    val succeeded = info.state == WorkInfo.State.SUCCEEDED
-                    uiState = uiState.copy(
-                        isSyncing  = false,
-                        syncStatus = if (succeeded) "Все системы в норме" else "Ошибка синхронизации",
-                        lastSyncTime = if (succeeded) "Только что" else uiState.lastSyncTime
-                    )
-                }
+        val wm = WorkManager.getInstance(this)
+        wm.enqueue(request)
+        wm.getWorkInfoByIdLiveData(request.id).observe(this) { info ->
+            if (info != null && info.state.isFinished) {
+                val ok = info.state == WorkInfo.State.SUCCEEDED
+                AppLogger.i(TAG, "Sync finished: ${info.state}")
+                uiState = uiState.copy(
+                    isSyncing    = false,
+                    syncStatus   = if (ok) "Готово к синхронизации" else "Ошибка синхронизации",
+                    lastSyncTime = if (ok) nowTime() else uiState.lastSyncTime
+                )
             }
+        }
     }
 
-    /** Sets up hourly background sync via WorkManager (only registers once via KEEP policy). */
     private fun setupPeriodicSync() {
-        val request = PeriodicWorkRequestBuilder<SyncWorker>(1, TimeUnit.HOURS)
+        val req = PeriodicWorkRequestBuilder<SyncWorker>(1, TimeUnit.HOURS)
             .setConstraints(Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build())
+                .setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
-
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             HuaweiConfig.SYNC_WORKER_TAG,
             ExistingPeriodicWorkPolicy.KEEP,
-            request
+            req
         )
+        AppLogger.d(TAG, "Periodic sync scheduled")
     }
+
+    private fun nowTime() =
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
 }

@@ -91,3 +91,4 @@ jobs:
           name: BitLut-release
           path: app/build/outputs/apk/release/**.apk
           retention-days: 14
+      # Icon source: BitLut.svg in repo root → converted to app/src/main/res/drawable/vector_icon.xml
