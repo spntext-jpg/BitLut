@@ -35,44 +35,52 @@ jobs:
         run: |
           echo "HUAWEI_CLIENT_ID=${{ secrets.HUAWEI_CLIENT_ID }}" >> local.properties
           echo "HUAWEI_CLIENT_SECRET=${{ secrets.HUAWEI_CLIENT_SECRET }}" >> local.properties
-          echo "Credentials injected into local.properties"
 
       - name: Build APK
         id: build
         run: |
           TASK="assemble${{ github.event.inputs.build_type == 'release' && 'Release' || 'Debug' }}"
-          ./gradlew $TASK --stacktrace --build-cache 2>&1 | tee build_output.txt
+          ./gradlew $TASK --stacktrace 2>&1 | tee build_output.txt
           exit ${PIPESTATUS[0]}
 
-      - name: Parse and summarize errors
+      - name: Full error summary on failure
         if: failure()
         run: |
-          echo "## ❌ Build Failed — Error Summary" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "### Kotlin errors:" >> $GITHUB_STEP_SUMMARY
-          grep -E "^e: file://" build_output.txt \
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -E "^e: " build_output.txt \
             | sed 's|/home/runner/work/BitLut/BitLut/||' \
-            | sort -u >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Resource / AAPT errors:" >> $GITHUB_STEP_SUMMARY
-          grep -E "AAPT: error:|not found\." build_output.txt \
-            | sort -u >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Failed tasks:" >> $GITHUB_STEP_SUMMARY
-          grep -E "> Task .* FAILED" build_output.txt \
-            | sort -u >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Root cause:" >> $GITHUB_STEP_SUMMARY
-          grep -A 4 "What went wrong:" build_output.txt \
-            | head -20 >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
-
+            >> $GITHUB_STEP_SUMMARY || echo "none" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: Upload build log on failure
+          echo "### AAPT/Resource errors:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -E "error: |AAPT:" build_output.txt \
+            | sed 's|/home/runner/work/BitLut/BitLut/||' \
+            >> $GITHUB_STEP_SUMMARY || echo "none" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          echo "### Failed tasks:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep "> Task .* FAILED" build_output.txt \
+            >> $GITHUB_STEP_SUMMARY || echo "none" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          echo "### Root cause (What went wrong):" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -A 10 "What went wrong:" build_output.txt \
+            | head -30 >> $GITHUB_STEP_SUMMARY || echo "none" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          echo "### Last 50 lines of build output:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 build_output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload full build log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
