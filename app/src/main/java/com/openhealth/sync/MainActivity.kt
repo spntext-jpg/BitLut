@@ -27,7 +27,8 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "MainActivity"
-private const val HC_PLAY = "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata"
+private const val HC_PLAY =
+    "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata"
 
 class MainActivity : ComponentActivity() {
 
@@ -35,16 +36,21 @@ class MainActivity : ComponentActivity() {
     private val huaweiManager by lazy { HuaweiAuthManager(this) }
     private var uiState by mutableStateOf(MainUiState())
 
+    // Set to true when user is sent to Play Store to install HC.
+    // onResume checks this and auto-launches permissions if HC is now installed.
+    private var pendingPermissionRequest = false
+    private var requestPermissions: (() -> Unit)? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppLogger.i(TAG, "Start — ${android.os.Build.MODEL} API${android.os.Build.VERSION.SDK_INT}")
 
         setContent {
-            val permLauncher = rememberLauncherForActivityResult(
+            val launcher = rememberLauncherForActivityResult(
                 PermissionController.createRequestPermissionResultContract()
             ) { granted ->
                 val ok = granted.containsAll(googleManager.permissions)
-                AppLogger.i(TAG, "HC permissions: ok=$ok granted=$granted")
+                AppLogger.i(TAG, "HC permissions result: ok=$ok")
                 uiState = uiState.copy(
                     isGoogleConnected = ok,
                     syncStatus = if (ok) "Google Health подключён" else "Доступ отклонён"
@@ -52,49 +58,17 @@ class MainActivity : ComponentActivity() {
                 if (ok) setupPeriodicSync()
             }
 
+            requestPermissions = { launcher.launch(googleManager.permissions) }
+
             LaunchedEffect(Unit) { refreshStatuses() }
 
             OpenHealthSyncTheme {
                 MainScreen(
                     uiState = uiState,
-
-                    onConnectGoogle = {
-                        val status = uiState.healthConnectStatus
-                        AppLogger.i(TAG, "onConnectGoogle: status=$status")
-                        when (status) {
-                            HealthConnectStatus.AVAILABLE ->
-                                permLauncher.launch(googleManager.permissions)
-                            HealthConnectStatus.NOT_INSTALLED,
-                            HealthConnectStatus.NEEDS_UPDATE ->
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(HC_PLAY)))
-                            HealthConnectStatus.NOT_SUPPORTED ->
-                                Toast.makeText(this,
-                                    "Health Connect не поддерживается", Toast.LENGTH_LONG).show()
-                        }
-                    },
-
-                    onConnectHuawei = {
-                        val configured = uiState.isHuaweiConfigured
-                        val authorized = huaweiManager.isAuthorized()
-                        AppLogger.i(TAG, "onConnectHuawei: configured=$configured authorized=$authorized")
-                        if (!configured) {
-                            Toast.makeText(this,
-                                "Huawei API не настроен — замените CLIENT_ID в HuaweiConfig.kt",
-                                Toast.LENGTH_LONG).show()
-                        } else if (authorized) {
-                            Toast.makeText(this, "Huawei Health уже подключён",
-                                Toast.LENGTH_SHORT).show()
-                        } else {
-                            startActivity(Intent(Intent.ACTION_VIEW,
-                                Uri.parse(huaweiManager.getAuthUrl())))
-                        }
-                    },
-
-                    onSyncNow = { triggerManualSync() },
-
-                    onToggleLogs = {
-                        uiState = uiState.copy(showLogs = !uiState.showLogs)
-                    }
+                    onConnectGoogle  = { handleConnectGoogle() },
+                    onConnectHuawei  = { handleConnectHuawei() },
+                    onSyncNow        = { triggerManualSync() },
+                    onToggleLogs     = { uiState = uiState.copy(showLogs = !uiState.showLogs) }
                 )
             }
         }
@@ -102,18 +76,66 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        refreshStatuses()
+        lifecycleScope.launch {
+            refreshStatuses()
+            // User returned from Play Store — if HC is now installed, launch permissions immediately
+            if (pendingPermissionRequest &&
+                uiState.healthConnectStatus == HealthConnectStatus.AVAILABLE) {
+                AppLogger.i(TAG, "onResume: HC now installed — launching permission dialog")
+                pendingPermissionRequest = false
+                requestPermissions?.invoke()
+            }
+        }
+    }
+
+    private fun handleConnectGoogle() {
+        val status = uiState.healthConnectStatus
+        AppLogger.i(TAG, "handleConnectGoogle: status=$status")
+        when (status) {
+            HealthConnectStatus.AVAILABLE -> {
+                AppLogger.i(TAG, "HC available — requesting permissions")
+                requestPermissions?.invoke()
+            }
+            HealthConnectStatus.NOT_INSTALLED,
+            HealthConnectStatus.NEEDS_UPDATE -> {
+                pendingPermissionRequest = true
+                AppLogger.i(TAG, "HC not installed — opening Play Store, pendingPermission=true")
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(HC_PLAY)))
+            }
+            HealthConnectStatus.NOT_SUPPORTED ->
+                Toast.makeText(this,
+                    "Health Connect не поддерживается на этом устройстве",
+                    Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun handleConnectHuawei() {
+        val configured = HuaweiConfig.isConfigured()
+        val authorized = huaweiManager.isAuthorized()
+        AppLogger.i(TAG, "handleConnectHuawei: configured=$configured authorized=$authorized")
+        when {
+            !configured -> Toast.makeText(this,
+                "Huawei API не настроен.\n" +
+                "Добавьте HUAWEI_CLIENT_ID в local.properties\n" +
+                "или GitHub Actions Secrets.",
+                Toast.LENGTH_LONG).show()
+            authorized  -> Toast.makeText(this,
+                "Huawei Health уже подключён", Toast.LENGTH_SHORT).show()
+            else        -> startActivity(Intent(Intent.ACTION_VIEW,
+                Uri.parse(huaweiManager.getAuthUrl())))
+        }
     }
 
     private fun refreshStatuses() {
         lifecycleScope.launch {
             val hcStatus   = googleManager.getStatus()
-            val googleOk   = if (hcStatus == HealthConnectStatus.AVAILABLE)
-                                 googleManager.hasAllPermissions() else false
+            val googleOk   = hcStatus == HealthConnectStatus.AVAILABLE
+                             && googleManager.hasAllPermissions()
             val huaweiOk   = huaweiManager.isAuthorized()
-            val configured = HuaweiConfig.CLIENT_ID != "YOUR_HUAWEI_CLIENT_ID"
+            val configured = HuaweiConfig.isConfigured()
 
-            AppLogger.i(TAG, "Refresh: hc=$hcStatus google=$googleOk huawei=$huaweiOk configured=$configured")
+            AppLogger.i(TAG, "Refresh: hc=$hcStatus google=$googleOk " +
+                "huawei=$huaweiOk configured=$configured")
 
             uiState = uiState.copy(
                 healthConnectStatus = hcStatus,
@@ -122,8 +144,10 @@ class MainActivity : ComponentActivity() {
                 isHuaweiConfigured  = configured,
                 syncStatus = when {
                     googleOk && huaweiOk -> "Готово к синхронизации"
-                    hcStatus == HealthConnectStatus.NOT_INSTALLED -> "Установите Google Health Connect"
-                    hcStatus == HealthConnectStatus.NEEDS_UPDATE  -> "Обновите Google Health Connect"
+                    hcStatus == HealthConnectStatus.NOT_INSTALLED ->
+                        "Установите Google Health Connect"
+                    hcStatus == HealthConnectStatus.NEEDS_UPDATE ->
+                        "Обновите Google Health Connect"
                     !googleOk -> "Подключите Google Health"
                     else      -> "Подключите Huawei Health"
                 }
@@ -133,7 +157,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun triggerManualSync() {
-        AppLogger.i(TAG, "Manual sync")
+        AppLogger.i(TAG, "Manual sync triggered")
         uiState = uiState.copy(isSyncing = true, syncStatus = "Синхронизация...")
         val req = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(Constraints.Builder()

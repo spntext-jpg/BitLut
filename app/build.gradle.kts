@@ -1,7 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+// Read local.properties — used locally and injected by CI via env vars
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) load(f.inputStream())
+}
+
+fun huaweiProp(key: String): String =
+    System.getenv(key)                          // CI: from GitHub Secrets
+        ?: localProps[key]?.toString()          // Local: from local.properties
+        ?: "YOUR_${key}"                        // Fallback: placeholder
 
 android {
     namespace = "com.openhealth.sync"
@@ -15,6 +28,12 @@ android {
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        // Huawei credentials injected at build time — never hardcoded in source
+        buildConfigField("String", "HUAWEI_CLIENT_ID",
+            "\"${huaweiProp("HUAWEI_CLIENT_ID")}\"")
+        buildConfigField("String", "HUAWEI_CLIENT_SECRET",
+            "\"${huaweiProp("HUAWEI_CLIENT_SECRET")}\"")
     }
 
     buildTypes {
@@ -26,57 +45,33 @@ android {
             )
         }
     }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
+    kotlinOptions { jvmTarget = "17" }
     buildFeatures {
         compose = true
         buildConfig = true
     }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.4.8"
-    }
-
-    packaging {
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
-    }
+    composeOptions { kotlinCompilerExtensionVersion = "1.4.8" }
+    packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
 dependencies {
-    // AppCompat — required for Theme.AppCompat.DayNight.NoActionBar in XML
     implementation("androidx.appcompat:appcompat:1.6.1")
-
-    // Health Connect
     implementation("androidx.health.connect:connect-client:1.1.0-alpha07")
-
-    // AndroidX core
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
-
-    // Compose
     implementation("androidx.compose.ui:ui:1.4.3")
     implementation("androidx.compose.ui:ui-graphics:1.4.3")
     implementation("androidx.compose.ui:ui-tooling-preview:1.4.3")
     implementation("androidx.compose.material3:material3:1.1.1")
     debugImplementation("androidx.compose.ui:ui-tooling:1.4.3")
-
-    // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
-
-    // Network
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-
-    // Encrypted token storage
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

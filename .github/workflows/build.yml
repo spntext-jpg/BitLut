@@ -31,11 +31,16 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Inject Huawei credentials from GitHub Secrets
+        run: |
+          echo "HUAWEI_CLIENT_ID=${{ secrets.HUAWEI_CLIENT_ID }}" >> local.properties
+          echo "HUAWEI_CLIENT_SECRET=${{ secrets.HUAWEI_CLIENT_SECRET }}" >> local.properties
+          echo "Credentials injected into local.properties"
+
       - name: Build APK
         id: build
         run: |
-          BUILD_TYPE=${{ github.event.inputs.build_type }}
-          TASK="assemble$(echo ${BUILD_TYPE^})"
+          TASK="assemble${{ github.event.inputs.build_type == 'release' && 'Release' || 'Debug' }}"
           ./gradlew $TASK --stacktrace --build-cache 2>&1 | tee build_output.txt
           exit ${PIPESTATUS[0]}
 
@@ -45,25 +50,24 @@ jobs:
           echo "## ❌ Build Failed — Error Summary" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-          echo "### Kotlin compilation errors:" >> $GITHUB_STEP_SUMMARY
-          grep -E "^e: file://|Unresolved reference|is not defined|None of the candidates" build_output.txt \
+          echo "### Kotlin errors:" >> $GITHUB_STEP_SUMMARY
+          grep -E "^e: file://" build_output.txt \
             | sed 's|/home/runner/work/BitLut/BitLut/||' \
             | sort -u >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Resource / AAPT errors:" >> $GITHUB_STEP_SUMMARY
-          grep -E "AAPT: error:|ERROR:.*AndroidManifest|not found\." build_output.txt \
-            | sed 's|/home/runner/work/BitLut/BitLut/||' \
+          grep -E "AAPT: error:|not found\." build_output.txt \
             | sort -u >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Failed Gradle tasks:" >> $GITHUB_STEP_SUMMARY
+          echo "### Failed tasks:" >> $GITHUB_STEP_SUMMARY
           grep -E "> Task .* FAILED" build_output.txt \
             | sort -u >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Top-level exception:" >> $GITHUB_STEP_SUMMARY
-          grep -A 3 "What went wrong:" build_output.txt \
+          echo "### Root cause:" >> $GITHUB_STEP_SUMMARY
+          grep -A 4 "What went wrong:" build_output.txt \
             | head -20 >> $GITHUB_STEP_SUMMARY || echo "  none" >> $GITHUB_STEP_SUMMARY
 
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -91,4 +95,3 @@ jobs:
           name: BitLut-release
           path: app/build/outputs/apk/release/**.apk
           retention-days: 14
-      # Icon source: BitLut.svg in repo root → converted to app/src/main/res/drawable/vector_icon.xml
