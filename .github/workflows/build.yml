@@ -26,6 +26,7 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          # Встроенный кэш Gradle — повторные сборки ~30 сек вместо 2 минут
           cache: gradle
 
       - name: Grant execute permission for gradlew
@@ -33,11 +34,11 @@ jobs:
 
       - name: Build Debug APK
         if: github.event.inputs.build_type == 'debug'
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace --build-cache
 
       - name: Build Release APK
         if: github.event.inputs.build_type == 'release'
-        run: ./gradlew assembleRelease --stacktrace
+        run: ./gradlew assembleRelease --stacktrace --build-cache
 
       - name: Upload Debug APK
         if: github.event.inputs.build_type == 'debug'
@@ -45,7 +46,7 @@ jobs:
         with:
           name: BitLut-debug
           path: app/build/outputs/apk/debug/**.apk
-          retention-days: 7
+          retention-days: 14
 
       - name: Upload Release APK
         if: github.event.inputs.build_type == 'release'
@@ -53,4 +54,4 @@ jobs:
         with:
           name: BitLut-release
           path: app/build/outputs/apk/release/**.apk
-          retention-days: 7
+          retention-days: 14

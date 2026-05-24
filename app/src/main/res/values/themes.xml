@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Основная тема приложения — наследует Material3 DayNight без ActionBar -->
+    <style name="Theme.BitLut" parent="Theme.Material3.DayNight.NoActionBar" />
+
+</resources>

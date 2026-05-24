@@ -11,25 +11,22 @@
         android:label="@string/app_name"
         android:roundIcon="@drawable/vector_icon"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar"
+        android:theme="@style/Theme.BitLut"
         tools:targetApi="34">
 
-        <!-- Main screen -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+            android:theme="@style/Theme.BitLut">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Required for Health Connect permissions rationale -->
             <intent-filter>
                 <action android:name="androidx.health.connect.action.SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
         </activity>
 
-        <!-- Required alias for Health Connect system settings integration -->
         <activity-alias
             android:name="ViewPermissionRationaleActivity"
             android:exported="true"
@@ -40,7 +37,6 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- Intercepts Huawei OAuth2 redirect URI -->
         <activity
             android:name=".HuaweiCallbackActivity"
             android:exported="true"
@@ -49,7 +45,6 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <!-- Must match HuaweiConfig.REDIRECT_URI exactly -->
                 <data
                     android:scheme="https"
                     android:host="com.openhealth.sync"
