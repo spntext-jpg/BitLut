@@ -5,11 +5,29 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,7 +52,6 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
 
-    // Scaffold gives us a proper floatingActionButton slot — no clipping issues
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
@@ -44,21 +61,19 @@ fun MainScreen(
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
             ) {
                 Text("📋", fontSize = 16.sp)
-                Spacer(Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text("Логи", fontSize = 14.sp)
             }
         }
     ) { innerPadding ->
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 24.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // ── Status header ─────────────────────────────────────────────────
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(top = 16.dp)
@@ -71,24 +86,23 @@ fun MainScreen(
                     textAlign = TextAlign.Center
                 )
                 if (uiState.lastSyncTime != "—") {
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        "Последняя синхронизация: ${uiState.lastSyncTime}",
+                        text = "Последняя синхронизация: ${uiState.lastSyncTime}",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.secondary
                     )
                 }
             }
 
-            // ── Service cards ─────────────────────────────────────────────────
             ServiceCard(
                 name = "Google Health",
                 statusText = when {
                     uiState.isGoogleConnected -> "Подключено"
                     uiState.healthConnectStatus == HealthConnectStatus.NOT_INSTALLED ->
-                        "Нажмите — установить приложение"
+                        "Нажмите — установить"
                     uiState.healthConnectStatus == HealthConnectStatus.NEEDS_UPDATE ->
-                        "Нажмите — открыть Play Store"
+                        "Нажмите — обновить"
                     else -> "Нажмите для подключения"
                 },
                 isConnected = uiState.isGoogleConnected,
@@ -98,17 +112,16 @@ fun MainScreen(
             ServiceCard(
                 name = "Huawei Health",
                 statusText = when {
-                    uiState.isHuaweiConnected    -> "Подключено"
-                    !uiState.isHuaweiConfigured  -> "Ожидает CLIENT_ID разработчика"
-                    else                         -> "Нажмите для входа"
+                    uiState.isHuaweiConnected   -> "Подключено"
+                    !uiState.isHuaweiConfigured -> "Ожидает CLIENT_ID"
+                    else                        -> "Нажмите для входа"
                 },
                 isConnected = uiState.isHuaweiConnected,
                 onClick = onConnectHuawei
             )
 
-            Spacer(Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(1f))
 
-            // ── Sync button ───────────────────────────────────────────────────
             Button(
                 onClick = onSyncNow,
                 enabled = !uiState.isSyncing
@@ -132,7 +145,6 @@ fun MainScreen(
         }
     }
 
-    // ── Log bottom sheet — rendered outside Scaffold so it overlays everything
     if (uiState.showLogs) {
         LogBottomSheet(onDismiss = onToggleLogs, context = context)
     }
@@ -142,7 +154,7 @@ fun MainScreen(
 @Composable
 fun LogBottomSheet(onDismiss: () -> Unit, context: Context) {
     val logs = AppLogger.getLogs()
-    val logsText = logs.joinToString("\n").ifEmpty { "Логов пока нет." }
+    val text = logs.joinToString("\n").ifEmpty { "Логов пока нет." }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -159,41 +171,35 @@ fun LogBottomSheet(onDismiss: () -> Unit, context: Context) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "Логи (${logs.size})",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp
-                )
+                Text("Логи (${logs.size})", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Row {
                     TextButton(onClick = {
-                        val cb = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                as ClipboardManager
-                        cb.setPrimaryClip(ClipData.newPlainText("BitLut Logs", logsText))
-                        Toast.makeText(context, "Скопировано в буфер", Toast.LENGTH_SHORT).show()
+                        val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cb.setPrimaryClip(ClipData.newPlainText("BitLut Logs", text))
+                        Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show()
                     }) { Text("Копировать") }
                     TextButton(onClick = {
                         AppLogger.clear()
-                        Toast.makeText(context, "Логи очищены", Toast.LENGTH_SHORT).show()
                         onDismiss()
                     }) { Text("Очистить") }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            Box(
+            Spacer(modifier = Modifier.height(8.dp))
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 120.dp, max = 500.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(12.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = logsText,
+                    text = text,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 15.sp,
-                    modifier = Modifier.verticalScroll(rememberScrollState())
+                    lineHeight = 15.sp
                 )
             }
         }
@@ -217,20 +223,13 @@ fun ServiceCard(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = name,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = statusText,
-                fontSize = 12.sp,
+            Text(name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface)
+            Text(statusText, fontSize = 12.sp,
                 color = if (isConnected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.secondary
-            )
+                        else MaterialTheme.colorScheme.secondary)
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         TextButton(onClick = onClick) {
             Text(if (isConnected) "Сменить" else "Войти", fontWeight = FontWeight.Medium)
         }

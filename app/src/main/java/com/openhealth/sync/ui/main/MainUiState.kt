@@ -1,9 +1,14 @@
 package com.openhealth.sync.ui.main
 
+import com.openhealth.sync.data.HealthConnectStatus
+
 data class MainUiState(
-    val syncStatus: String = "Все системы в норме",
-    val lastSyncTime: String = "Не синхронизировалось",
-    val isHuaweiConnected: Boolean = false,
     val isGoogleConnected: Boolean = false,
-    val isSyncing: Boolean = false
+    val isHuaweiConnected: Boolean = false,
+    val isHuaweiConfigured: Boolean = false,
+    val isSyncing: Boolean = false,
+    val syncStatus: String = "Инициализация...",
+    val lastSyncTime: String = "—",
+    val healthConnectStatus: HealthConnectStatus = HealthConnectStatus.NOT_INSTALLED,
+    val showLogs: Boolean = false
 )
