@@ -26,11 +26,13 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          # Встроенный кэш Gradle — повторные сборки ~30 сек вместо 2 минут
           cache: gradle
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: Verify Java version
+        run: java -version
 
       - name: Build Debug APK
         if: github.event.inputs.build_type == 'debug'
