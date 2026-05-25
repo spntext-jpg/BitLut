@@ -1,7 +1,7 @@
 package com.openhealth.sync.data.worker
 
 import android.content.Context
-import android.util.Log
+import android.content.SharedPreferences
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.openhealth.sync.data.GoogleHealthManager
@@ -23,28 +23,27 @@ private const val TAG = "SyncWorker"
 
 class SyncWorker(
     context: Context,
-    workerParams: WorkerParameters
-) : CoroutineWorker(context, workerParams) {
+    params: WorkerParameters
+) : CoroutineWorker(context, params) {
 
     private val googleManager = GoogleHealthManager(applicationContext)
     private val huaweiManager = HuaweiAuthManager(applicationContext)
-
-    private val syncPrefs = applicationContext.getSharedPreferences(
+    private val syncPrefs: SharedPreferences = applicationContext.getSharedPreferences(
         HuaweiConfig.PREFS_NAME, Context.MODE_PRIVATE
     )
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        AppLogger.i(TAG, "Sync started")
 
         // ── 1. Validate Huawei token ──────────────────────────────────────────
-        val token = huaweiManager.getValidToken()
-        if (token == null) {
-            AppLogger.e(TAG, "No valid Huawei token — user must re-authenticate")
+        val token = huaweiManager.getValidToken() ?: run {
+            AppLogger.e(TAG, "No valid token — user must re-authenticate")
             return@withContext Result.failure()
         }
 
         // ── 2. Validate Health Connect permissions ────────────────────────────
         if (!googleManager.hasAllPermissions()) {
-            AppLogger.w(TAG, "HC permissions not granted — retrying later")
+            AppLogger.w(TAG, "HC permissions not granted — will retry")
             return@withContext Result.retry()
         }
 
@@ -57,7 +56,7 @@ class SyncWorker(
         val startTime = Instant.ofEpochMilli(lastSyncMs)
         AppLogger.d(TAG, "Sync window: $startTime → $endTime")
 
-        // ── 4. Fetch from Huawei ──────────────────────────────────────────────
+        // ── 4. Fetch from Huawei Health API ───────────────────────────────────
         val rawData = try {
             NetworkClient.healthService.getHealthData(
                 bearerToken = "Bearer $token",
@@ -96,21 +95,21 @@ class SyncWorker(
             )
         } ?: emptyList()
 
-        AppLogger.d(TAG, "Fetched: ${steps.size} step records, ${heartRates.size} HR records")
+        AppLogger.d(TAG, "Fetched: ${steps.size} steps, ${heartRates.size} HR records")
 
-        // ── 6. Write to Health Connect (batch) ────────────────────────────────
+        // ── 6. Write to Health Connect in batch ───────────────────────────────
         val stepsOk = googleManager.writeStepsBatch(steps)
         val hrOk    = googleManager.writeHeartRateBatch(heartRates)
 
-        // ── 7. Persist cursor only on full success ────────────────────────────
+        // ── 7. Persist sync cursor only on full success ───────────────────────
         return@withContext if (stepsOk && hrOk) {
             syncPrefs.edit()
                 .putLong(HuaweiConfig.KEY_LAST_SYNC_MS, endTime.toEpochMilli())
                 .apply()
-            AppLogger.i(TAG, "Sync complete ✓")
+            AppLogger.i(TAG, "Sync complete ✓ steps=${steps.size} hr=${heartRates.size}")
             Result.success()
         } else {
-            AppLogger.w(TAG, "Partial write failure — retry. steps=$stepsOk hr=$hrOk")
+            AppLogger.w(TAG, "Partial failure — retry. steps=$stepsOk hr=$hrOk")
             Result.retry()
         }
     }
