@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="96" alt="BitLut logo" />
+  <img src="docs/bitlut-icon.png" width="96" alt="BitLut logo" />
 </p>
 
 <h1 align="center">BitLut</h1>
