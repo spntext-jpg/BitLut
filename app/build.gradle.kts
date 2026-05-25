@@ -51,8 +51,8 @@ android {
         applicationId = "com.openhealth.sync"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "1.1.3"
+        versionCode = 16
+        versionName = "1.1.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 

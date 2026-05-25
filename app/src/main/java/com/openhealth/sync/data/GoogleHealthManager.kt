@@ -5,13 +5,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.StepsRecord
 import com.openhealth.sync.util.AppLogger
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.DistanceRecord
 
 private const val TAG = "GoogleHealthManager"
 
@@ -33,7 +33,7 @@ class GoogleHealthManager(private val context: Context) {
 
     val permissions: Set<String> = setOf(
         HealthPermission.getWritePermission(StepsRecord::class),
-        HealthPermission.getWritePermission(HeartRateRecord::class),
+        HealthPermission.getWritePermission(DistanceRecord::class),
         HealthPermission.getWritePermission(ExerciseSessionRecord::class)
     )
 
@@ -134,29 +134,14 @@ class GoogleHealthManager(private val context: Context) {
     }
 
     suspend fun writeHeartRateBatch(records: List<HeartRateData>): Boolean {
-        val c = healthConnectClient ?: run {
-            AppLogger.e(TAG, "writeHeartRateBatch: no client"); return false
+        // Heart rate is intentionally disabled until Huawei Health Kit approves this scope.
+        // Keep this method as a no-op so SyncWorker can remain simple.
+        if (records.isNotEmpty()) {
+            AppLogger.w(TAG, "Skipping ${records.size} heart-rate samples: scope is not approved yet")
         }
-        val valid = records.filter { it.beatsPerMinute > 0 }.map { d ->
-            val time: Instant        = Instant.ofEpochMilli(d.timeMs)
-            val end: Instant         = time.plusSeconds(1)
-            val startOff: ZoneOffset = zoneRules.getOffset(time)
-            val endOff: ZoneOffset   = zoneRules.getOffset(end)
-            HeartRateRecord(startTime = time, endTime = end,
-                startZoneOffset = startOff, endZoneOffset = endOff,
-                samples = listOf(HeartRateRecord.Sample(
-                    time = time, beatsPerMinute = d.beatsPerMinute)))
-        }
-        if (valid.isEmpty()) return true
-        return try {
-            c.insertRecords(valid)
-            AppLogger.d(TAG, "Wrote ${valid.size} HR records")
-            true
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "writeHeartRateBatch failed: ${e.message}")
-            false
-        }
+        return true
     }
+
 }
 
 data class StepData(val startTimeMs: Long, val endTimeMs: Long, val count: Long)

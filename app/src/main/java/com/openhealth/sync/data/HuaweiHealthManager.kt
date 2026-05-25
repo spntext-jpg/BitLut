@@ -45,7 +45,10 @@ class HuaweiHealthManager(private val context: Context) {
 
     private val scopes = arrayOf(
         Scopes.HEALTHKIT_STEP_READ,
-        Scopes.HEALTHKIT_HEARTRATE_READ
+        Scopes.HEALTHKIT_DISTANCE_READ,
+        Scopes.HEALTHKIT_ACTIVITY_READ,
+        Scopes.HEALTHKIT_ACTIVITY_RECORD_READ,
+        Scopes.HEALTHKIT_HISTORYDATA_OPEN_WEEK
     )
 
     fun isAuthorized(): Boolean = prefs.getBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, false)
@@ -83,7 +86,7 @@ class HuaweiHealthManager(private val context: Context) {
         require(startTimeMs < endTimeMs) { "startTimeMs must be before endTimeMs" }
         AppLogger.i(TAG, "Reading Huawei Health data from $startTimeMs to $endTimeMs")
         val steps = readSteps(startTimeMs, endTimeMs)
-        val heartRates = readHeartRates(startTimeMs, endTimeMs)
+        val heartRates = emptyList<HeartRateData>()
         AppLogger.i(TAG, "Huawei read complete: steps=${steps.size}, heartRates=${heartRates.size}")
         return HuaweiHealthSnapshot(steps = steps, heartRates = heartRates)
     }
