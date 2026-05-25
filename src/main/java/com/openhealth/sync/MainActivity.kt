@@ -23,7 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.work.*
-import com.openhealth.sync.config.HuaweiConfig
+import com.openhealth.sync.data.config.HuaweiConfig
 import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
@@ -132,7 +132,7 @@ fun MainExpressiveLayout(
                 modifier = Modifier
                     .fillMaxWidth()
                     .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow))
-            ) {
+                ) {
                 Column(Modifier.padding(24.dp)) {
                     Text("Синхронизация", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
