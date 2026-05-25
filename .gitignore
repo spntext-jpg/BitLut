@@ -18,3 +18,5 @@ agconnect-services.json
 .signing/
 app/release/
 app/build/outputs/
+
+build-release.sh
