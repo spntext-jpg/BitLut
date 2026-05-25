@@ -20,3 +20,6 @@ app/release/
 app/build/outputs/
 
 build-release.sh
+
+app/agconnect-services.json
+agconnect-services.json
