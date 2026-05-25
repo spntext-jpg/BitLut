@@ -275,25 +275,29 @@ fun MainExpressiveLayout(
 }
 
 @Composable
+private fun SourceCard(
+    title: String,
     status: String,
     buttonText: String,
     onClick: () -> Unit
 ) {
     Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.padding(20.dp).fillMaxWidth(),
+            modifier = Modifier
+                .padding(20.dp)
+                .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(status, style = MaterialTheme.typography.bodyMedium)
             }
-            Button(onClick = onClick) { Text(buttonText) }
+            Button(onClick = onClick) {
+                Text(buttonText)
+            }
         }
     }
-
-
 }
 
-// 1.0.1 UX copy: Install or update HMS Core to authorize Huawei Health.
+// 1.0.3: Material 3 Expressive UI + HMS Core readiness fixes.

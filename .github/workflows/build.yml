@@ -43,7 +43,8 @@ jobs:
           VERSION_CODE: ${{ github.run_number }}
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:clean :app:assembleRelease --stacktrace
+          set -o pipefail
+          ./gradlew --no-daemon :app:clean :app:assembleRelease --stacktrace 2>&1 | tee build.log
           echo "APK outputs:"
           find app/build/outputs -type f | sort
 
