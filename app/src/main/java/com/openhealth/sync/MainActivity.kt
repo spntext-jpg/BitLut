@@ -41,8 +41,8 @@ class MainActivity : ComponentActivity() {
     private val viewModel: SyncViewModel by viewModels {
         val app = application as SyncApplication
         SyncViewModel.provideFactory(
-            app.container.googleManager,
-            app.container.huaweiManager,
+            app.container.googleHealthManager,
+            app.container.huaweiAuthManager,
             this
         )
     }
