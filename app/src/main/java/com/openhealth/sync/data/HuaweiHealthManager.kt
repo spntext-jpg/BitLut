@@ -79,8 +79,8 @@ class HuaweiHealthManager(private val context: Context) {
 
     private suspend fun readSteps(startTimeMs: Long, endTimeMs: Long): List<StepData> {
         if (!HmsCoreHelper.isInstalled(context)) {
-            AppLogger.e("HuaweiHealthManager", HmsCoreHelper.missingMessage())
-            throw IllegalStateException(HmsCoreHelper.missingMessage())
+            AppLogger.e("HuaweiHealthManager", HmsCoreHelper.missingMessage)
+            throw IllegalStateException(HmsCoreHelper.missingMessage)
         }
 
         val options = ReadOptions.Builder()
