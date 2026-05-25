@@ -296,7 +296,6 @@ private fun SourceCard(
     }
 
     private fun openHmsCoreInstallPage() {
-        HmsCoreHelper.openInstallPage(this)
     }
 
 }
