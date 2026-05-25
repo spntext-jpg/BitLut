@@ -7,10 +7,6 @@ on:
         description: "Release version name"
         required: true
         default: "1.0.0"
-      version_code:
-        description: "Release version code"
-        required: true
-        default: "1"
 
 jobs:
   build-release:
@@ -44,7 +40,7 @@ jobs:
           BITLUT_KEY_PASSWORD: ${{ secrets.BITLUT_KEY_PASSWORD }}
           HUAWEI_APP_ID: ${{ secrets.HUAWEI_APP_ID }}
           VERSION_NAME: ${{ github.event.inputs.version_name }}
-          VERSION_CODE: ${{ github.event.inputs.version_code }}
+          VERSION_CODE: ${{ github.run_number }}
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon :app:clean :app:assembleRelease --stacktrace
@@ -55,7 +51,8 @@ jobs:
         run: |
           test -n "$(find app/build/outputs/apk/release -name '*.apk' -type f -print -quit)"
           mkdir -p release-artifacts
-          cp app/build/outputs/apk/release/*.apk release-artifacts/
+          APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' -type f -print -quit)"
+          cp "$APK_PATH" "release-artifacts/BitLut-${{ github.event.inputs.version_name }}.apk"
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
