@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/bitlut-icon.png" width="96" alt="BitLut logo" />
+  <img src="docs/bitlut-mascot.png" width="180" alt="BitLut mascot" />
 </p>
 
 <h1 align="center">BitLut</h1>
