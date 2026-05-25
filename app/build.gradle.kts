@@ -11,10 +11,37 @@ val localProps = Properties().apply {
     if (f.exists()) load(f.inputStream())
 }
 
-fun huaweiProp(key: String): String =
+val huaweiEnvProps = Properties().apply {
+    val f = rootProject.file(".huawei.env")
+    if (f.exists()) {
+        f.readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains("=") }
+            .forEach { line ->
+                val idx = line.indexOf('=')
+                put(line.substring(0, idx).trim(), line.substring(idx + 1).trim())
+            }
+    }
+}
+
+fun secretProp(key: String, fallback: String = ""): String =
     System.getenv(key)
         ?: localProps[key]?.toString()
-        ?: "YOUR_${key}"
+        ?: huaweiEnvProps[key]?.toString()
+        ?: fallback
+
+fun escapedBuildConfig(key: String, fallback: String = ""): String =
+    secretProp(key, fallback).replace("\\", "\\\\").replace("\"", "\\\"")
+
+val releaseKeystorePath = secretProp("BITLUT_KEYSTORE_PATH")
+val releaseKeystorePassword = secretProp("BITLUT_KEYSTORE_PASSWORD")
+val releaseKeyAlias = secretProp("BITLUT_KEY_ALIAS")
+val releaseKeyPassword = secretProp("BITLUT_KEY_PASSWORD")
+val hasReleaseSigning = releaseKeystorePath.isNotBlank() &&
+    releaseKeystorePassword.isNotBlank() &&
+    releaseKeyAlias.isNotBlank() &&
+    releaseKeyPassword.isNotBlank()
+
 
 android {
     namespace = "com.openhealth.sync"
@@ -29,24 +56,37 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 
-        buildConfigField("String", "HUAWEI_CLIENT_ID",
-            "\"${huaweiProp("HUAWEI_CLIENT_ID")}\"")
-        buildConfigField("String", "HUAWEI_CLIENT_SECRET",
-            "\"${huaweiProp("HUAWEI_CLIENT_SECRET")}\"")
+        val huaweiAppId = secretProp("HUAWEI_APP_ID", "117824685")
+        manifestPlaceholders["huaweiAppId"] = huaweiAppId
+
+        buildConfigField("String", "HUAWEI_APP_ID", "\"${escapedBuildConfig("HUAWEI_APP_ID", "117824685")}\"")
+        buildConfigField("String", "HUAWEI_CLIENT_ID", "\"${escapedBuildConfig("HUAWEI_CLIENT_ID")}\"")
+        buildConfigField("String", "HUAWEI_CLIENT_SECRET", "\"${escapedBuildConfig("HUAWEI_CLIENT_SECRET")}\"")
+        buildConfigField("String", "HUAWEI_REDIRECT_URI", "\"${escapedBuildConfig("HUAWEI_REDIRECT_URI", "https://com.openhealth.sync/oauth_callback")}\"")
+        buildConfigField("String", "HUAWEI_SCOPES", "\"${escapedBuildConfig("HUAWEI_SCOPES", "https://www.huawei.com/auth/healthkit.step.read+https://www.huawei.com/auth/healthkit.heartrate.read")}\"")
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseKeystorePath)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
+            isDebuggable = false
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
         debug {
             isDebuggable = true
-            applicationIdSuffix = ".debug"
+            // No applicationIdSuffix: Huawei AppGallery/Health Kit package must stay com.openhealth.sync.
         }
     }
 
@@ -55,16 +95,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    kotlinOptions { jvmTarget = "17" }
 
     buildFeatures {
         compose = true
         buildConfig = true
     }
-
-    // composeOptions block removed — Kotlin 2.0 + Compose Plugin handles this automatically
 
     packaging {
         resources {
@@ -77,45 +113,29 @@ android {
 }
 
 dependencies {
-    // Compose BOM — aligns all Compose library versions
     val composeBom = platform("androidx.compose:compose-bom:2025.04.01")
     implementation(composeBom)
 
-    // Compose
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // Material 3 Expressive — latest stable
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3:material3-adaptive-navigation-suite")
+    implementation("androidx.compose.material:material-icons-extended")
 
-    // AndroidX core
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-
-    // AppCompat — required for HuaweiCallbackActivity
     implementation("androidx.appcompat:appcompat:1.7.0")
 
-    // Health Connect — latest compatible with compileSdk 35
     implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
-
-    // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
-    // Network
-    implementation("com.squareup.retrofit2:retrofit:2.11.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.huawei.hms:health:6.11.0.303")
 
-    // Secure storage
-    implementation("androidx.security:security-crypto:1.0.0")
-
-    // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }

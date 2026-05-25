@@ -1,0 +1,4 @@
+-keep class com.huawei.** { *; }
+-keep interface com.huawei.** { *; }
+-dontwarn com.huawei.**
+-keep class com.openhealth.sync.data.** { *; }

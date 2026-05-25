@@ -11,3 +11,10 @@ embedded-jdk/
 .DS_Store
 repomix-output.xml
 huawei.properties
+.huawei.env
+*.jks
+*.keystore
+agconnect-services.json
+.signing/
+app/release/
+app/build/outputs/

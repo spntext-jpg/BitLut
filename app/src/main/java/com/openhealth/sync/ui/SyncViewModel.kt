@@ -5,8 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.openhealth.sync.data.GoogleHealthManager
-import com.openhealth.sync.data.HuaweiAuthManager
 import com.openhealth.sync.data.HealthConnectStatus
+import com.openhealth.sync.data.HuaweiHealthManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,31 +27,37 @@ data class SyncUiState(
 
 class SyncViewModel(
     val googleManager: GoogleHealthManager,
-    val huaweiManager: HuaweiAuthManager,
+    val huaweiHealthManager: HuaweiHealthManager,
     private val prefs: android.content.SharedPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SyncUiState())
     val uiState: StateFlow<SyncUiState> = _uiState.asStateFlow()
 
-    init { loadInitialState() }
+    init { refreshStatuses() }
 
     fun refreshStatuses() {
         viewModelScope.launch {
+            val isAvailable = googleManager.getStatus() == HealthConnectStatus.AVAILABLE
             val hasPerms = googleManager.hasAllPermissions()
-            _uiState.update { it.copy(hasGooglePermissions = hasPerms) }
+            val savedTime = prefs.getString("last_sync_time", "Нет данных") ?: "Нет данных"
+            _uiState.update {
+                it.copy(
+                    isGoogleAvailable = isAvailable,
+                    hasGooglePermissions = hasPerms,
+                    isHuaweiAuthorized = huaweiHealthManager.isAuthorized(),
+                    lastSyncTime = savedTime
+                )
+            }
         }
     }
 
-    private fun loadInitialState() {
-        viewModelScope.launch {
-            val isAvailable = googleManager.getStatus() == HealthConnectStatus.AVAILABLE
-            val savedTime = prefs.getString("last_sync_time", "Нет данных") ?: "Нет данных"
-            _uiState.update { it.copy(
-                isGoogleAvailable = isAvailable,
-                lastSyncTime = savedTime
-            )}
-            refreshStatuses()
+    fun onHuaweiAuthorizationResult(success: Boolean) {
+        _uiState.update {
+            it.copy(
+                isHuaweiAuthorized = success,
+                syncStatus = if (success) "Huawei подключен" else "Ошибка авторизации Huawei"
+            )
         }
     }
 
@@ -64,18 +70,19 @@ class SyncViewModel(
         val time = if (success) SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()) else _uiState.value.lastSyncTime
         if (success) prefs.edit().putString("last_sync_time", time).apply()
         _uiState.update { it.copy(isSyncing = false, syncStatus = statusMsg, lastSyncTime = time) }
+        refreshStatuses()
     }
 
     companion object {
         fun provideFactory(
             googleManager: GoogleHealthManager,
-            huaweiManager: HuaweiAuthManager,
+            huaweiHealthManager: HuaweiHealthManager,
             context: Context
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
-                return SyncViewModel(googleManager, huaweiManager, prefs) as T
+                return SyncViewModel(googleManager, huaweiHealthManager, prefs) as T
             }
         }
     }
