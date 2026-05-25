@@ -1,7 +1,6 @@
 package com.openhealth.sync.data
 
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
@@ -15,17 +14,18 @@ import java.time.ZoneOffset
 
 private const val TAG = "GoogleHealthManager"
 
-// Every known package name for Health Connect across all Android versions and OEMs.
-// We check ALL of them — first match wins.
+// ONLY real Health Connect package names — NOT com.google.android.gms
+// GMS is Google Play Services and has nothing to do with Health Connect
 private val HC_PACKAGES = listOf(
-    "com.google.android.apps.healthdata",    // Play Store standalone (Android 9-13)
-    "com.google.android.health.connect",     // Integrated build (Android 14+)
-    "com.android.healthconnect.controller",  // Pixel system component
-    "com.google.android.gms"                 // Some builds route through GMS
+    "com.google.android.apps.healthdata",   // Standalone APK from Play Store (Android 9-13)
+    "com.google.android.health.connect"     // Integrated module (Android 14+)
 )
 
 enum class HealthConnectStatus {
-    AVAILABLE, NOT_INSTALLED, NEEDS_UPDATE, NOT_SUPPORTED
+    AVAILABLE,       // SDK ready, client works, permissions can be requested
+    NOT_INSTALLED,   // HC APK not on device — send to Play Store
+    NEEDS_UPDATE,    // HC installed but too old
+    NOT_SUPPORTED    // Device/OS cannot run HC at all
 }
 
 class GoogleHealthManager(private val context: Context) {
@@ -37,43 +37,31 @@ class GoogleHealthManager(private val context: Context) {
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
 
-    // We attempt getOrCreate regardless of getSdkStatus() on API 31-33.
-    // The SDK check is known to return wrong values on OEM builds.
+    // Lazily create client — null means HC is not usable on this device
     val healthConnectClient: HealthConnectClient? by lazy {
-        try {
-            HealthConnectClient.getOrCreate(context).also {
-                AppLogger.i(TAG, "HealthConnectClient created successfully")
+        // Only attempt if SDK explicitly says available
+        if (HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE) {
+            try {
+                HealthConnectClient.getOrCreate(context).also {
+                    AppLogger.i(TAG, "HealthConnectClient created OK")
+                }
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "getOrCreate failed: ${e.message}")
+                null
             }
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "HealthConnectClient.getOrCreate failed: ${e.message}")
+        } else {
+            AppLogger.w(TAG, "SDK not available — skipping client creation")
             null
         }
     }
 
     fun getStatus(): HealthConnectStatus {
-        val sdkStatus    = HealthConnectClient.getSdkStatus(context)
+        val sdkStatus = HealthConnectClient.getSdkStatus(context)
         val installedPkg = findInstalledHcPackage()
 
         AppLogger.i(TAG, "getSdkStatus()=$sdkStatus " +
             "installedPackage=${installedPkg ?: "none"} " +
             "API=${Build.VERSION.SDK_INT} device=${Build.MODEL}")
-
-        // On API 33 OEM builds the SDK status is unreliable.
-        // Use package presence + client instantiation as the real signal.
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.TIRAMISU) {
-            // Try to instantiate the client directly — if it works, we're available
-            val clientWorks = try {
-                HealthConnectClient.getOrCreate(context)
-                true
-            } catch (e: Exception) {
-                AppLogger.w(TAG, "getOrCreate failed: ${e.message}")
-                false
-            }
-            if (clientWorks) {
-                AppLogger.i(TAG, "HC: client works on API${Build.VERSION.SDK_INT} — AVAILABLE")
-                return HealthConnectStatus.AVAILABLE
-            }
-        }
 
         return when (sdkStatus) {
             HealthConnectClient.SDK_AVAILABLE -> {
@@ -81,55 +69,30 @@ class GoogleHealthManager(private val context: Context) {
                 HealthConnectStatus.AVAILABLE
             }
             HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
-                if (installedPkg != null) {
-                    AppLogger.w(TAG, "HC: pkg=$installedPkg installed but SDK says UPDATE — treating AVAILABLE")
-                    HealthConnectStatus.AVAILABLE
-                } else {
-                    AppLogger.w(TAG, "HC: NEEDS_UPDATE, not installed")
-                    HealthConnectStatus.NEEDS_UPDATE
-                }
+                AppLogger.w(TAG, "HC: needs update (sdkStatus=2)")
+                // Only treat as needing update, never as AVAILABLE
+                // Even if a package exists, the SDK version is incompatible
+                HealthConnectStatus.NEEDS_UPDATE
             }
             else -> {
+                AppLogger.w(TAG, "HC: not available (sdkStatus=$sdkStatus)")
                 if (installedPkg != null) HealthConnectStatus.NEEDS_UPDATE
                 else HealthConnectStatus.NOT_INSTALLED
             }
         }
     }
 
-    /**
-     * Scans all known Health Connect package names.
-     * Also does a broad search for any installed package containing "healthconnect" or "healthdata".
-     */
     fun findInstalledHcPackage(): String? {
-        // Check known packages first
         for (pkg in HC_PACKAGES) {
             try {
                 context.packageManager.getPackageInfo(pkg, 0)
                 AppLogger.d(TAG, "Found HC package: $pkg")
                 return pkg
             } catch (e: PackageManager.NameNotFoundException) {
-                // continue
+                AppLogger.d(TAG, "HC package not found: $pkg")
             }
         }
-
-        // Broad scan — find ANY package with health-related name
-        // This catches OEM-specific package names we don't know yet
-        try {
-            val allPackages = context.packageManager.getInstalledPackages(0)
-            val healthPkgs = allPackages
-                .map { it.packageName }
-                .filter { pkg ->
-                    (pkg.contains("healthconnect", ignoreCase = true) ||
-                     pkg.contains("healthdata", ignoreCase = true) ||
-                     pkg.contains("health.connect", ignoreCase = true)) &&
-                    !pkg.contains("com.openhealth.sync") // exclude ourselves
-                }
-            AppLogger.i(TAG, "Broad health package scan found: $healthPkgs")
-            return healthPkgs.firstOrNull()
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "Broad package scan failed: ${e.message}")
-        }
-
+        AppLogger.d(TAG, "No HC package found on device")
         return null
     }
 
@@ -137,7 +100,7 @@ class GoogleHealthManager(private val context: Context) {
         val c = healthConnectClient ?: return false
         return try {
             val granted = c.permissionController.getGrantedPermissions()
-            AppLogger.d(TAG, "Granted: $granted")
+            AppLogger.d(TAG, "Granted permissions: $granted")
             granted.containsAll(permissions)
         } catch (e: Exception) {
             AppLogger.e(TAG, "Permission check failed: ${e.message}")
@@ -179,8 +142,8 @@ class GoogleHealthManager(private val context: Context) {
             val endOff: ZoneOffset   = zoneRules.getOffset(end)
             HeartRateRecord(startTime = time, endTime = end,
                 startZoneOffset = startOff, endZoneOffset = endOff,
-                samples = listOf(HeartRateRecord.Sample(time = time,
-                    beatsPerMinute = d.beatsPerMinute)))
+                samples = listOf(HeartRateRecord.Sample(
+                    time = time, beatsPerMinute = d.beatsPerMinute)))
         }
         if (valid.isEmpty()) return true
         return try {
