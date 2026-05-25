@@ -1,3 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ ! -f "settings.gradle.kts" ] || [ ! -d "app/src/main" ]; then
+  echo "ERROR: run from BitLut repo root" >&2
+  exit 1
+fi
+
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+p = Path("app/build.gradle.kts")
+s = p.read_text()
+s = re.sub(r'versionCode\s*=\s*\d+', 'versionCode = 5', s)
+s = re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "1.0.4"', s)
+p.write_text(s)
+
+manifest = Path("app/src/main/AndroidManifest.xml")
+m = manifest.read_text()
+perms = [
+    '<uses-permission android:name="android.permission.health.WRITE_STEPS" />',
+    '<uses-permission android:name="android.permission.health.WRITE_HEART_RATE" />',
+    '<uses-permission android:name="android.permission.health.READ_STEPS" />',
+    '<uses-permission android:name="android.permission.health.READ_HEART_RATE" />',
+]
+for perm in perms:
+    if perm not in m:
+        pos = m.find(">") + 1
+        m = m[:pos] + "\n    " + perm + m[pos:]
+if "<queries>" not in m:
+    q = '''    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+        <package android:name="com.huawei.hwid" />
+        <package android:name="com.huawei.health" />
+        <package android:name="com.huawei.appmarket" />
+        <intent>
+            <action android:name="android.health.connect.action.MANAGE_HEALTH_PERMISSIONS" />
+        </intent>
+        <intent>
+            <action android:name="androidx.health.ACTION_HEALTH_CONNECT_SETTINGS" />
+        </intent>
+    </queries>
+'''
+    pos = m.find("<application")
+    if pos != -1:
+        m = m[:pos] + q + "\n    " + m[pos:]
+manifest.write_text(m)
+PY
+
+mkdir -p app/src/main/java/com/openhealth/sync/platform
+cat > app/src/main/java/com/openhealth/sync/platform/HmsCoreHelper.kt <<'KOTLIN'
+package com.openhealth.sync.platform
+
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import com.openhealth.sync.util.AppLogger
+
+object HmsCoreHelper {
+    private const val HMS_CORE_PACKAGE = "com.huawei.hwid"
+    private const val APPGALLERY_PACKAGE = "com.huawei.appmarket"
+    private const val HMS_CORE_WEB_URI = "https://consumer.huawei.com/en/mobileservices/hms-core/"
+
+    const val missingMessage: String =
+        "HMS Core is required for Huawei Health authorization. Install or update HMS Core and try again."
+
+    fun isHmsCoreInstalled(context: Context): Boolean = try {
+        context.packageManager.getPackageInfo(HMS_CORE_PACKAGE, 0)
+        true
+    } catch (_: PackageManager.NameNotFoundException) {
+        false
+    }
+
+    fun isInstalled(context: Context): Boolean = isHmsCoreInstalled(context)
+
+    fun openHmsCoreInstall(context: Context) {
+        val intents = listOf(
+            Intent(Intent.ACTION_VIEW, Uri.parse("appmarket://details?id=$HMS_CORE_PACKAGE")).apply {
+                setPackage(APPGALLERY_PACKAGE)
+            },
+            Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$HMS_CORE_PACKAGE")),
+            Intent(Intent.ACTION_VIEW, Uri.parse(HMS_CORE_WEB_URI))
+        )
+
+        for (intent in intents) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                AppLogger.i("HmsCoreHelper", "Opened HMS Core install/update page")
+                return
+            } catch (e: ActivityNotFoundException) {
+                AppLogger.w("HmsCoreHelper", "HMS Core install intent unavailable: ${e.message}")
+            } catch (e: Exception) {
+                AppLogger.w("HmsCoreHelper", "Failed to open HMS Core install page: ${e.message}")
+            }
+        }
+    }
+
+    fun openInstallPage(context: Context) = openHmsCoreInstall(context)
+}
+KOTLIN
+
+cat > app/src/main/java/com/openhealth/sync/MainActivity.kt <<'KOTLIN'
 package com.openhealth.sync
 
 import android.content.ClipData
@@ -357,3 +463,7 @@ private fun SourceCard(
     }
 }
 
+KOTLIN
+
+rm -f compile_errors.log fixitall.sh fix_runtime_connections_103.sh
+echo "Patched BitLut 1.0.4 health connection flows. Run compileReleaseKotlin before commit."
