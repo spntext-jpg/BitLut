@@ -275,8 +275,6 @@ fun MainExpressiveLayout(
 }
 
 @Composable
-private fun SourceCard(
-    title: String,
     status: String,
     buttonText: String,
     onClick: () -> Unit
@@ -295,8 +293,6 @@ private fun SourceCard(
         }
     }
 
-    private fun openHmsCoreInstallPage() {
-    }
 
 }
 
