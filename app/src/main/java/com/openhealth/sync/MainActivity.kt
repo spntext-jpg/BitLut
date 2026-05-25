@@ -69,6 +69,7 @@ import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.util.AppLogger
 import java.util.concurrent.TimeUnit
 import com.openhealth.sync.platform.HmsCoreHelper
+import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 
 class MainActivity : ComponentActivity() {
     
@@ -101,7 +102,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setupPeriodicSync()
         setContent {
-            MaterialTheme {
+            BitLutExpressiveTheme {
                 val uiState by viewModel.uiState.collectAsState()
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     MainExpressiveLayout(
