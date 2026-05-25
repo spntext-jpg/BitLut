@@ -1,7 +1,9 @@
 package com.openhealth.sync.data
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.HeartRateRecord
@@ -13,11 +15,13 @@ import java.time.ZoneOffset
 
 private const val TAG = "GoogleHealthManager"
 
-// All known package names for Health Connect across Android versions and OEMs
+// Every known package name for Health Connect across all Android versions and OEMs.
+// We check ALL of them — first match wins.
 private val HC_PACKAGES = listOf(
-    "com.google.android.apps.healthdata",   // Standalone APK (Play Store, Android 9-13)
-    "com.google.android.health.connect",    // Integrated (Android 14+, some OEM builds)
-    "com.android.healthconnect.controller"  // System component on some Pixel builds
+    "com.google.android.apps.healthdata",    // Play Store standalone (Android 9-13)
+    "com.google.android.health.connect",     // Integrated build (Android 14+)
+    "com.android.healthconnect.controller",  // Pixel system component
+    "com.google.android.gms"                 // Some builds route through GMS
 )
 
 enum class HealthConnectStatus {
@@ -33,19 +37,43 @@ class GoogleHealthManager(private val context: Context) {
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
 
-    private val client: HealthConnectClient? by lazy {
-        if (getStatus() == HealthConnectStatus.AVAILABLE)
-            HealthConnectClient.getOrCreate(context)
-        else null
+    // We attempt getOrCreate regardless of getSdkStatus() on API 31-33.
+    // The SDK check is known to return wrong values on OEM builds.
+    val healthConnectClient: HealthConnectClient? by lazy {
+        try {
+            HealthConnectClient.getOrCreate(context).also {
+                AppLogger.i(TAG, "HealthConnectClient created successfully")
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "HealthConnectClient.getOrCreate failed: ${e.message}")
+            null
+        }
     }
 
     fun getStatus(): HealthConnectStatus {
-        val sdkStatus = HealthConnectClient.getSdkStatus(context)
+        val sdkStatus    = HealthConnectClient.getSdkStatus(context)
         val installedPkg = findInstalledHcPackage()
 
         AppLogger.i(TAG, "getSdkStatus()=$sdkStatus " +
             "installedPackage=${installedPkg ?: "none"} " +
-            "device=${android.os.Build.MODEL} API=${android.os.Build.VERSION.SDK_INT}")
+            "API=${Build.VERSION.SDK_INT} device=${Build.MODEL}")
+
+        // On API 33 OEM builds the SDK status is unreliable.
+        // Use package presence + client instantiation as the real signal.
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.TIRAMISU) {
+            // Try to instantiate the client directly — if it works, we're available
+            val clientWorks = try {
+                HealthConnectClient.getOrCreate(context)
+                true
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "getOrCreate failed: ${e.message}")
+                false
+            }
+            if (clientWorks) {
+                AppLogger.i(TAG, "HC: client works on API${Build.VERSION.SDK_INT} — AVAILABLE")
+                return HealthConnectStatus.AVAILABLE
+            }
+        }
 
         return when (sdkStatus) {
             HealthConnectClient.SDK_AVAILABLE -> {
@@ -53,52 +81,63 @@ class GoogleHealthManager(private val context: Context) {
                 HealthConnectStatus.AVAILABLE
             }
             HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
-                // SDK says update required — but check if package actually exists.
-                // OnePlus/OPPO Android 11-12: SDK lies, package is present and functional.
                 if (installedPkg != null) {
-                    AppLogger.w(TAG, "HC: SDK=UPDATE_REQUIRED but pkg=$installedPkg exists " +
-                        "— treating as AVAILABLE (OEM signature mismatch workaround)")
+                    AppLogger.w(TAG, "HC: pkg=$installedPkg installed but SDK says UPDATE — treating AVAILABLE")
                     HealthConnectStatus.AVAILABLE
                 } else {
-                    AppLogger.w(TAG, "HC: genuinely needs update — not installed")
+                    AppLogger.w(TAG, "HC: NEEDS_UPDATE, not installed")
                     HealthConnectStatus.NEEDS_UPDATE
                 }
             }
             else -> {
-                // SDK_UNAVAILABLE
-                if (installedPkg != null) {
-                    AppLogger.w(TAG, "HC: SDK_UNAVAILABLE but pkg=$installedPkg found — NEEDS_UPDATE")
-                    HealthConnectStatus.NEEDS_UPDATE
-                } else {
-                    AppLogger.w(TAG, "HC: not installed anywhere")
-                    HealthConnectStatus.NOT_INSTALLED
-                }
+                if (installedPkg != null) HealthConnectStatus.NEEDS_UPDATE
+                else HealthConnectStatus.NOT_INSTALLED
             }
         }
     }
 
     /**
      * Scans all known Health Connect package names.
-     * Returns the first installed one, or null if none found.
+     * Also does a broad search for any installed package containing "healthconnect" or "healthdata".
      */
-    private fun findInstalledHcPackage(): String? {
+    fun findInstalledHcPackage(): String? {
+        // Check known packages first
         for (pkg in HC_PACKAGES) {
             try {
                 context.packageManager.getPackageInfo(pkg, 0)
                 AppLogger.d(TAG, "Found HC package: $pkg")
                 return pkg
             } catch (e: PackageManager.NameNotFoundException) {
-                AppLogger.d(TAG, "HC package not found: $pkg")
+                // continue
             }
         }
+
+        // Broad scan — find ANY package with health-related name
+        // This catches OEM-specific package names we don't know yet
+        try {
+            val allPackages = context.packageManager.getInstalledPackages(0)
+            val healthPkgs = allPackages
+                .map { it.packageName }
+                .filter { pkg ->
+                    (pkg.contains("healthconnect", ignoreCase = true) ||
+                     pkg.contains("healthdata", ignoreCase = true) ||
+                     pkg.contains("health.connect", ignoreCase = true)) &&
+                    !pkg.contains("com.openhealth.sync") // exclude ourselves
+                }
+            AppLogger.i(TAG, "Broad health package scan found: $healthPkgs")
+            return healthPkgs.firstOrNull()
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Broad package scan failed: ${e.message}")
+        }
+
         return null
     }
 
     suspend fun hasAllPermissions(): Boolean {
-        val c = client ?: return false
+        val c = healthConnectClient ?: return false
         return try {
             val granted = c.permissionController.getGrantedPermissions()
-            AppLogger.d(TAG, "Granted permissions: $granted")
+            AppLogger.d(TAG, "Granted: $granted")
             granted.containsAll(permissions)
         } catch (e: Exception) {
             AppLogger.e(TAG, "Permission check failed: ${e.message}")
@@ -107,19 +146,16 @@ class GoogleHealthManager(private val context: Context) {
     }
 
     suspend fun writeStepsBatch(records: List<StepData>): Boolean {
-        val c = client ?: run { AppLogger.e(TAG, "writeStepsBatch: no client"); return false }
+        val c = healthConnectClient ?: run {
+            AppLogger.e(TAG, "writeStepsBatch: no client"); return false
+        }
         val valid = records.filter { it.count > 0 && it.startTimeMs < it.endTimeMs }.map { d ->
             val start: Instant       = Instant.ofEpochMilli(d.startTimeMs)
             val end: Instant         = Instant.ofEpochMilli(d.endTimeMs)
             val startOff: ZoneOffset = zoneRules.getOffset(start)
             val endOff: ZoneOffset   = zoneRules.getOffset(end)
-            StepsRecord(
-                count = d.count,
-                startTime = start,
-                endTime = end,
-                startZoneOffset = startOff,
-                endZoneOffset = endOff
-            )
+            StepsRecord(count = d.count, startTime = start, endTime = end,
+                startZoneOffset = startOff, endZoneOffset = endOff)
         }
         if (valid.isEmpty()) return true
         return try {
@@ -133,21 +169,18 @@ class GoogleHealthManager(private val context: Context) {
     }
 
     suspend fun writeHeartRateBatch(records: List<HeartRateData>): Boolean {
-        val c = client ?: run { AppLogger.e(TAG, "writeHeartRateBatch: no client"); return false }
+        val c = healthConnectClient ?: run {
+            AppLogger.e(TAG, "writeHeartRateBatch: no client"); return false
+        }
         val valid = records.filter { it.beatsPerMinute > 0 }.map { d ->
             val time: Instant        = Instant.ofEpochMilli(d.timeMs)
             val end: Instant         = time.plusSeconds(1)
             val startOff: ZoneOffset = zoneRules.getOffset(time)
             val endOff: ZoneOffset   = zoneRules.getOffset(end)
-            HeartRateRecord(
-                startTime = time,
-                endTime = end,
-                startZoneOffset = startOff,
-                endZoneOffset = endOff,
-                samples = listOf(
-                    HeartRateRecord.Sample(time = time, beatsPerMinute = d.beatsPerMinute)
-                )
-            )
+            HeartRateRecord(startTime = time, endTime = end,
+                startZoneOffset = startOff, endZoneOffset = endOff,
+                samples = listOf(HeartRateRecord.Sample(time = time,
+                    beatsPerMinute = d.beatsPerMinute)))
         }
         if (valid.isEmpty()) return true
         return try {
