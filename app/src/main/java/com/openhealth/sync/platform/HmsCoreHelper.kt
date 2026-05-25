@@ -10,7 +10,7 @@ import com.openhealth.sync.util.AppLogger
 object HmsCoreHelper {
     private const val HMS_CORE_PACKAGE = "com.huawei.hwid"
     private const val APPGALLERY_PACKAGE = "com.huawei.appmarket"
-    private const val HMS_CORE_WEB_URI = "https://consumer.huawei.com/en/mobileservices/hms-core/"
+    private const val HMS_CORE_WEB_URI = "https://consumer.huawei.com/ru/mobileservices/hms-core/"
 
     const val missingMessage: String =
         "HMS Core is required for Huawei Health authorization. Install or update HMS Core and try again."
@@ -26,11 +26,11 @@ object HmsCoreHelper {
 
     fun openHmsCoreInstall(context: Context) {
         val intents = listOf(
+            Intent(Intent.ACTION_VIEW, Uri.parse(HMS_CORE_WEB_URI)),
             Intent(Intent.ACTION_VIEW, Uri.parse("appmarket://details?id=$HMS_CORE_PACKAGE")).apply {
                 setPackage(APPGALLERY_PACKAGE)
             },
-            Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$HMS_CORE_PACKAGE")),
-            Intent(Intent.ACTION_VIEW, Uri.parse(HMS_CORE_WEB_URI))
+            Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$HMS_CORE_PACKAGE"))
         )
 
         for (intent in intents) {

@@ -91,9 +91,12 @@ class MainActivity : ComponentActivity() {
 
         val required = viewModel.googleManager.permissions
         if (!granted.containsAll(required)) {
-            AppLogger.w("MainActivity", "Health Connect permissions were not granted; opening management/settings fallback")
-            Toast.makeText(this, "Разрешите доступ BitLut в Health Connect.", Toast.LENGTH_LONG).show()
-            openHealthConnectManagement()
+            AppLogger.w("MainActivity", "Health Connect permissions were not granted")
+            Toast.makeText(
+                this,
+                "Health Connect не выдал разрешения. Нажмите Google Health ещё раз и разрешите доступ BitLut.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -136,6 +139,7 @@ class MainActivity : ComponentActivity() {
         if (status == HealthConnectClient.SDK_AVAILABLE) {
             val permissions = viewModel.googleManager.permissions
             AppLogger.i("MainActivity", "Opening Health Connect permission screen for: $permissions")
+            Toast.makeText(this, "Открываю запрос разрешений Health Connect", Toast.LENGTH_SHORT).show()
             googlePermissionLauncher.launch(permissions)
             return
         }
