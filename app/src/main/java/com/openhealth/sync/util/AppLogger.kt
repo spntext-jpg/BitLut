@@ -1,27 +1,26 @@
 package com.openhealth.sync.util
 
 import android.util.Log
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.CopyOnWriteArrayList
 
 object AppLogger {
-    private const val MAX = 500
-    private val fmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
-    private val buffer = CopyOnWriteArrayList<String>()
+    private val _logs = MutableStateFlow<List<String>>(emptyList())
+    val logs = _logs.asStateFlow()
 
-    private fun add(level: String, tag: String, msg: String) {
-        val line = "${fmt.format(Date())} $level/$tag: $msg"
-        buffer.add(line)
-        if (buffer.size > MAX) buffer.removeAt(0)
+    private fun addLog(level: String, tag: String, message: String) {
+        val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        _logs.value = listOf("[$time] $level/$tag: $message") + _logs.value
     }
 
-    fun d(tag: String, msg: String) { add("D", tag, msg); Log.d(tag, msg) }
-    fun i(tag: String, msg: String) { add("I", tag, msg); Log.i(tag, msg) }
-    fun w(tag: String, msg: String) { add("W", tag, msg); Log.w(tag, msg) }
-    fun e(tag: String, msg: String) { add("E", tag, msg); Log.e(tag, msg) }
-
-    fun getLogs(): List<String> = buffer.toList()
-    fun clear() = buffer.clear()
+    fun d(tag: String, msg: String) { Log.d(tag, msg); addLog("D", tag, msg) }
+    fun i(tag: String, msg: String) { Log.i(tag, msg); addLog("I", tag, msg) }
+    fun w(tag: String, msg: String) { Log.w(tag, msg); addLog("W", tag, msg) }
+    fun e(tag: String, msg: String, t: Throwable? = null) {
+        Log.e(tag, msg, t)
+        addLog("E", tag, msg + (t?.message?.let { " - $it" } ?: ""))
+    }
 }
