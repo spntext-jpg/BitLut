@@ -199,7 +199,7 @@ class MainActivity : ComponentActivity() {
             AppLogger.e("MainActivity", "Cannot start Huawei Health authorization", error)
             Toast.makeText(
                 this,
-                "Не удалось открыть авторизацию Huawei Health. Откройте Huawei Health / HMS Core и попробуйте снова.",
+                "Huawei Health пока не выдал доступ. Проверьте Huawei Health, настройки конфиденциальности и статус заявки Health Kit.",
                 Toast.LENGTH_LONG
             ).show()
 
@@ -333,10 +333,14 @@ fun MainExpressiveLayout(
 
             SourceCard(
                 title = "Huawei Health",
-                status = if (uiState.isHuaweiAuthorized) "Подключено" else "Требуется доступ",
-                buttonText = if (uiState.isHuaweiAuthorized) "Обновить" else "Связать",
+                status = if (uiState.isHuaweiAuthorized) "Подключено" else "Ожидает разрешения Huawei",
+                buttonText = if (uiState.isHuaweiAuthorized) "Обновить" else "Проверить доступ",
                 onClick = onHuaweiClick
             )
+
+            if (!uiState.isHuaweiAuthorized) {
+                HuaweiApprovalInfoCard()
+            }
 
             Button(
                 onClick = onSyncClick,
@@ -345,6 +349,34 @@ fun MainExpressiveLayout(
             ) {
                 Text(if (uiState.isSyncing) "Синхронизация..." else "Синхронизировать сейчас")
             }
+        }
+    }
+}
+
+
+@Composable
+private fun HuaweiApprovalInfoCard() {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "Huawei Health: доступ на проверке",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "BitLut уже настроен для Huawei Health Kit, но Huawei отдельно проверяет доступ к данным здоровья. Пока заявка на Health Service Kit находится на ручной проверке, авторизация может возвращать ошибки 50005 или 50011.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                "Что можно сделать сейчас: откройте Huawei Health, войдите в тот же Huawei ID, примите настройки конфиденциальности Health Kit и повторите попытку позже.",
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 }

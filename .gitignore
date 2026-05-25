@@ -26,3 +26,13 @@ agconnect-services.json
 
 app/agconnect-services.json
 agconnect-services.json
+
+# Local secrets / build artifacts
+.huawei.env
+.signing/
+app/agconnect-services.json
+agconnect-services.json
+*.apk
+*.aab
+compile_errors.log
+*.sh
