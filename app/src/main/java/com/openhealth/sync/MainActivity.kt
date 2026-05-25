@@ -181,26 +181,36 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestHuaweiAuthorizationOrInstallHms() {
-        if (!HmsCoreHelper.isInstalled(this)) {
-            AppLogger.w("MainActivity", "HMS Core is missing; opening official HMS Core page")
-            Toast.makeText(this, HmsCoreHelper.missingMessage, Toast.LENGTH_LONG).show()
-            HmsCoreHelper.openInstallPage(this)
-            return
-        }
-
         if (!HuaweiConfig.hasDeveloperAppId()) {
+            AppLogger.e("MainActivity", "Huawei App ID is not configured")
             Toast.makeText(this, "Huawei App ID is not configured.", Toast.LENGTH_LONG).show()
             return
         }
 
         runCatching {
-            AppLogger.i("MainActivity", "Opening Huawei Health authorization screen")
-            huaweiAuthorizationLauncher.launch(viewModel.huaweiHealthManager.getAuthorizationIntent())
+            AppLogger.i(
+                "MainActivity",
+                "Starting Huawei authorization. hmsInstalled=${HmsCoreHelper.isInstalled(this)} huaweiHealthInstalled=${HmsCoreHelper.isHuaweiHealthInstalled(this)}"
+            )
+
+            val intent = viewModel.huaweiHealthManager.getAuthorizationIntent()
+            huaweiAuthorizationLauncher.launch(intent)
         }.onFailure { error ->
-            AppLogger.e("MainActivity", "Cannot start Huawei authorization", error)
-            Toast.makeText(this, "Не удалось открыть авторизацию Huawei Health", Toast.LENGTH_LONG).show()
+            AppLogger.e("MainActivity", "Cannot start Huawei Health authorization", error)
+            Toast.makeText(
+                this,
+                "Не удалось открыть авторизацию Huawei Health. Откройте Huawei Health / HMS Core и попробуйте снова.",
+                Toast.LENGTH_LONG
+            ).show()
+
+            if (HmsCoreHelper.isHuaweiHealthInstalled(this)) {
+                HmsCoreHelper.openHuaweiHealth(this)
+            } else {
+                HmsCoreHelper.openInstallPage(this)
+            }
         }
     }
+
 
     private fun triggerImmediateSync() {
         viewModel.markSyncStarted()
