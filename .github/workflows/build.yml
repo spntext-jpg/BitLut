@@ -1,77 +1,65 @@
-name: Build BitLut Release
+name: Android Release Build
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
-
-permissions:
-  contents: read
+    inputs:
+      version_name:
+        description: "Release version name"
+        required: true
+        default: "1.0.0"
+      version_code:
+        description: "Release version code"
+        required: true
+        default: "1"
 
 jobs:
-  release-apk:
-    name: Build signed release APK
+  build-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: gradle
+          distribution: temurin
+          java-version: 17
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Restore release keystore from GitHub Secrets
-        env:
-          BITLUT_KEYSTORE_BASE64: ${{ secrets.BITLUT_KEYSTORE_BASE64 }}
+      - name: Restore release keystore
         run: |
-          if [ -z "$BITLUT_KEYSTORE_BASE64" ]; then
-            echo "BITLUT_KEYSTORE_BASE64 secret is required for production release builds." >&2
-            exit 1
-          fi
-          echo "$BITLUT_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/bitlut-release.jks"
+          mkdir -p .signing
+          echo "${{ secrets.BITLUT_KEYSTORE_BASE64 }}" | base64 -d > .signing/bitlut-release.jks
 
-      - name: Write local release properties
+      - name: Create local Huawei env
         run: |
-          cat > local.properties <<EOF
-          BITLUT_KEYSTORE_PATH=$RUNNER_TEMP/bitlut-release.jks
-          BITLUT_KEYSTORE_PASSWORD=${{ secrets.BITLUT_KEYSTORE_PASSWORD }}
-          BITLUT_KEY_ALIAS=${{ secrets.BITLUT_KEY_ALIAS }}
-          BITLUT_KEY_PASSWORD=${{ secrets.BITLUT_KEY_PASSWORD }}
+          cat > .huawei.env <<EOF
           HUAWEI_APP_ID=${{ secrets.HUAWEI_APP_ID }}
-          HUAWEI_CLIENT_ID=${{ secrets.HUAWEI_CLIENT_ID }}
-          HUAWEI_CLIENT_SECRET=${{ secrets.HUAWEI_CLIENT_SECRET }}
-          HUAWEI_REDIRECT_URI=${{ secrets.HUAWEI_REDIRECT_URI }}
           EOF
 
-      - name: Validate production package and version
+      - name: Build release APK
+        env:
+          BITLUT_KEYSTORE_PATH: .signing/bitlut-release.jks
+          BITLUT_KEYSTORE_PASSWORD: ${{ secrets.BITLUT_KEYSTORE_PASSWORD }}
+          BITLUT_KEY_ALIAS: ${{ secrets.BITLUT_KEY_ALIAS }}
+          BITLUT_KEY_PASSWORD: ${{ secrets.BITLUT_KEY_PASSWORD }}
+          HUAWEI_APP_ID: ${{ secrets.HUAWEI_APP_ID }}
+          VERSION_NAME: ${{ github.event.inputs.version_name }}
+          VERSION_CODE: ${{ github.event.inputs.version_code }}
         run: |
-          grep -q 'applicationId = "com.openhealth.sync"' app/build.gradle.kts
-          grep -q 'versionName = "1.0.0"' app/build.gradle.kts
-          ! grep -R 'applicationIdSuffix' app/build.gradle.kts
-          test -n "${{ secrets.HUAWEI_APP_ID }}"
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:clean :app:assembleRelease --stacktrace
+          echo "APK outputs:"
+          find app/build/outputs -type f | sort
 
-      - name: Build signed release APK
-        run: ./gradlew --no-daemon :app:clean :app:assembleRelease --stacktrace 2>&1 | tee build_output.txt
+      - name: Verify release APK exists
+        run: |
+          test -n "$(find app/build/outputs/apk/release -name '*.apk' -type f -print -quit)"
+          mkdir -p release-artifacts
+          cp app/build/outputs/apk/release/*.apk release-artifacts/
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: BitLut-1.0.0-release-apk
-          path: app/build/outputs/apk/release/*.apk
+          name: BitLut-${{ github.event.inputs.version_name }}-release-apk
+          path: release-artifacts/*.apk
           if-no-files-found: error
-
-      - name: Build failure summary
-        if: failure()
-        run: |
-          echo "## Build failed" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          tail -120 build_output.txt >> "$GITHUB_STEP_SUMMARY" || true
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
