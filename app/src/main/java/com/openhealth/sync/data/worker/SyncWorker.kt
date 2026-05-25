@@ -6,6 +6,7 @@ import androidx.work.WorkerParameters
 import com.openhealth.sync.SyncApplication
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.util.AppLogger
+import com.openhealth.sync.platform.HmsCoreHelper
 
 private const val TAG = "SyncWorker"
 private const val DEFAULT_LOOKBACK_MS = 24L * 60L * 60L * 1000L
@@ -19,6 +20,11 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
 
     override suspend fun doWork(): Result {
         AppLogger.i(TAG, "Starting Huawei -> Health Connect sync")
+
+        if (!HmsCoreHelper.isInstalled(applicationContext)) {
+            AppLogger.w("SyncWorker", "HMS Core is missing; Huawei Health sync cannot start")
+            return Result.failure()
+        }
 
         val googleManager = appContainer.googleHealthManager
         val huaweiManager = appContainer.huaweiHealthManager

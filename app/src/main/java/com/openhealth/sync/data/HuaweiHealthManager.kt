@@ -17,6 +17,7 @@ import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.util.AppLogger
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
+import com.openhealth.sync.platform.HmsCoreHelper
 
 private const val TAG = "HuaweiHealthManager"
 
@@ -77,6 +78,11 @@ class HuaweiHealthManager(private val context: Context) {
     }
 
     private suspend fun readSteps(startTimeMs: Long, endTimeMs: Long): List<StepData> {
+        if (!HmsCoreHelper.isInstalled(context)) {
+            AppLogger.e("HuaweiHealthManager", HmsCoreHelper.missingMessage())
+            throw IllegalStateException(HmsCoreHelper.missingMessage())
+        }
+
         val options = ReadOptions.Builder()
             .read(DataType.DT_CONTINUOUS_STEPS_DELTA)
             .setTimeRange(startTimeMs, endTimeMs, TimeUnit.MILLISECONDS)

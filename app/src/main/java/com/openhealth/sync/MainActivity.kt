@@ -68,8 +68,12 @@ import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.util.AppLogger
 import java.util.concurrent.TimeUnit
+import com.openhealth.sync.platform.HmsCoreHelper
 
 class MainActivity : ComponentActivity() {
+    
+
+
     private val viewModel: SyncViewModel by viewModels {
         val app = application as SyncApplication
         SyncViewModel.provideFactory(
@@ -289,4 +293,11 @@ private fun SourceCard(
             Button(onClick = onClick) { Text(buttonText) }
         }
     }
+
+    private fun openHmsCoreInstallPage() {
+        HmsCoreHelper.openInstallPage(this)
+    }
+
 }
+
+// 1.0.1 UX copy: Install or update HMS Core to authorize Huawei Health.

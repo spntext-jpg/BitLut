@@ -63,3 +63,26 @@ jobs:
           name: BitLut-${{ github.event.inputs.version_name }}-release-apk
           path: release-artifacts/*.apk
           if-no-files-found: error
+
+
+      - name: Build failure summary
+        if: failure()
+        run: |
+          {
+            echo "## Build failed"
+            echo ""
+            echo "### Quick diagnosis"
+            echo "- Check the first Gradle error above this summary."
+            echo "- Check Java version, signing secrets, and APK output path."
+            echo "- For signing errors, verify BITLUT_KEYSTORE_BASE64, BITLUT_KEYSTORE_PASSWORD, BITLUT_KEY_ALIAS, BITLUT_KEY_PASSWORD."
+            echo ""
+            echo "### Java"
+            echo '```'
+            java -version 2>&1 || true
+            echo '```'
+            echo ""
+            echo "### Outputs"
+            echo '```'
+            find app/build/outputs -maxdepth 6 -type f -print 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

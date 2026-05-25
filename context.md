@@ -73,3 +73,14 @@ base64 -w 0 .signing/bitlut-release.jks
 - Release builds must keep applicationId exactly `com.openhealth.sync`; no `.debug` suffix.
 - `.huawei.env`, `.signing/`, `*.jks`, and `agconnect-services.json` are local/private and must not be committed.
 - Missing Huawei values must not block Gradle configuration while AppGallery onboarding is in progress. Runtime Health Kit authorization remains user-driven through Huawei HMS SDK.
+
+## 2026-05-25 - BitLut 1.0.1 runtime fixes
+Observed on device:
+- Huawei Health Kit authorization failed with code 31 when HMS Core was not installed.
+- Health Connect SDK was available, but granted permissions were empty, so WorkManager sync could not write records.
+
+1.0.1 goals:
+- Do not silently fail Huawei authorization when HMS Core is missing.
+- Show a clear user action and open AppGallery/market/web page for HMS Core installation or update.
+- Do not start background sync when Health Connect write permissions are missing.
+- Keep package name com.openhealth.sync and release signing unchanged.
