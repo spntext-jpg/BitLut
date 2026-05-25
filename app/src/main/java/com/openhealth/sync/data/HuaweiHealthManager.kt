@@ -56,13 +56,24 @@ class HuaweiHealthManager(private val context: Context) {
         val result = settingController.parseHealthKitAuthResultFromIntent(data)
         val success = result?.isSuccess == true
         prefs.edit().putBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, success).apply()
+
         if (success) {
             AppLogger.i(TAG, "Huawei Health Kit authorization granted")
         } else {
-            AppLogger.e(TAG, "Huawei Health Kit authorization failed: ${result?.errorCode ?: "no result"}")
+            val code = result?.errorCode
+            val hint = when (code) {
+                50005 -> "Scope unauthorized. Check Health Kit Data Application: Steps, Heart Rate, and Activity/Exercise Records must be approved for Read."
+                50011 -> "Huawei Health privacy/authorization was not accepted. Open Huawei Health > Me > Privacy management > HUAWEI Health Kit, then revoke BitLut authorization and try again."
+                907135702 -> "Certificate fingerprint mismatch. Check SHA-256 in AppGallery Connect."
+                907135000 -> "Invalid HMS arguments. Check appid metadata, package name, and agconnect-services.json."
+                else -> "Check Health Kit enablement, SHA-256, agconnect-services.json, and test account permissions."
+            }
+            AppLogger.e(TAG, "Huawei Health Kit authorization failed: ${code ?: "no result"}. $hint")
         }
+
         return success
     }
+
 
     fun markAuthorizationUnknown() {
         prefs.edit().putBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, false).apply()

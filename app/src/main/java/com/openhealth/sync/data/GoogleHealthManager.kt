@@ -11,6 +11,7 @@ import com.openhealth.sync.util.AppLogger
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import androidx.health.connect.client.records.ExerciseSessionRecord
 
 private const val TAG = "GoogleHealthManager"
 
@@ -32,7 +33,8 @@ class GoogleHealthManager(private val context: Context) {
 
     val permissions: Set<String> = setOf(
         HealthPermission.getWritePermission(StepsRecord::class),
-        HealthPermission.getWritePermission(HeartRateRecord::class)
+        HealthPermission.getWritePermission(HeartRateRecord::class),
+        HealthPermission.getWritePermission(ExerciseSessionRecord::class)
     )
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
