@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 val localProps = Properties().apply {
@@ -56,10 +57,6 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-            "-opt-in=kotlin.RequiresOptIn"
-        )
     }
 
     buildFeatures {
@@ -67,10 +64,7 @@ android {
         buildConfig = true
     }
 
-    // Compose compiler tied to Kotlin 1.8.22 — use BOM for library versions
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.4.8"
-    }
+    // composeOptions block removed — Kotlin 2.0 + Compose Plugin handles this automatically
 
     packaging {
         resources {
@@ -83,45 +77,45 @@ android {
 }
 
 dependencies {
-    // ── Compose BOM — aligns all Compose library versions ──────────────────
-    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
+    // Compose BOM — aligns all Compose library versions
+    val composeBom = platform("androidx.compose:compose-bom:2025.04.01")
     implementation(composeBom)
 
-    // ── Compose ─────────────────────────────────────────────────────────────
+    // Compose
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // Material 3 — latest stable, Material You / Expressive
-    implementation("androidx.compose.material3:material3:1.3.1")
-    implementation("androidx.compose.material3:material3-window-size-class:1.3.1")
+    // Material 3 Expressive — latest stable
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3-adaptive-navigation-suite")
 
-    // ── AndroidX core ────────────────────────────────────────────────────────
+    // AndroidX core
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
-    // ── AppCompat — required for HuaweiCallbackActivity ──────────────────────
+    // AppCompat — required for HuaweiCallbackActivity
     implementation("androidx.appcompat:appcompat:1.7.0")
 
-    // ── Health Connect — latest compatible with compileSdk 35 ────────────────
+    // Health Connect — latest compatible with compileSdk 35
     implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
 
-    // ── WorkManager ──────────────────────────────────────────────────────────
+    // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
-    // ── Network ──────────────────────────────────────────────────────────────
+    // Network
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // ── Secure storage ───────────────────────────────────────────────────────
+    // Secure storage
     implementation("androidx.security:security-crypto:1.0.0")
 
-    // ── Coroutines ───────────────────────────────────────────────────────────
+    // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }
