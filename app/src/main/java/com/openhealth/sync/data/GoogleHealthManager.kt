@@ -12,7 +12,13 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 private const val TAG = "GoogleHealthManager"
-private const val HC_PACKAGE = "com.google.android.apps.healthdata"
+
+// All known package names for Health Connect across Android versions and OEMs
+private val HC_PACKAGES = listOf(
+    "com.google.android.apps.healthdata",   // Standalone APK (Play Store, Android 9-13)
+    "com.google.android.health.connect",    // Integrated (Android 14+, some OEM builds)
+    "com.android.healthconnect.controller"  // System component on some Pixel builds
+)
 
 enum class HealthConnectStatus {
     AVAILABLE, NOT_INSTALLED, NEEDS_UPDATE, NOT_SUPPORTED
@@ -35,37 +41,64 @@ class GoogleHealthManager(private val context: Context) {
 
     fun getStatus(): HealthConnectStatus {
         val sdkStatus = HealthConnectClient.getSdkStatus(context)
-        AppLogger.i(TAG, "getSdkStatus()=$sdkStatus device=${android.os.Build.MODEL} API=${android.os.Build.VERSION.SDK_INT}")
+        val installedPkg = findInstalledHcPackage()
+
+        AppLogger.i(TAG, "getSdkStatus()=$sdkStatus " +
+            "installedPackage=${installedPkg ?: "none"} " +
+            "device=${android.os.Build.MODEL} API=${android.os.Build.VERSION.SDK_INT}")
+
         return when (sdkStatus) {
             HealthConnectClient.SDK_AVAILABLE -> {
-                AppLogger.i(TAG, "HC: AVAILABLE")
+                AppLogger.i(TAG, "HC: AVAILABLE (SDK confirms)")
                 HealthConnectStatus.AVAILABLE
             }
             HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
-                val installed = isHcInstalled()
-                AppLogger.w(TAG, "HC: UPDATE_REQUIRED, package installed=$installed")
-                // OnePlus/OPPO Android 12 OEM returns UPDATE_REQUIRED even when HC is current.
-                // If the package exists, treat as AVAILABLE — client.getOrCreate() still works.
-                if (installed) HealthConnectStatus.AVAILABLE else HealthConnectStatus.NEEDS_UPDATE
+                // SDK says update required — but check if package actually exists.
+                // OnePlus/OPPO Android 11-12: SDK lies, package is present and functional.
+                if (installedPkg != null) {
+                    AppLogger.w(TAG, "HC: SDK=UPDATE_REQUIRED but pkg=$installedPkg exists " +
+                        "— treating as AVAILABLE (OEM signature mismatch workaround)")
+                    HealthConnectStatus.AVAILABLE
+                } else {
+                    AppLogger.w(TAG, "HC: genuinely needs update — not installed")
+                    HealthConnectStatus.NEEDS_UPDATE
+                }
             }
             else -> {
-                val installed = isHcInstalled()
-                AppLogger.w(TAG, "HC: UNAVAILABLE, package installed=$installed")
-                if (installed) HealthConnectStatus.NEEDS_UPDATE else HealthConnectStatus.NOT_INSTALLED
+                // SDK_UNAVAILABLE
+                if (installedPkg != null) {
+                    AppLogger.w(TAG, "HC: SDK_UNAVAILABLE but pkg=$installedPkg found — NEEDS_UPDATE")
+                    HealthConnectStatus.NEEDS_UPDATE
+                } else {
+                    AppLogger.w(TAG, "HC: not installed anywhere")
+                    HealthConnectStatus.NOT_INSTALLED
+                }
             }
         }
     }
 
-    private fun isHcInstalled(): Boolean = try {
-        context.packageManager.getPackageInfo(HC_PACKAGE, 0)
-        true
-    } catch (e: PackageManager.NameNotFoundException) { false }
+    /**
+     * Scans all known Health Connect package names.
+     * Returns the first installed one, or null if none found.
+     */
+    private fun findInstalledHcPackage(): String? {
+        for (pkg in HC_PACKAGES) {
+            try {
+                context.packageManager.getPackageInfo(pkg, 0)
+                AppLogger.d(TAG, "Found HC package: $pkg")
+                return pkg
+            } catch (e: PackageManager.NameNotFoundException) {
+                AppLogger.d(TAG, "HC package not found: $pkg")
+            }
+        }
+        return null
+    }
 
     suspend fun hasAllPermissions(): Boolean {
         val c = client ?: return false
         return try {
             val granted = c.permissionController.getGrantedPermissions()
-            AppLogger.d(TAG, "Granted: $granted")
+            AppLogger.d(TAG, "Granted permissions: $granted")
             granted.containsAll(permissions)
         } catch (e: Exception) {
             AppLogger.e(TAG, "Permission check failed: ${e.message}")
@@ -76,8 +109,8 @@ class GoogleHealthManager(private val context: Context) {
     suspend fun writeStepsBatch(records: List<StepData>): Boolean {
         val c = client ?: run { AppLogger.e(TAG, "writeStepsBatch: no client"); return false }
         val valid = records.filter { it.count > 0 && it.startTimeMs < it.endTimeMs }.map { d ->
-            val start: Instant    = Instant.ofEpochMilli(d.startTimeMs)
-            val end: Instant      = Instant.ofEpochMilli(d.endTimeMs)
+            val start: Instant       = Instant.ofEpochMilli(d.startTimeMs)
+            val end: Instant         = Instant.ofEpochMilli(d.endTimeMs)
             val startOff: ZoneOffset = zoneRules.getOffset(start)
             val endOff: ZoneOffset   = zoneRules.getOffset(end)
             StepsRecord(
@@ -102,8 +135,8 @@ class GoogleHealthManager(private val context: Context) {
     suspend fun writeHeartRateBatch(records: List<HeartRateData>): Boolean {
         val c = client ?: run { AppLogger.e(TAG, "writeHeartRateBatch: no client"); return false }
         val valid = records.filter { it.beatsPerMinute > 0 }.map { d ->
-            val time: Instant     = Instant.ofEpochMilli(d.timeMs)
-            val end: Instant      = time.plusSeconds(1)
+            val time: Instant        = Instant.ofEpochMilli(d.timeMs)
+            val end: Instant         = time.plusSeconds(1)
             val startOff: ZoneOffset = zoneRules.getOffset(time)
             val endOff: ZoneOffset   = zoneRules.getOffset(end)
             HeartRateRecord(
@@ -111,7 +144,9 @@ class GoogleHealthManager(private val context: Context) {
                 endTime = end,
                 startZoneOffset = startOff,
                 endZoneOffset = endOff,
-                samples = listOf(HeartRateRecord.Sample(time = time, beatsPerMinute = d.beatsPerMinute))
+                samples = listOf(
+                    HeartRateRecord.Sample(time = time, beatsPerMinute = d.beatsPerMinute)
+                )
             )
         }
         if (valid.isEmpty()) return true
