@@ -1,3 +1,4 @@
+cat << 'EOF' > app/src/main/java/com/openhealth/sync/MainActivity.kt
 package com.openhealth.sync
 
 import android.content.Intent
@@ -152,3 +153,5 @@ fun MainExpressiveLayout(
         }
     }
 }
+EOF
+echo "✅ Часть 2 завершена. Запустите: ./gradlew clean assembleDebug"
