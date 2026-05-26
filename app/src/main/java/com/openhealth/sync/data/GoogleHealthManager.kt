@@ -6,6 +6,11 @@ import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.FloorsClimbedRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.ElevationGainedRecord
+import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import com.openhealth.sync.util.AppLogger
 import java.time.Instant
 import java.time.ZoneId
@@ -28,7 +33,12 @@ enum class HealthConnectStatus {
 class GoogleHealthManager(private val context: Context) {
 
     val permissions: Set<String> = setOf(
-        HealthPermission.getWritePermission(StepsRecord::class)
+        HealthPermission.getWritePermission(StepsRecord::class),
+        HealthPermission.getWritePermission(DistanceRecord::class),
+        HealthPermission.getWritePermission(FloorsClimbedRecord::class),
+        HealthPermission.getWritePermission(ElevationGainedRecord::class),
+        HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
+        HealthPermission.getWritePermission(ExerciseSessionRecord::class)
     )
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
