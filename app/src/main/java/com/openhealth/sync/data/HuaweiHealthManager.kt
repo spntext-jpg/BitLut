@@ -149,6 +149,34 @@ class HuaweiHealthManager(private val context: Context) {
         }.filter { it.count > 0 && it.startTimeMs < it.endTimeMs }
     }
 
+
+    private fun SamplePoint.toStepDataOrNull(): StepData? {
+        return try {
+            val start = getStartTime(TimeUnit.MILLISECONDS)
+            val end = getEndTime(TimeUnit.MILLISECONDS)
+
+            val value = fieldValueMap["steps"] ?: return null
+
+            val count = when (value) {
+                is Int -> value.toLong()
+                is Long -> value
+                is Float -> value.toLong()
+                is Double -> value.toLong()
+                else -> return null
+            }
+
+            if (count <= 0L || start >= end) return null
+
+            StepData(
+                startTimeMs = start,
+                endTimeMs = end,
+                count = count
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private suspend fun <T> Task<T>.awaitTask(): T = kotlinx.coroutines.suspendCancellableCoroutine { cont ->
         addOnSuccessListener { value -> cont.resume(value) }
         addOnFailureListener { error -> cont.cancel(error) }
