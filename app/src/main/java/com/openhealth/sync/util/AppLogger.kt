@@ -11,9 +11,30 @@ object AppLogger {
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs = _logs.asStateFlow()
 
+    private fun shouldShowInUi(level: String, tag: String, message: String): Boolean {
+        if (level == "D") return false
+
+        val noisy = listOf(
+            "Granted permissions",
+            "HC: AVAILABLE",
+            "getSdkStatus()",
+            "Found HC package",
+            "HealthConnectClient created OK",
+            "pending approval",
+            "Scope unauthorized",
+            "Health Kit is not authorized"
+        )
+
+        if (noisy.any { message.contains(it, ignoreCase = true) }) return false
+
+        return true
+    }
+
     private fun addLog(level: String, tag: String, message: String) {
+        if (!shouldShowInUi(level, tag, message)) return
+
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        _logs.value = (listOf("[$time] $level/$tag: $message") + _logs.value).take(300)
+        _logs.value = (listOf("[$time] $level/$tag: $message") + _logs.value).take(80)
     }
 
     fun d(tag: String, msg: String) {
@@ -36,3 +57,4 @@ object AppLogger {
         addLog("E", tag, msg + (t?.message?.let { " - $it" } ?: ""))
     }
 }
+

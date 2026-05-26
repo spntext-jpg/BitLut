@@ -67,3 +67,38 @@ GitHub Actions:
 
 Never generate fake health data.
 Only sync real Huawei-derived records.
+
+
+## Successful baseline
+
+The current internal production baseline is confirmed:
+
+- signed APK installs successfully
+- Google Health Connect permissions work
+- Huawei authorization reaches expected approval gate
+- CI release pipeline creates signed APKs
+- no fake health data is generated
+
+See also: docs/SUCCESSFUL_BUILD.md
+
+## UI log policy
+
+The in-app log screen should show only useful user-level events.
+Verbose technical checks are kept in Logcat but hidden from UI logs.
+
+Hidden from UI logs:
+
+- repeated Health Connect availability checks
+- granted permission debug dumps
+- Huawei pending approval noise
+- expected not-authorized state before Huawei approval
+
+## Duplicate sync protection policy
+
+Before Huawei approval, sync must not write fake data.
+After approval, duplicate protection must be implemented around real Huawei-derived records only:
+
+- use last successful sync timestamp
+- avoid overlapping historical windows
+- avoid parallel WorkManager runs
+- never insert generated placeholder records
