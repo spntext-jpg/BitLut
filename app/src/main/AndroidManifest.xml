@@ -40,7 +40,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BitLut">
 
-        <meta-data android:name="com.huawei.hms.client.appid" android:value="appid=${huaweiAppId}" />
+        <meta-data android:name="com.huawei.hms.client.appid" android:value="appid=117824685${huaweiAppId}" />
 
         <activity
             android:name=".MainActivity"

@@ -53,25 +53,35 @@ class HuaweiHealthManager(private val context: Context) {
 
     fun isAuthorized(): Boolean = prefs.getBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, false)
 
+    fun isPendingApproval(): Boolean = prefs.getBoolean("huawei_pending_approval", false)
+
     fun getAuthorizationIntent(): Intent = settingController.requestAuthorizationIntent(scopes, true)
 
     fun handleAuthorizationResult(data: Intent?): Boolean {
         val result = settingController.parseHealthKitAuthResultFromIntent(data)
         val success = result?.isSuccess == true
-        prefs.edit().putBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, success).apply()
+        val code = result?.errorCode
+        val isPending = code == 50005
+        prefs.edit()
+            .putBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, success)
+            .putBoolean("huawei_pending_approval", isPending)
+            .apply()
 
         if (success) {
             AppLogger.i(TAG, "Huawei Health Kit authorization granted")
         } else {
-            val code = result?.errorCode
             val hint = when (code) {
-                50005 -> "Scope unauthorized. Huawei Health Service Kit application is still pending approval for Step, Distance, Activity, Activity Record, and Historical Data."
+                50005 -> "Scope unauthorized — Health Service Kit approval pending (up to 15 working days). This is expected, no action needed."
                 50011 -> "Huawei Health privacy/authorization was not accepted. Open Huawei Health > Me > Privacy management > HUAWEI Health Kit, then revoke BitLut authorization and try again."
                 907135702 -> "Certificate fingerprint mismatch. Check SHA-256 in AppGallery Connect."
                 907135000 -> "Invalid HMS arguments. Check appid metadata, package name, and agconnect-services.json."
                 else -> "Check Health Kit enablement, SHA-256, agconnect-services.json, and test account permissions."
             }
-            AppLogger.e(TAG, "Huawei Health Kit authorization failed: ${code ?: "no result"}. $hint")
+            if (isPending) {
+                AppLogger.w(TAG, "Huawei Health Kit authorization pending approval: ${code}. $hint")
+            } else {
+                AppLogger.e(TAG, "Huawei Health Kit authorization failed: ${code ?: "no result"}. $hint")
+            }
         }
 
         return success
