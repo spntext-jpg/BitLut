@@ -54,7 +54,10 @@ jobs:
       - name: Prepare APK
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/release/app-release.apk release/BitLut-${RELEASE_TAG}.apk
+          APK_PATH="$(find app/build/outputs/apk/release -name "*.apk" | head -1)"
+          echo "Found APK: $APK_PATH"
+          test -n "$APK_PATH"
+          cp "$APK_PATH" "release/BitLut-${RELEASE_TAG}.apk"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
