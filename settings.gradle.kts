@@ -1,19 +1,18 @@
 pluginManagement {
     repositories {
-        google()
+        maven { url = uri("https://developer.huawei.com/repo/") }
+        google { content { includeGroupByRegex("com\\.android.*"); includeGroupByRegex("com\\.google.*"); includeGroupByRegex("androidx.*") } }
         mavenCentral()
         gradlePluginPortal()
-        maven { url = uri("https://developer.huawei.com/repo/") }
     }
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        maven { url = uri("https://developer.huawei.com/repo/") }
         google()
         mavenCentral()
-        maven { url = uri("https://developer.huawei.com/repo/") }
     }
 }
-
 rootProject.name = "BitLut"
 include(":app")
