@@ -54,11 +54,21 @@ jobs:
       - name: Prepare APK
         run: |
           mkdir -p release
-          APK_PATH="$(find app/build/outputs/apk/release -name "*.apk" | head -1)"
-          echo "Found APK: $APK_PATH"
-          test -n "$APK_PATH"
-          cp "$APK_PATH" "release/BitLut-${RELEASE_TAG}.apk"
+          echo "Available APK files:"
+          find app/build/outputs/apk -type f -name "*.apk" -print
 
+          APK_PATH="$(find app/build/outputs/apk/release -type f -name "*release*.apk" ! -name "*androidTest*" ! -name "*unsigned*" | head -1)"
+
+          if [ -z "$APK_PATH" ]; then
+            echo "No signed release APK found"
+            exit 1
+          fi
+
+          echo "Selected APK: $APK_PATH"
+          file "$APK_PATH"
+          unzip -t "$APK_PATH"
+
+          cp "$APK_PATH" "release/BitLut-${RELEASE_TAG}.apk"
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
