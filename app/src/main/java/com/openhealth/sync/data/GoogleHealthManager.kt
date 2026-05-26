@@ -10,8 +10,11 @@ import com.openhealth.sync.util.AppLogger
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
-import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ElevationGainedRecord
+import androidx.health.connect.client.records.FloorsClimbedRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 
 private const val TAG = "GoogleHealthManager"
 
@@ -32,10 +35,8 @@ enum class HealthConnectStatus {
 class GoogleHealthManager(private val context: Context) {
 
     val permissions: Set<String> = setOf(
-        HealthPermission.getWritePermission(StepsRecord::class),
-        HealthPermission.getWritePermission(DistanceRecord::class),
-        HealthPermission.getWritePermission(ExerciseSessionRecord::class)
     )
+
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
 
@@ -134,13 +135,16 @@ class GoogleHealthManager(private val context: Context) {
     }
 
     suspend fun writeHeartRateBatch(records: List<HeartRateData>): Boolean {
-        // Heart rate is intentionally disabled until Huawei Health Kit approves this scope.
-        // Keep this method as a no-op so SyncWorker can remain simple.
         if (records.isNotEmpty()) {
-            AppLogger.w(TAG, "Skipping ${records.size} heart-rate samples: scope is not approved yet")
+            AppLogger.w(TAG, "Skipping ${records.size} heart-rate samples: Huawei Heart Rate scope is not requested in this build")
         }
         return true
     }
+
+
+
+
+
 
 }
 

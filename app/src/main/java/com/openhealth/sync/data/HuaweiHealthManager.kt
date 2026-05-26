@@ -65,7 +65,7 @@ class HuaweiHealthManager(private val context: Context) {
         } else {
             val code = result?.errorCode
             val hint = when (code) {
-                50005 -> "Scope unauthorized. Check Health Kit Data Application: Steps, Heart Rate, and Activity/Exercise Records must be approved for Read."
+                50005 -> "Scope unauthorized. For this build BitLut requests only Steps. Check that Steps Read is approved in Huawei Health Kit Data Application."
                 50011 -> "Huawei Health privacy/authorization was not accepted. Open Huawei Health > Me > Privacy management > HUAWEI Health Kit, then revoke BitLut authorization and try again."
                 907135702 -> "Certificate fingerprint mismatch. Check SHA-256 in AppGallery Connect."
                 907135000 -> "Invalid HMS arguments. Check appid metadata, package name, and agconnect-services.json."
