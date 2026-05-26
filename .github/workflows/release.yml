@@ -51,24 +51,42 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean :app:assembleRelease --stacktrace
 
-      - name: Prepare APK
+      - name: Prepare signed APK
+        env:
+          BITLUT_KEYSTORE_PASSWORD: ${{ secrets.BITLUT_KEYSTORE_PASSWORD }}
+          BITLUT_KEY_ALIAS: ${{ secrets.BITLUT_KEY_ALIAS }}
+          BITLUT_KEY_PASSWORD: ${{ secrets.BITLUT_KEY_PASSWORD }}
         run: |
           mkdir -p release
           echo "Available APK files:"
           find app/build/outputs/apk -type f -name "*.apk" -print
 
-          APK_PATH="$(find app/build/outputs/apk/release -type f -name "*release*.apk" ! -name "*androidTest*" ! -name "*unsigned*" | head -1)"
+          UNSIGNED_APK="$(find app/build/outputs/apk/release -type f -name "*unsigned*.apk" | head -1)"
 
-          if [ -z "$APK_PATH" ]; then
-            echo "No signed release APK found"
+          if [ -z "$UNSIGNED_APK" ]; then
+            echo "No unsigned release APK found"
             exit 1
           fi
 
-          echo "Selected APK: $APK_PATH"
-          file "$APK_PATH"
-          unzip -t "$APK_PATH"
+          echo "Unsigned APK: $UNSIGNED_APK"
 
-          cp "$APK_PATH" "release/BitLut-${RELEASE_TAG}.apk"
+          ZIPALIGNED_APK="release/BitLut-${RELEASE_TAG}-aligned.apk"
+          SIGNED_APK="release/BitLut-${RELEASE_TAG}.apk"
+
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -name zipalign | sort | tail -1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)"
+
+          echo "zipalign: $ZIPALIGN"
+          echo "apksigner: $APKSIGNER"
+
+          "$ZIPALIGN" -f -p 4 "$UNSIGNED_APK" "$ZIPALIGNED_APK"
+
+          "$APKSIGNER" sign             --ks .signing/bitlut-release.jks             --ks-key-alias "$BITLUT_KEY_ALIAS"             --ks-pass "pass:$BITLUT_KEYSTORE_PASSWORD"             --key-pass "pass:$BITLUT_KEY_PASSWORD"             --out "$SIGNED_APK"             "$ZIPALIGNED_APK"
+
+          "$APKSIGNER" verify --verbose --print-certs "$SIGNED_APK"
+          unzip -t "$SIGNED_APK"
+
+          rm -f "$ZIPALIGNED_APK"
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
