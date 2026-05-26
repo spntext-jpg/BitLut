@@ -327,8 +327,12 @@ fun MainExpressiveLayout(
                     uiState.hasGooglePermissions -> "Подключено"
                     else -> "Требуется доступ"
                 },
-                buttonText = if (uiState.hasGooglePermissions) "Обновить" else "Связать",
-                onClick = onGoogleClick
+                buttonText = if (uiState.hasGooglePermissions) "Подключено" else "Связать",
+                onClick = {
+                    if (!uiState.hasGooglePermissions) {
+                        onGoogleClick()
+                    }
+                }
             )
 
             SourceCard(

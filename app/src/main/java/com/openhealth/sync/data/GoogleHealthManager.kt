@@ -10,11 +10,6 @@ import com.openhealth.sync.util.AppLogger
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
-import androidx.health.connect.client.records.DistanceRecord
-import androidx.health.connect.client.records.ElevationGainedRecord
-import androidx.health.connect.client.records.FloorsClimbedRecord
-import androidx.health.connect.client.records.ExerciseSessionRecord
-import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 
 private const val TAG = "GoogleHealthManager"
 
@@ -36,6 +31,7 @@ class GoogleHealthManager(private val context: Context) {
 
     val permissions: Set<String> = setOf(
     )
+
 
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
@@ -136,10 +132,11 @@ class GoogleHealthManager(private val context: Context) {
 
     suspend fun writeHeartRateBatch(records: List<HeartRateData>): Boolean {
         if (records.isNotEmpty()) {
-            AppLogger.w(TAG, "Skipping ${records.size} heart-rate samples: Huawei Heart Rate scope is not requested in this build")
+            AppLogger.w(TAG, "Skipping ${records.size} heart-rate samples: Heart Rate scope is not approved yet")
         }
         return true
     }
+
 
 
 
