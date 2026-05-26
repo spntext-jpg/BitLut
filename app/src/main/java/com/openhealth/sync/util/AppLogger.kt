@@ -13,19 +13,22 @@ object AppLogger {
 
     private fun addLog(level: String, tag: String, message: String) {
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        _logs.value = (listOf("[$time] $level/$tag: $message") + _logs.value).take(200)
+        _logs.value = (listOf("[$time] $level/$tag: $message") + _logs.value).take(300)
     }
 
     fun d(tag: String, msg: String) {
         Log.d(tag, msg)
+        addLog("D", tag, msg)
     }
 
     fun i(tag: String, msg: String) {
         Log.i(tag, msg)
+        addLog("I", tag, msg)
     }
 
     fun w(tag: String, msg: String) {
         Log.w(tag, msg)
+        addLog("W", tag, msg)
     }
 
     fun e(tag: String, msg: String, t: Throwable? = null) {

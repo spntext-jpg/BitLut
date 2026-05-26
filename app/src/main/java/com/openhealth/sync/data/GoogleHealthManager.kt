@@ -30,8 +30,7 @@ enum class HealthConnectStatus {
 class GoogleHealthManager(private val context: Context) {
 
 val permissions: Set<String> = setOf(
-    HealthPermission.getWritePermission(StepsRecord::class),
-    HealthPermission.getReadPermission(StepsRecord::class)
+    HealthPermission.getWritePermission(StepsRecord::class)
 )
 
 

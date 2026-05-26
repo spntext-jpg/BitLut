@@ -4,8 +4,9 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.huawei.agconnect")
 }
+
+apply(plugin = "com.huawei.agconnect")
 
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
