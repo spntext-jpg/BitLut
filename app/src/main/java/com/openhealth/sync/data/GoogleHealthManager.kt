@@ -13,40 +13,34 @@ import java.time.ZoneOffset
 
 private const val TAG = "GoogleHealthManager"
 
-// ONLY real Health Connect package names — NOT com.google.android.gms
-// GMS is Google Play Services and has nothing to do with Health Connect
 private val HC_PACKAGES = listOf(
-    "com.google.android.apps.healthdata",   // Standalone APK from Play Store (Android 9-13)
-    "com.google.android.health.connect"     // Integrated module (Android 14+)
+    "com.google.android.apps.healthdata",
+    "com.google.android.health.connect"
 )
 
 enum class HealthConnectStatus {
-    AVAILABLE,       // SDK ready, client works, permissions can be requested
-    NOT_INSTALLED,   // HC APK not on device — send to Play Store
-    NEEDS_UPDATE,    // HC installed but too old
-    NOT_SUPPORTED    // Device/OS cannot run HC at all
+    AVAILABLE,
+    NOT_INSTALLED,
+    NEEDS_UPDATE,
+    NOT_SUPPORTED
 }
 
 class GoogleHealthManager(private val context: Context) {
 
-val permissions: Set<String> = setOf(
-    HealthPermission.getWritePermission(StepsRecord::class)
-)
-
-
+    val permissions: Set<String> = setOf(
+        HealthPermission.getWritePermission(StepsRecord::class)
+    )
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
 
-    // Lazily create client — null means HC is not usable on this device
     val healthConnectClient: HealthConnectClient? by lazy {
-        // Only attempt if SDK explicitly says available
         if (HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE) {
             try {
                 HealthConnectClient.getOrCreate(context).also {
                     AppLogger.i(TAG, "HealthConnectClient created OK")
                 }
             } catch (e: Exception) {
-                AppLogger.e(TAG, "getOrCreate failed: ${e.message}")
+                AppLogger.e(TAG, "getOrCreate failed: ${e.message}", e)
                 null
             }
         } else {
@@ -59,9 +53,10 @@ val permissions: Set<String> = setOf(
         val sdkStatus = HealthConnectClient.getSdkStatus(context)
         val installedPkg = findInstalledHcPackage()
 
-        AppLogger.i(TAG, "getSdkStatus()=$sdkStatus " +
-            "installedPackage=${installedPkg ?: "none"} " +
-            "API=${Build.VERSION.SDK_INT} device=${Build.MODEL}")
+        AppLogger.i(
+            TAG,
+            "getSdkStatus()=$sdkStatus installedPackage=${installedPkg ?: "none"} API=${Build.VERSION.SDK_INT} device=${Build.MODEL}"
+        )
 
         return when (sdkStatus) {
             HealthConnectClient.SDK_AVAILABLE -> {
@@ -69,15 +64,12 @@ val permissions: Set<String> = setOf(
                 HealthConnectStatus.AVAILABLE
             }
             HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
-                AppLogger.w(TAG, "HC: needs update (sdkStatus=2)")
-                // Only treat as needing update, never as AVAILABLE
-                // Even if a package exists, the SDK version is incompatible
+                AppLogger.w(TAG, "HC: needs update")
                 HealthConnectStatus.NEEDS_UPDATE
             }
             else -> {
-                AppLogger.w(TAG, "HC: not available (sdkStatus=$sdkStatus)")
-                if (installedPkg != null) HealthConnectStatus.NEEDS_UPDATE
-                else HealthConnectStatus.NOT_INSTALLED
+                AppLogger.w(TAG, "HC: not available")
+                if (installedPkg != null) HealthConnectStatus.NEEDS_UPDATE else HealthConnectStatus.NOT_INSTALLED
             }
         }
     }
@@ -103,30 +95,42 @@ val permissions: Set<String> = setOf(
             AppLogger.d(TAG, "Granted permissions: $granted")
             granted.containsAll(permissions)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Permission check failed: ${e.message}")
+            AppLogger.e(TAG, "Permission check failed: ${e.message}", e)
             false
         }
     }
 
     suspend fun writeStepsBatch(records: List<StepData>): Boolean {
         val c = healthConnectClient ?: run {
-            AppLogger.e(TAG, "writeStepsBatch: no client"); return false
+            AppLogger.e(TAG, "writeStepsBatch: no client")
+            return false
         }
-        val valid = records.filter { it.count > 0 && it.startTimeMs < it.endTimeMs }.map { d ->
-            val start: Instant       = Instant.ofEpochMilli(d.startTimeMs)
-            val end: Instant         = Instant.ofEpochMilli(d.endTimeMs)
-            val startOff: ZoneOffset = zoneRules.getOffset(start)
-            val endOff: ZoneOffset   = zoneRules.getOffset(end)
-            StepsRecord(count = d.count, startTime = start, endTime = end,
-                startZoneOffset = startOff, endZoneOffset = endOff)
-        }
+
+        val valid = records
+            .filter { it.count > 0 && it.startTimeMs < it.endTimeMs }
+            .map { d ->
+                val start: Instant = Instant.ofEpochMilli(d.startTimeMs)
+                val end: Instant = Instant.ofEpochMilli(d.endTimeMs)
+                val startOff: ZoneOffset = zoneRules.getOffset(start)
+                val endOff: ZoneOffset = zoneRules.getOffset(end)
+
+                StepsRecord(
+                    count = d.count,
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = startOff,
+                    endZoneOffset = endOff
+                )
+            }
+
         if (valid.isEmpty()) return true
+
         return try {
             c.insertRecords(valid)
             AppLogger.d(TAG, "Wrote ${valid.size} step records")
             true
         } catch (e: Exception) {
-            AppLogger.e(TAG, "writeStepsBatch failed: ${e.message}")
+            AppLogger.e(TAG, "writeStepsBatch failed: ${e.message}", e)
             false
         }
     }
@@ -137,13 +141,6 @@ val permissions: Set<String> = setOf(
         }
         return true
     }
-
-
-
-
-
-
-
 }
 
 data class StepData(val startTimeMs: Long, val endTimeMs: Long, val count: Long)
