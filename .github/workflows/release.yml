@@ -1,0 +1,68 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Restore release keystore
+        run: |
+          mkdir -p .signing
+          echo "${{ secrets.BITLUT_KEYSTORE_BASE64 }}" | base64 -d > .signing/bitlut-release.jks
+
+      - name: Restore agconnect-services.json
+        run: |
+          echo "${{ secrets.AGCONNECT_SERVICES_JSON_BASE64 }}" | base64 -d > app/agconnect-services.json
+
+      - name: Build release APK
+        env:
+          BITLUT_KEYSTORE_PASSWORD: ${{ secrets.BITLUT_KEYSTORE_PASSWORD }}
+          BITLUT_KEY_ALIAS: ${{ secrets.BITLUT_KEY_ALIAS }}
+          BITLUT_KEY_PASSWORD: ${{ secrets.BITLUT_KEY_PASSWORD }}
+          HUAWEI_APP_ID: ${{ secrets.HUAWEI_APP_ID }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean :app:assembleRelease --stacktrace
+
+      - name: Rename APK
+        run: |
+          mkdir -p release
+          cp app/build/outputs/apk/release/app-release.apk release/BitLut-${GITHUB_REF_NAME}.apk
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BitLut-${{ github.ref_name }}
+          path: release/*.apk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: BitLut ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: release/*.apk
+          draft: false
+          prerelease: false
+          generate_release_notes: true
