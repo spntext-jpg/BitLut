@@ -69,6 +69,7 @@ import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
+import com.openhealth.sync.ui.onboarding.OnboardingScreen
 import com.openhealth.sync.util.AppLogger
 import java.util.concurrent.TimeUnit
 
@@ -112,8 +113,25 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setupPeriodicSync()
 
-        setContent {
+        
+setContent {
+
+            var showOnboarding by rememberSaveable {
+                mutableStateOf(true)
+            }
+
+
             BitLutExpressiveTheme {
+
+                if (showOnboarding) {
+                    OnboardingScreen(
+                        onContinue = {
+                            showOnboarding = false
+                        }
+                    )
+                    return@BitLutExpressiveTheme
+                }
+
                 val uiState by viewModel.uiState.collectAsState()
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     MainExpressiveLayout(
