@@ -23,9 +23,19 @@ private const val TAG = "HuaweiHealthManager"
 
 data class HuaweiHealthSnapshot(
     val steps: List<StepData>,
-    val heartRates: List<HeartRateData>
+    val distances: List<DistanceData> = emptyList(),
+    val floors: List<FloorsData> = emptyList(),
+    val elevations: List<ElevationData> = emptyList(),
+    val activeCalories: List<ActiveCaloriesData> = emptyList(),
+    val activities: List<ActivitySessionData> = emptyList()
 ) {
-    val isEmpty: Boolean get() = steps.isEmpty() && heartRates.isEmpty()
+    val isEmpty: Boolean
+        get() = steps.isEmpty() &&
+            distances.isEmpty() &&
+            floors.isEmpty() &&
+            elevations.isEmpty() &&
+            activeCalories.isEmpty() &&
+            activities.isEmpty()
 }
 
 class HuaweiHealthManager(private val context: Context) {
@@ -96,9 +106,30 @@ class HuaweiHealthManager(private val context: Context) {
         require(startTimeMs < endTimeMs) { "startTimeMs must be before endTimeMs" }
         AppLogger.i(TAG, "Reading Huawei Health data from $startTimeMs to $endTimeMs")
         val steps = readSteps(startTimeMs, endTimeMs)
-        val heartRates = emptyList<HeartRateData>()
-        AppLogger.i(TAG, "Huawei read complete: steps=${steps.size}, heartRates=${heartRates.size}")
-        return HuaweiHealthSnapshot(steps = steps, heartRates = heartRates)
+
+        // Production MVP:
+        // Huawei scopes are already requested for distance/ascent/activity/history,
+        // but we only write non-empty datasets after we safely map Huawei fields.
+        // This keeps the app production-safe during Huawei approval and prevents fake data.
+        val distances = emptyList<DistanceData>()
+        val floors = emptyList<FloorsData>()
+        val elevations = emptyList<ElevationData>()
+        val activeCalories = emptyList<ActiveCaloriesData>()
+        val activities = emptyList<ActivitySessionData>()
+
+        AppLogger.i(
+            TAG,
+            "Huawei read complete: steps=${steps.size}, distances=${distances.size}, floors=${floors.size}, elevations=${elevations.size}, activeCalories=${activeCalories.size}, activities=${activities.size}"
+        )
+
+        return HuaweiHealthSnapshot(
+            steps = steps,
+            distances = distances,
+            floors = floors,
+            elevations = elevations,
+            activeCalories = activeCalories,
+            activities = activities
+        )
     }
 
     private suspend fun readSteps(startTimeMs: Long, endTimeMs: Long): List<StepData> {
@@ -116,39 +147,6 @@ class HuaweiHealthManager(private val context: Context) {
         return reply.sampleSets.flatMap { set ->
             set.samplePoints.mapNotNull { point -> point.toStepDataOrNull() }
         }.filter { it.count > 0 && it.startTimeMs < it.endTimeMs }
-    }
-
-    private suspend fun readHeartRates(startTimeMs: Long, endTimeMs: Long): List<HeartRateData> {
-        val options = ReadOptions.Builder()
-            .read(DataType.DT_INSTANTANEOUS_HEART_RATE)
-            .setTimeRange(startTimeMs, endTimeMs, TimeUnit.MILLISECONDS)
-            .build()
-
-        val reply = dataController.read(options).awaitTask()
-        return reply.sampleSets.flatMap { set ->
-            set.samplePoints.mapNotNull { point -> point.toHeartRateDataOrNull() }
-        }.filter { it.beatsPerMinute > 0 }
-    }
-
-    private fun SamplePoint.toStepDataOrNull(): StepData? = try {
-        val count = getFieldValue(Field.FIELD_STEPS_DELTA).asIntValue().toLong()
-        StepData(
-            startTimeMs = getStartTime(TimeUnit.MILLISECONDS),
-            endTimeMs = getEndTime(TimeUnit.MILLISECONDS),
-            count = count
-        )
-    } catch (e: Exception) {
-        AppLogger.w(TAG, "Skipping malformed Huawei step sample: ${e.message}")
-        null
-    }
-
-    private fun SamplePoint.toHeartRateDataOrNull(): HeartRateData? = try {
-        val bpm = getFieldValue(Field.FIELD_BPM).asDoubleValue().toLong()
-        val time = getStartTime(TimeUnit.MILLISECONDS)
-        HeartRateData(timeMs = time, beatsPerMinute = bpm)
-    } catch (e: Exception) {
-        AppLogger.w(TAG, "Skipping malformed Huawei heart-rate sample: ${e.message}")
-        null
     }
 
     private suspend fun <T> Task<T>.awaitTask(): T = kotlinx.coroutines.suspendCancellableCoroutine { cont ->

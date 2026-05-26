@@ -57,15 +57,17 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 return Result.success()
             }
 
-            val stepsOk = googleManager.writeStepsBatch(snapshot.steps)
-            val heartOk = googleManager.writeHeartRateBatch(snapshot.heartRates)
+            val writeOk = googleManager.writeSnapshot(snapshot)
 
-            if (stepsOk && heartOk) {
+            if (writeOk) {
                 prefs.edit().putLong(HuaweiConfig.KEY_LAST_SYNC_MS, endTime).apply()
-                AppLogger.i(TAG, "Sync complete: steps=${snapshot.steps.size}, heartRates=${snapshot.heartRates.size}")
+                AppLogger.i(
+                    TAG,
+                    "Sync complete: steps=${snapshot.steps.size}, distances=${snapshot.distances.size}, floors=${snapshot.floors.size}, elevations=${snapshot.elevations.size}, activeCalories=${snapshot.activeCalories.size}, activities=${snapshot.activities.size}"
+                )
                 Result.success()
             } else {
-                AppLogger.e(TAG, "Health Connect write failed: stepsOk=$stepsOk heartOk=$heartOk")
+                AppLogger.e(TAG, "Health Connect write failed")
                 Result.retry()
             }
         } catch (e: SecurityException) {

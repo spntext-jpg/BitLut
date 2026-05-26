@@ -5,12 +5,14 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.records.FloorsClimbedRecord
-import androidx.health.connect.client.records.ExerciseSessionRecord
-import androidx.health.connect.client.records.ElevationGainedRecord
-import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ElevationGainedRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.FloorsClimbedRecord
+import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.units.Energy
+import androidx.health.connect.client.units.Length
 import com.openhealth.sync.util.AppLogger
 import java.time.Instant
 import java.time.ZoneId
@@ -29,6 +31,18 @@ enum class HealthConnectStatus {
     NEEDS_UPDATE,
     NOT_SUPPORTED
 }
+
+data class StepData(val startTimeMs: Long, val endTimeMs: Long, val count: Long)
+data class DistanceData(val startTimeMs: Long, val endTimeMs: Long, val meters: Double)
+data class FloorsData(val startTimeMs: Long, val endTimeMs: Long, val floors: Double)
+data class ElevationData(val startTimeMs: Long, val endTimeMs: Long, val meters: Double)
+data class ActiveCaloriesData(val startTimeMs: Long, val endTimeMs: Long, val kilocalories: Double)
+data class ActivitySessionData(
+    val startTimeMs: Long,
+    val endTimeMs: Long,
+    val title: String = "Huawei activity",
+    val exerciseType: Int = ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
+)
 
 class GoogleHealthManager(private val context: Context) {
 
@@ -54,7 +68,7 @@ class GoogleHealthManager(private val context: Context) {
                 null
             }
         } else {
-            AppLogger.w(TAG, "SDK not available — skipping client creation")
+            AppLogger.w(TAG, "SDK not available - skipping client creation")
             null
         }
     }
@@ -110,48 +124,151 @@ class GoogleHealthManager(private val context: Context) {
         }
     }
 
-    suspend fun writeStepsBatch(records: List<StepData>): Boolean {
-        val c = healthConnectClient ?: run {
-            AppLogger.e(TAG, "writeStepsBatch: no client")
-            return false
-        }
+    suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): Boolean {
+        val stepsOk = writeStepsBatch(snapshot.steps)
+        val distanceOk = writeDistanceBatch(snapshot.distances)
+        val floorsOk = writeFloorsBatch(snapshot.floors)
+        val elevationOk = writeElevationBatch(snapshot.elevations)
+        val caloriesOk = writeActiveCaloriesBatch(snapshot.activeCalories)
+        val sessionsOk = writeActivitySessionsBatch(snapshot.activities)
 
+        AppLogger.i(
+            TAG,
+            "Write summary: steps=$stepsOk distance=$distanceOk floors=$floorsOk elevation=$elevationOk calories=$caloriesOk sessions=$sessionsOk"
+        )
+
+        return stepsOk && distanceOk && floorsOk && elevationOk && caloriesOk && sessionsOk
+    }
+
+    suspend fun writeStepsBatch(records: List<StepData>): Boolean {
         val valid = records
             .filter { it.count > 0 && it.startTimeMs < it.endTimeMs }
-            .map { d ->
-                val start: Instant = Instant.ofEpochMilli(d.startTimeMs)
-                val end: Instant = Instant.ofEpochMilli(d.endTimeMs)
-                val startOff: ZoneOffset = zoneRules.getOffset(start)
-                val endOff: ZoneOffset = zoneRules.getOffset(end)
-
+            .map {
+                val start = Instant.ofEpochMilli(it.startTimeMs)
+                val end = Instant.ofEpochMilli(it.endTimeMs)
                 StepsRecord(
-                    count = d.count,
+                    count = it.count,
                     startTime = start,
                     endTime = end,
-                    startZoneOffset = startOff,
-                    endZoneOffset = endOff
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end)
                 )
             }
 
-        if (valid.isEmpty()) return true
+        return insertRecords("steps", valid)
+    }
+
+    private suspend fun writeDistanceBatch(records: List<DistanceData>): Boolean {
+        val valid = records
+            .filter { it.meters > 0.0 && it.startTimeMs < it.endTimeMs }
+            .map {
+                val start = Instant.ofEpochMilli(it.startTimeMs)
+                val end = Instant.ofEpochMilli(it.endTimeMs)
+                DistanceRecord(
+                    distance = Length.meters(it.meters),
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end)
+                )
+            }
+
+        return insertRecords("distance", valid)
+    }
+
+    private suspend fun writeFloorsBatch(records: List<FloorsData>): Boolean {
+        val valid = records
+            .filter { it.floors > 0.0 && it.startTimeMs < it.endTimeMs }
+            .map {
+                val start = Instant.ofEpochMilli(it.startTimeMs)
+                val end = Instant.ofEpochMilli(it.endTimeMs)
+                FloorsClimbedRecord(
+                    floors = it.floors,
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end)
+                )
+            }
+
+        return insertRecords("floors", valid)
+    }
+
+    private suspend fun writeElevationBatch(records: List<ElevationData>): Boolean {
+        val valid = records
+            .filter { it.meters > 0.0 && it.startTimeMs < it.endTimeMs }
+            .map {
+                val start = Instant.ofEpochMilli(it.startTimeMs)
+                val end = Instant.ofEpochMilli(it.endTimeMs)
+                ElevationGainedRecord(
+                    elevation = Length.meters(it.meters),
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end)
+                )
+            }
+
+        return insertRecords("elevation", valid)
+    }
+
+    private suspend fun writeActiveCaloriesBatch(records: List<ActiveCaloriesData>): Boolean {
+        val valid = records
+            .filter { it.kilocalories > 0.0 && it.startTimeMs < it.endTimeMs }
+            .map {
+                val start = Instant.ofEpochMilli(it.startTimeMs)
+                val end = Instant.ofEpochMilli(it.endTimeMs)
+                ActiveCaloriesBurnedRecord(
+                    energy = Energy.kilocalories(it.kilocalories),
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end)
+                )
+            }
+
+        return insertRecords("activeCalories", valid)
+    }
+
+    private suspend fun writeActivitySessionsBatch(records: List<ActivitySessionData>): Boolean {
+        val valid = records
+            .filter { it.startTimeMs < it.endTimeMs }
+            .map {
+                val start = Instant.ofEpochMilli(it.startTimeMs)
+                val end = Instant.ofEpochMilli(it.endTimeMs)
+                ExerciseSessionRecord(
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end),
+                    exerciseType = it.exerciseType,
+                    title = it.title
+                )
+            }
+
+        return insertRecords("activitySessions", valid)
+    }
+
+    private suspend fun insertRecords(label: String, records: List<androidx.health.connect.client.records.Record>): Boolean {
+        val c = healthConnectClient ?: run {
+            AppLogger.e(TAG, "write $label: no client")
+            return false
+        }
+
+        if (records.isEmpty()) {
+            AppLogger.i(TAG, "No $label records to write")
+            return true
+        }
 
         return try {
-            c.insertRecords(valid)
-            AppLogger.d(TAG, "Wrote ${valid.size} step records")
+            c.insertRecords(records)
+            AppLogger.i(TAG, "Wrote ${records.size} $label records")
             true
         } catch (e: Exception) {
-            AppLogger.e(TAG, "writeStepsBatch failed: ${e.message}", e)
+            AppLogger.e(TAG, "write $label failed: ${e.message}", e)
             false
         }
     }
 
-    suspend fun writeHeartRateBatch(records: List<HeartRateData>): Boolean {
-        if (records.isNotEmpty()) {
-            AppLogger.w(TAG, "Skipping ${records.size} heart-rate samples: Heart Rate scope is not approved yet")
-        }
-        return true
-    }
+    private fun offset(instant: Instant): ZoneOffset = zoneRules.getOffset(instant)
 }
-
-data class StepData(val startTimeMs: Long, val endTimeMs: Long, val count: Long)
-data class HeartRateData(val timeMs: Long, val beatsPerMinute: Long)
