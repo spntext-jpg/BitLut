@@ -155,17 +155,20 @@ class HuaweiHealthManager(private val context: Context) {
             val start = getStartTime(TimeUnit.MILLISECONDS)
             val end = getEndTime(TimeUnit.MILLISECONDS)
 
-            val value = fieldValueMap["steps"] ?: return null
+            val raw = getFieldValue(Field.FIELD_STEPS)
+                ?: return null
 
-            val count = when (value) {
-                is Int -> value.toLong()
-                is Long -> value
-                is Float -> value.toLong()
-                is Double -> value.toLong()
+            val count = when (raw) {
+                is Int -> raw.toLong()
+                is Long -> raw
+                is Float -> raw.toLong()
+                is Double -> raw.toLong()
                 else -> return null
             }
 
-            if (count <= 0L || start >= end) return null
+            if (count <= 0L || start >= end) {
+                return null
+            }
 
             StepData(
                 startTimeMs = start,
