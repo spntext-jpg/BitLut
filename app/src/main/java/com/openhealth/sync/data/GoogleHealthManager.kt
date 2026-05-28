@@ -48,11 +48,17 @@ class GoogleHealthManager(private val context: Context) {
 
     val permissions: Set<String> = setOf(
         HealthPermission.getWritePermission(StepsRecord::class),
+        HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getWritePermission(DistanceRecord::class),
+        HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getWritePermission(FloorsClimbedRecord::class),
+        HealthPermission.getReadPermission(FloorsClimbedRecord::class),
         HealthPermission.getWritePermission(ElevationGainedRecord::class),
+        HealthPermission.getReadPermission(ElevationGainedRecord::class),
         HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
-        HealthPermission.getWritePermission(ExerciseSessionRecord::class)
+        HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+        HealthPermission.getWritePermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
     )
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }

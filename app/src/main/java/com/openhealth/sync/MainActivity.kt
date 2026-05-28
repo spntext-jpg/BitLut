@@ -367,7 +367,7 @@ fun MainExpressiveLayout(
 
             Button(
                 onClick = onSyncClick,
-                enabled = !uiState.isSyncing && uiState.hasGooglePermissions && uiState.isHuaweiAuthorized,
+                enabled = !uiState.isSyncing && uiState.hasGooglePermissions,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(if (uiState.isSyncing) "Синхронизация..." else "Синхронизировать сейчас")
