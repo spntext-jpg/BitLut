@@ -106,9 +106,28 @@ class MainActivity : ComponentActivity() {
     private val huaweiAuthorizationLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val success = viewModel.huaweiHealthManager.handleAuthorizationResult(result.data)
+        AppLogger.i(
+            "MainActivity",
+            "Huawei authorization returned resultCode=${result.resultCode} hasData=${result.data != null}"
+        )
+
+        val success = viewModel.huaweiHealthManager.handleAuthorizationResult(
+            resultCode = result.resultCode,
+            data = result.data
+        )
+
         viewModel.onHuaweiAuthorizationResult(success)
         viewModel.refreshStatuses()
+
+        if (success) {
+            Toast.makeText(this, "Huawei Health подключен. Можно запускать синхронизацию.", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(
+                this,
+                "Huawei authorization returned. Sync will verify real API access.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

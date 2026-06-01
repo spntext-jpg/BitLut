@@ -1,5 +1,6 @@
 package com.openhealth.sync.data
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -80,7 +81,7 @@ class HuaweiHealthManager(private val context: Context) {
         return settingController.requestAuthorizationIntent(scopes, true)
     }
 
-    fun handleAuthorizationResult(data: Intent?): Boolean {
+    fun handleAuthorizationResult(resultCode: Int, data: Intent?): Boolean {
         if (data == null) {
             saveAuthorizationState(success = false, pendingApproval = false)
             AppLogger.e(TAG, "Huawei authorization returned no result intent")

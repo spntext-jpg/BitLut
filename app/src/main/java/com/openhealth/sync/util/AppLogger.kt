@@ -20,9 +20,6 @@ object AppLogger {
             "getSdkStatus()",
             "Found HC package",
             "HealthConnectClient created OK",
-            "pending approval",
-            "Scope unauthorized",
-            "Health Kit is not authorized"
         )
 
         if (noisy.any { message.contains(it, ignoreCase = true) }) return false
@@ -34,7 +31,7 @@ object AppLogger {
         if (!shouldShowInUi(level, tag, message)) return
 
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        _logs.value = (listOf("[$time] $level/$tag: $message") + _logs.value).take(80)
+        _logs.value = (listOf("[$time] $level/$tag: $message") + _logs.value).take(160)
     }
 
     fun d(tag: String, msg: String) {
