@@ -476,6 +476,7 @@ class HuaweiHealthManager(private val context: Context) {
 
     private companion object {
         const val KEY_HUAWEI_PENDING_APPROVAL = "huawei_pending_approval"
+        const val KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED = "huawei_appgallery_verification_required"
 
         const val HUAWEI_SCOPE_UNAUTHORIZED = 50005
         const val HUAWEI_PRIVACY_NOT_ACCEPTED = 50011
