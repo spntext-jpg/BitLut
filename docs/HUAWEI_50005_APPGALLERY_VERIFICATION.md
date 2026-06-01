@@ -1,42 +1,28 @@
 # Huawei Health Kit 50005 diagnosis
 
-## Confirmed state
+## Confirmed app behavior
 
 - Huawei authorization screen opens.
 - HMS Core is installed.
 - Huawei Health is installed.
-- Huawei Health shows BitLut as connected.
-- Android Health Connect permissions work.
-- Real Huawei Health Kit read fails on steps with 50005.
+- Android Health Connect works.
+- BitLut reaches Huawei Health Kit DataController.read().
+- Huawei Health Kit returns 50005 on real data read.
 
-## Root cause
+## Meaning
 
-Huawei Health Kit requires server-side approval for the app, package name, release SHA-256 and requested scopes.
+50005 means the requested Health Kit permission is not approved or not available for the app/package/release signing certificate/scope set.
 
-User permission inside Huawei Health is not enough.
+Huawei user authorization inside Huawei Health is necessary but not sufficient. Huawei Health Kit server-side approval is also required.
 
-Huawei documentation states that if the application for Health Kit data has not been approved, a third-party app cannot access user data even after the user grants permission. HMS Core may also cache scope permission information for 24 hours.
+## Required approval scope
 
-## Required production scopes
+- Step read
+- Distance read
+- Activity read
+- Activity record read
+- Historical data open week
 
-- HEALTHKIT_STEP_READ
-- HEALTHKIT_DISTANCE_READ
-- HEALTHKIT_ACTIVITY_READ
-- HEALTHKIT_ACTIVITY_RECORD_READ
-- HEALTHKIT_HISTORYDATA_OPEN_WEEK
+## Important
 
-## Required AppGallery checks
-
-- Package name: com.openhealth.sync
-- Huawei App ID matches the APK
-- agconnect-services.json belongs to the same Huawei app
-- Health Kit / Health Service is enabled
-- All requested scopes are approved
-- Release SHA-256 from the signed APK is configured
-- The installed APK is signed with the same release key
-- Wait up to 24 hours after approval or permission changes
-
-## Current conclusion
-
-The app reaches DataController.read().
-The failure is server-side Huawei Health Kit authorization, not Google Health Connect and not the local sync pipeline.
+The app must be tested after Health Kit verification is granted. HMS Core permission cache may require up to 24 hours after approval or permission changes.

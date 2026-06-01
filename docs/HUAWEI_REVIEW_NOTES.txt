@@ -1,0 +1,41 @@
+BitLut is a production Android bridge from Huawei Health to Android Health Connect.
+
+Package:
+com.openhealth.sync
+
+Requested Huawei Health Kit scopes:
+- HEALTHKIT_STEP_READ
+- HEALTHKIT_DISTANCE_READ
+- HEALTHKIT_ACTIVITY_READ
+- HEALTHKIT_ACTIVITY_RECORD_READ
+- HEALTHKIT_HISTORYDATA_OPEN_WEEK
+
+Why these scopes are required:
+- Step read: imports daily step records from Huawei Health.
+- Distance read: imports walking/running distance when available.
+- Activity read: imports real user activity signals when available.
+- Activity record read: imports real exercise/activity records when available.
+- Historical data open week: allows recent historical sync after installation or missed background sync.
+
+Data policy:
+- BitLut reads only real user data returned by Huawei Health Kit.
+- BitLut writes available records to Android Health Connect.
+- BitLut does not generate mock health data.
+- BitLut does not create fake steps, fake workouts, fake calories, or placeholder records.
+- Empty Huawei responses are treated as no data, not fabricated data.
+
+Reviewer test flow:
+1. Install the signed release APK.
+2. Install/update HMS Core.
+3. Install/update Huawei Health.
+4. Sign in to Huawei Health.
+5. Make sure Huawei Health contains real steps/activity data.
+6. Open BitLut.
+7. Grant Android Health Connect permissions.
+8. Tap Huawei Health.
+9. Approve Huawei Health Kit permissions.
+10. Tap Sync.
+11. Verify records appear in Android Health Connect.
+
+Known blocker before verification:
+If Huawei Health Kit returns 50005, this means the requested Health Kit scopes are not yet approved server-side for this app/package/release SHA-256/scope set. User permission inside Huawei Health alone is not enough.
