@@ -76,6 +76,23 @@ class HuaweiHealthManager(private val context: Context) {
     fun isPendingApproval(): Boolean =
         prefs.getBoolean(KEY_HUAWEI_PENDING_APPROVAL, false)
 
+    fun isAppGalleryVerificationRequired(): Boolean =
+        prefs.getBoolean(KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED, false)
+
+    fun clearAppGalleryVerificationRequired() {
+        prefs.edit()
+            .putBoolean(KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED, false)
+            .apply()
+    }
+
+    fun markAppGalleryVerificationRequired() {
+        prefs.edit()
+            .putBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, false)
+            .putBoolean(KEY_HUAWEI_PENDING_APPROVAL, true)
+            .putBoolean(KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED, true)
+            .apply()
+    }
+
     fun getAuthorizationIntent(): Intent {
         AppLogger.i(TAG, "Requesting Huawei Health Kit authorization: ${requestedScopeNames()}")
         return settingController.requestAuthorizationIntent(scopes, true)
@@ -102,7 +119,7 @@ class HuaweiHealthManager(private val context: Context) {
 
         val hint = when (code) {
             HUAWEI_SCOPE_UNAUTHORIZED ->
-                "Scope unauthorized. Verify Health Kit approval for every requested scope, release SHA-256, package name, Huawei App ID, agconnect-services.json, reviewer account, and HMS Core cache."
+                "AppGallery verification required. Huawei Health Kit returned 50005: this app/release SHA-256/scope set is not approved server-side yet, even if the user granted permissions inside Huawei Health. Verify every requested scope, release SHA-256, package name, Huawei App ID, agconnect-services.json, reviewer account, and wait for HMS Core cache refresh."
 
             HUAWEI_PRIVACY_NOT_ACCEPTED ->
                 "Huawei Health privacy authorization was not accepted. Open Huawei Health, accept privacy terms, revoke BitLut access if visible, and authorize again."
@@ -160,6 +177,7 @@ class HuaweiHealthManager(private val context: Context) {
         prefs.edit()
             .putBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, success)
             .putBoolean(KEY_HUAWEI_PENDING_APPROVAL, pendingApproval)
+            .putBoolean(KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED, pendingApproval)
             .apply()
     }
 

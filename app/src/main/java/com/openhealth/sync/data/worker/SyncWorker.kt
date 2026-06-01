@@ -11,6 +11,7 @@ import com.openhealth.sync.util.AppLogger
 private const val TAG = "SyncWorker"
 private const val DEFAULT_LOOKBACK_MS = 24L * 60L * 60L * 1000L
 private const val MAX_LOOKBACK_MS = 7L * 24L * 60L * 60L * 1000L
+private const val HUAWEI_SCOPE_UNAUTHORIZED = 50005
 
 class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
     private val appContainer by lazy { (applicationContext as SyncApplication).container }
@@ -114,9 +115,19 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 Result.retry()
             }
         } catch (e: SecurityException) {
+            if (e.message?.contains(HUAWEI_SCOPE_UNAUTHORIZED.toString()) == true) {
+                huaweiManager.markAppGalleryVerificationRequired()
+                AppLogger.e(
+                    TAG,
+                    "Huawei Health Kit blocked import with 50005. Root cause: AppGallery Health Kit verification is not approved for this package/release SHA-256/scope set. User permission inside Huawei Health is not enough until Huawei approves the app.",
+                    e
+                )
+                return Result.failure()
+            }
+
             AppLogger.e(
                 TAG,
-                "Huawei/Health Connect security failure. If BitLut is visible in Huawei Health, revoke it there, clear HMS Core cache, reopen BitLut and authorize again.",
+                "Huawei/Health Connect security failure. Revoke BitLut in Huawei Health, clear HMS Core cache, reopen BitLut and authorize again.",
                 e
             )
             Result.failure()
