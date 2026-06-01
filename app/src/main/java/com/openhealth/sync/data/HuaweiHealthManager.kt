@@ -13,6 +13,10 @@ import com.huawei.hms.hihealth.data.Field
 import com.huawei.hms.hihealth.data.SamplePoint
 import com.huawei.hms.hihealth.data.Scopes
 import com.huawei.hms.hihealth.options.ReadOptions
+import com.huawei.hms.support.hwid.request.HuaweiIdAuthParamsHelper
+import com.huawei.hms.support.hwid.request.HuaweiIdAuthParams
+import com.huawei.hms.support.hwid.HuaweiIdAuthManager
+import com.huawei.hms.support.api.entity.auth.Scope
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.util.AppLogger
@@ -94,8 +98,21 @@ class HuaweiHealthManager(private val context: Context) {
     }
 
     fun getAuthorizationIntent(): Intent {
-        AppLogger.i(TAG, "Requesting Huawei Health Kit authorization: ${requestedScopeNames()}")
+        AppLogger.i(TAG, "Requesting Huawei Health Kit authorization via SettingController: ${requestedScopeNames()}")
         return settingController.requestAuthorizationIntent(scopes, true)
+    }
+
+    fun getHuaweiIdAuthorizationIntent(): Intent {
+        AppLogger.i(TAG, "Requesting Huawei ID Health Kit authorization: ${requestedScopeNames()}")
+
+        val scopeList = scopes.map { Scope(it) }
+
+        val authParams = HuaweiIdAuthParamsHelper(HuaweiIdAuthParams.DEFAULT_AUTH_REQUEST_PARAM)
+            .setScopeList(scopeList)
+            .setAccessToken()
+            .createParams()
+
+        return HuaweiIdAuthManager.getService(context, authParams).signInIntent
     }
 
     fun handleAuthorizationResult(resultCode: Int, data: Intent?): Boolean {

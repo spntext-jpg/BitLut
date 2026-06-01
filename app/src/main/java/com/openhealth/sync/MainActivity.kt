@@ -253,25 +253,36 @@ class MainActivity : ComponentActivity() {
         }
 
         runCatching {
-            val intent = viewModel.huaweiHealthManager.getAuthorizationIntent()
+            val huaweiIdIntent = viewModel.huaweiHealthManager.getHuaweiIdAuthorizationIntent()
+            val settingIntent = viewModel.huaweiHealthManager.getAuthorizationIntent()
 
-            if (!HmsCoreHelper.canResolveIntent(this, intent)) {
-                AppLogger.e(
-                    "MainActivity",
-                    "Huawei authorization intent cannot be resolved. ${HmsCoreHelper.prerequisiteStatus(this)}"
-                )
-                Toast.makeText(
-                    this,
-                    "Huawei authorization screen is unavailable. Update HMS Core, Huawei Health and AppGallery.",
-                    Toast.LENGTH_LONG
-                ).show()
-
-                if (!HmsCoreHelper.isAppGalleryInstalled(this)) {
-                    HmsCoreHelper.openAppGallery(this)
-                } else {
-                    HmsCoreHelper.openHuaweiHealth(this)
+            val intent = when {
+                HmsCoreHelper.canResolveIntent(this, huaweiIdIntent) -> {
+                    AppLogger.i("MainActivity", "Using Huawei ID Health Kit authorization flow")
+                    huaweiIdIntent
                 }
-                return
+                HmsCoreHelper.canResolveIntent(this, settingIntent) -> {
+                    AppLogger.i("MainActivity", "Using SettingController Health Kit authorization flow")
+                    settingIntent
+                }
+                else -> {
+                    AppLogger.e(
+                        "MainActivity",
+                        "No Huawei authorization intent can be resolved. ${HmsCoreHelper.prerequisiteStatus(this)}"
+                    )
+                    Toast.makeText(
+                        this,
+                        "Huawei authorization screen is unavailable. Update HMS Core, Huawei Health and AppGallery.",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    if (!HmsCoreHelper.isAppGalleryInstalled(this)) {
+                        HmsCoreHelper.openAppGallery(this)
+                    } else {
+                        HmsCoreHelper.openHuaweiHealth(this)
+                    }
+                    return
+                }
             }
 
             AppLogger.i(
