@@ -206,19 +206,66 @@ setContent {
             return
         }
 
+        AppLogger.i(
+            "MainActivity",
+            "Huawei authorization preflight: ${HmsCoreHelper.prerequisiteStatus(this)}"
+        )
+
+        if (!HmsCoreHelper.isInstalled(this)) {
+            AppLogger.e("MainActivity", "Cannot start Huawei authorization: HMS Core is missing")
+            Toast.makeText(
+                this,
+                "Install or update HMS Core first, then return to BitLut.",
+                Toast.LENGTH_LONG
+            ).show()
+            HmsCoreHelper.openHmsCoreInstall(this)
+            return
+        }
+
+        if (!HmsCoreHelper.isHuaweiHealthInstalled(this)) {
+            AppLogger.e("MainActivity", "Cannot start Huawei authorization: Huawei Health is missing")
+            Toast.makeText(
+                this,
+                "Install Huawei Health first, sign in, then return to BitLut.",
+                Toast.LENGTH_LONG
+            ).show()
+            HmsCoreHelper.openHuaweiHealth(this)
+            return
+        }
+
         runCatching {
+            val intent = viewModel.huaweiHealthManager.getAuthorizationIntent()
+
+            if (!HmsCoreHelper.canResolveIntent(this, intent)) {
+                AppLogger.e(
+                    "MainActivity",
+                    "Huawei authorization intent cannot be resolved. ${HmsCoreHelper.prerequisiteStatus(this)}"
+                )
+                Toast.makeText(
+                    this,
+                    "Huawei authorization screen is unavailable. Update HMS Core, Huawei Health and AppGallery.",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                if (!HmsCoreHelper.isAppGalleryInstalled(this)) {
+                    HmsCoreHelper.openAppGallery(this)
+                } else {
+                    HmsCoreHelper.openHuaweiHealth(this)
+                }
+                return
+            }
+
             AppLogger.i(
                 "MainActivity",
-                "Starting Huawei authorization. hmsInstalled=${HmsCoreHelper.isInstalled(this)} huaweiHealthInstalled=${HmsCoreHelper.isHuaweiHealthInstalled(this)}"
+                "Launching Huawei authorization for ${viewModel.huaweiHealthManager.requestedScopeNames()}"
             )
-
-            val intent = viewModel.huaweiHealthManager.getAuthorizationIntent()
+            Toast.makeText(this, "Opening Huawei Health authorization", Toast.LENGTH_SHORT).show()
             huaweiAuthorizationLauncher.launch(intent)
         }.onFailure { error ->
             AppLogger.e("MainActivity", "Cannot start Huawei Health authorization", error)
             Toast.makeText(
                 this,
-                "Huawei Health пока не выдал доступ. Проверьте Huawei Health, настройки конфиденциальности и статус заявки Health Kit.",
+                "Huawei Health authorization could not be opened. Update HMS Core and Huawei Health, then try again.",
                 Toast.LENGTH_LONG
             ).show()
 
@@ -229,7 +276,6 @@ setContent {
             }
         }
     }
-
 
     private fun triggerImmediateSync() {
         viewModel.markSyncStarted()
