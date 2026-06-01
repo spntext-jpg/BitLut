@@ -46,7 +46,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
         val startTime = when {
             savedLastSync <= 0L -> fallbackStart
             savedLastSync < minStart -> minStart
-            else -> savedLastSync - 60_000L
+            else -> savedLastSync
         }
 
         return try {

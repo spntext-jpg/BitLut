@@ -59,6 +59,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
@@ -114,8 +115,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setupPeriodicSync()
 
-        
-setContent {
+        setContent {
 
             var showOnboarding by rememberSaveable {
                 mutableStateOf(true)
@@ -285,7 +285,11 @@ setContent {
             .build()
 
         val wm = WorkManager.getInstance(applicationContext)
-        wm.enqueue(req)
+        wm.enqueueUniqueWork(
+            "BitLutManualSync",
+            ExistingWorkPolicy.KEEP,
+            req
+        )
         wm.getWorkInfoByIdLiveData(req.id).observe(this) { info ->
             if (info?.state?.isFinished == true) {
                 viewModel.markSyncCompleted(info.state == WorkInfo.State.SUCCEEDED)
