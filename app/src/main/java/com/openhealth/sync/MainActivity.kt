@@ -27,9 +27,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -72,6 +74,8 @@ import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 import com.openhealth.sync.ui.onboarding.OnboardingScreen
+import com.openhealth.sync.ui.ImportViewModel
+import com.openhealth.sync.ui.ImportScreen
 import com.openhealth.sync.util.AppLogger
 import java.util.concurrent.TimeUnit
 
@@ -82,6 +86,14 @@ class MainActivity : ComponentActivity() {
         SyncViewModel.provideFactory(
             app.container.googleHealthManager,
             app.container.huaweiHealthManager,
+            this
+        )
+    }
+
+    private val importViewModel: ImportViewModel by viewModels {
+        val app = application as SyncApplication
+        ImportViewModel.provideFactory(
+            app.container.googleHealthManager,
             this
         )
     }
@@ -154,12 +166,20 @@ class MainActivity : ComponentActivity() {
 
                 val uiState by viewModel.uiState.collectAsState()
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MainExpressiveLayout(
-                        uiState = uiState,
-                        onGoogleClick = { requestGooglePermissionsOrOpenProvider() },
-                        onHuaweiClick = { requestHuaweiAuthorizationOrInstallHms() },
-                        onSyncClick = { triggerImmediateSync() }
-                    )
+                    if (uiState.showImportScreen) {
+                        ImportScreen(
+                            viewModel = importViewModel,
+                            onBack = { viewModel.hideImportScreen() }
+                        )
+                    } else {
+                        MainExpressiveLayout(
+                            uiState = uiState,
+                            onGoogleClick = { requestGooglePermissionsOrOpenProvider() },
+                            onHuaweiClick = { requestHuaweiAuthorizationOrInstallHms() },
+                            onSyncClick = { triggerImmediateSync() },
+                            onImportClick = { viewModel.showImportScreen() }
+                        )
+                    }
                 }
             }
         }
@@ -352,7 +372,8 @@ fun MainExpressiveLayout(
     uiState: SyncUiState,
     onGoogleClick: () -> Unit,
     onHuaweiClick: () -> Unit,
-    onSyncClick: () -> Unit
+    onSyncClick: () -> Unit,
+    onImportClick: () -> Unit
 ) {
     var showLogs by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -451,6 +472,15 @@ fun MainExpressiveLayout(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(if (uiState.isSyncing) "Синхронизация..." else "Синхронизировать сейчас")
+            }
+
+            OutlinedButton(
+                onClick = onImportClick,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Icon(Icons.Rounded.FileOpen, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text("Импорт из архива Huawei Health")
             }
         }
     }

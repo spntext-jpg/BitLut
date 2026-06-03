@@ -18,6 +18,7 @@ import java.util.Locale
 
 data class SyncUiState(
     val isGoogleAvailable: Boolean = false,
+    val showImportScreen: Boolean = false,
     val hasGooglePermissions: Boolean = false,
     val isHuaweiAuthorized: Boolean = false,
     val isSyncing: Boolean = false,
@@ -60,6 +61,9 @@ class SyncViewModel(
             )
         }
     }
+
+    fun showImportScreen() { _uiState.update { it.copy(showImportScreen = true) } }
+    fun hideImportScreen() { _uiState.update { it.copy(showImportScreen = false) } }
 
     fun markSyncStarted() {
         _uiState.update { it.copy(isSyncing = true, syncStatus = "Синхронизация...") }
