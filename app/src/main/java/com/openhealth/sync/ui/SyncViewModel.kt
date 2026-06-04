@@ -22,8 +22,8 @@ data class SyncUiState(
     val hasGooglePermissions: Boolean = false,
     val isHuaweiAuthorized: Boolean = false,
     val isSyncing: Boolean = false,
-    val syncStatus: String = "Ожидание действия",
-    val lastSyncTime: String = "Нет данных"
+    val syncStatus: String = "sync_status_idle",
+    val lastSyncTime: String = "sync_no_data"
 )
 
 class SyncViewModel(
@@ -41,7 +41,7 @@ class SyncViewModel(
         viewModelScope.launch {
             val isAvailable = googleManager.getStatus() == HealthConnectStatus.AVAILABLE
             val hasPerms = googleManager.hasAllPermissions()
-            val savedTime = prefs.getString("last_sync_time", "Нет данных") ?: "Нет данных"
+            val savedTime = prefs.getString("last_sync_time", "sync_no_data") ?: "sync_no_data"
             _uiState.update {
                 it.copy(
                     isGoogleAvailable = isAvailable,
@@ -57,7 +57,7 @@ class SyncViewModel(
         _uiState.update {
             it.copy(
                 isHuaweiAuthorized = success,
-                syncStatus = if (success) "Huawei подключен" else "Ошибка авторизации Huawei"
+                syncStatus = if (success) "sync_status_success" else "sync_status_error"
             )
         }
     }
@@ -66,11 +66,11 @@ class SyncViewModel(
     fun hideImportScreen() { _uiState.update { it.copy(showImportScreen = false) } }
 
     fun markSyncStarted() {
-        _uiState.update { it.copy(isSyncing = true, syncStatus = "Синхронизация...") }
+        _uiState.update { it.copy(isSyncing = true, syncStatus = "sync_status_syncing") }
     }
 
     fun markSyncCompleted(success: Boolean) {
-        val statusMsg = if (success) "Успешно" else "Ошибка"
+        val statusMsg = if (success) "sync_status_success" else "sync_status_error"
         val time = if (success) SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()) else _uiState.value.lastSyncTime
         if (success) prefs.edit().putString("last_sync_time", time).apply()
         _uiState.update { it.copy(isSyncing = false, syncStatus = statusMsg, lastSyncTime = time) }

@@ -366,6 +366,20 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Composable
+private fun resolveSyncStatus(key: String): String = when (key) {
+    "sync_status_idle"    -> stringResource(R.string.sync_status_idle)
+    "sync_status_syncing" -> stringResource(R.string.sync_status_syncing)
+    "sync_status_success" -> stringResource(R.string.sync_status_success)
+    "sync_status_error"   -> stringResource(R.string.sync_status_error)
+    else                  -> key
+}
+
+@Composable
+private fun resolveLastSync(key: String): String =
+    if (key == "sync_no_data") stringResource(R.string.sync_no_data) else key
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainExpressiveLayout(
@@ -433,7 +447,7 @@ fun MainExpressiveLayout(
             Card(shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(24.dp)) {
                     Text("Синхронизация", style = MaterialTheme.typography.labelLarge)
-                    Text(uiState.syncStatus, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text(resolveSyncStatus(uiState.syncStatus), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text("Последняя успешная: ${uiState.lastSyncTime}", style = MaterialTheme.typography.bodySmall)
                 }
             }

@@ -57,10 +57,7 @@ class ImportViewModel(
                 ) {
                     _state.update {
                         ImportState.Error(
-                            "В файле не найдено данных для импорта.\n\n" +
-                            "Убедитесь что вы выбрали правильный ZIP-архив из Huawei Health. " +
-                            "Найденные файлы: ${summary.filesFound.joinToString()}\n" +
-                            "Пропущенные файлы: ${summary.filesSkipped.size}"
+                            "import_error_no_data|${summary.filesFound.joinToString()}|${summary.filesSkipped.size}"
                         )
                     }
                 } else {
@@ -107,7 +104,7 @@ class ImportViewModel(
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Failed to write import data", e)
                 _state.update {
-                    ImportState.Error("Ошибка записи данных: ${e.message ?: "Неизвестная ошибка"}")
+                    ImportState.Error("import_error_write_failed|${e.message ?: ""}")
                 }
             }
         }
