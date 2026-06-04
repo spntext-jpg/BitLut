@@ -23,9 +23,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.AutoMirrored
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Place
@@ -80,7 +81,7 @@ fun ImportScreen(
                         viewModel.reset()
                         onBack()
                     }) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад")
                     }
                 }
             )
@@ -327,7 +328,7 @@ private fun PreviewContent(
         // Data summary cards
         if (summary.stepCount > 0) {
             DataSummaryCard(
-                icon = { Icon(Icons.Rounded.DirectionsRun, null, tint = MaterialTheme.colorScheme.primary) },
+                icon = { Icon(Icons.AutoMirrored.Rounded.DirectionsRun, null, tint = MaterialTheme.colorScheme.primary) },
                 label = "Записей о шагах",
                 count = summary.stepCount
             )
@@ -348,7 +349,7 @@ private fun PreviewContent(
         }
         if (summary.activityCount > 0) {
             DataSummaryCard(
-                icon = { Icon(Icons.Rounded.DirectionsRun, null, tint = MaterialTheme.colorScheme.tertiary) },
+                icon = { Icon(Icons.AutoMirrored.Rounded.DirectionsRun, null, tint = MaterialTheme.colorScheme.tertiary) },
                 label = "Тренировок",
                 count = summary.activityCount
             )
