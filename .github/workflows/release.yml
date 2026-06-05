@@ -41,12 +41,25 @@ jobs:
         run: |
           echo "${{ secrets.AGCONNECT_SERVICES_JSON_BASE64 }}" | base64 -d > app/agconnect-services.json
 
+      - name: Compute version code
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+          VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION → versionCode: $VERSION_CODE"
+
       - name: Build release APK
         env:
           BITLUT_KEYSTORE_PASSWORD: ${{ secrets.BITLUT_KEYSTORE_PASSWORD }}
           BITLUT_KEY_ALIAS: ${{ secrets.BITLUT_KEY_ALIAS }}
           BITLUT_KEY_PASSWORD: ${{ secrets.BITLUT_KEY_PASSWORD }}
           HUAWEI_APP_ID: ${{ secrets.HUAWEI_APP_ID }}
+          RELEASE_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
           chmod +x ./gradlew
           ./gradlew clean :app:assembleRelease --stacktrace

@@ -53,8 +53,10 @@ android {
         applicationId = "com.openhealth.sync"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "1.1.7"
+        val envVersionName = System.getenv("RELEASE_VERSION")?.takeIf { it.isNotBlank() } ?: "1.3.0"
+        val envVersionCode = System.getenv("RELEASE_VERSION_CODE")?.toIntOrNull() ?: 19
+        versionCode = envVersionCode
+        versionName = envVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 
