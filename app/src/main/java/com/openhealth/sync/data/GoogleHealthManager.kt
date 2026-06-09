@@ -11,6 +11,10 @@ import androidx.health.connect.client.records.ElevationGainedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.time.TimeRangeFilter
+import java.time.LocalDate
+import java.time.ZonedDateTime
 import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Length
 import com.openhealth.sync.util.AppLogger
@@ -274,6 +278,123 @@ class GoogleHealthManager(private val context: Context) {
             AppLogger.e(TAG, "write $label failed: ${e.message}", e)
             false
         }
+    }
+
+    // ── Read methods for Dashboard ────────────────────────────────────────────
+
+    suspend fun readStepsToday(): Long {
+        val c = healthConnectClient ?: return 0L
+        return try {
+            val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val end = Instant.now()
+            val req = ReadRecordsRequest(
+                recordType = StepsRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end)
+            )
+            c.readRecords(req).records.sumOf { it.count }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readStepsToday failed: ${e.message}")
+            0L
+        }
+    }
+
+    suspend fun readWeeklySteps(): List<Pair<LocalDate, Long>> {
+        val c = healthConnectClient ?: return emptyList()
+        return try {
+            val today = LocalDate.now()
+            val start = today.minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val end = Instant.now()
+            val req = ReadRecordsRequest(
+                recordType = StepsRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end)
+            )
+            val records = c.readRecords(req).records
+            (0..6).map { daysBack ->
+                val date = today.minusDays((6 - daysBack).toLong())
+                val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val steps = records
+                    .filter { it.startTime >= dayStart && it.startTime < dayEnd }
+                    .sumOf { it.count }
+                date to steps
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readWeeklySteps failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun readDistanceToday(): Double {
+        val c = healthConnectClient ?: return 0.0
+        return try {
+            val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val req = ReadRecordsRequest(
+                recordType = DistanceRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+            )
+            c.readRecords(req).records.sumOf { it.distance.inMeters }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readDistanceToday failed: ${e.message}")
+            0.0
+        }
+    }
+
+    suspend fun readCaloriesToday(): Double {
+        val c = healthConnectClient ?: return 0.0
+        return try {
+            val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val req = ReadRecordsRequest(
+                recordType = ActiveCaloriesBurnedRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+            )
+            c.readRecords(req).records.sumOf { it.energy.inKilocalories }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readCaloriesToday failed: ${e.message}")
+            0.0
+        }
+    }
+
+    suspend fun readRecentWorkouts(limit: Int = 5): List<ActivitySessionData> {
+        val c = healthConnectClient ?: return emptyList()
+        return try {
+            val start = LocalDate.now().minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val req = ReadRecordsRequest(
+                recordType = ExerciseSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+            )
+            c.readRecords(req).records
+                .sortedByDescending { it.startTime }
+                .take(limit)
+                .map {
+                    ActivitySessionData(
+                        startTimeMs = it.startTime.toEpochMilli(),
+                        endTimeMs = it.endTime.toEpochMilli(),
+                        title = it.title ?: exerciseTypeName(it.exerciseType),
+                        exerciseType = it.exerciseType
+                    )
+                }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readRecentWorkouts failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private fun exerciseTypeName(type: Int): String = when (type) {
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING        -> "Running"
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING        -> "Walking"
+        ExerciseSessionRecord.EXERCISE_TYPE_CYCLING        -> "Cycling"
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL  -> "Swimming"
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "Strength"
+        ExerciseSessionRecord.EXERCISE_TYPE_YOGA           -> "Yoga"
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING         -> "Hiking"
+        else -> "Workout"
+    }
+
+    fun writeHeartRateBatch(records: List<HeartRateData>): Boolean {
+        if (records.isNotEmpty())
+            AppLogger.w(TAG, "Skipping ${records.size} heart-rate samples: scope not approved yet")
+        return true
     }
 
     private fun offset(instant: Instant): ZoneOffset = zoneRules.getOffset(instant)

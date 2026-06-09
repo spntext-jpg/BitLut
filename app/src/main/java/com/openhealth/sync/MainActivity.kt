@@ -6,13 +6,20 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,41 +27,49 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.FileOpen
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,110 +86,93 @@ import androidx.work.WorkManager
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.platform.HmsCoreHelper
+import com.openhealth.sync.ui.DashboardScreen
+import com.openhealth.sync.ui.DashboardViewModel
+import com.openhealth.sync.ui.ImportScreen
+import com.openhealth.sync.ui.ImportViewModel
 import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
-import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 import com.openhealth.sync.ui.onboarding.OnboardingScreen
-import com.openhealth.sync.ui.ImportViewModel
-import com.openhealth.sync.ui.ImportScreen
+import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
+import com.openhealth.sync.ui.theme.ElectricIndigo
+import com.openhealth.sync.ui.theme.ElectricIndigoLt
+import com.openhealth.sync.ui.theme.GlassCard
+import com.openhealth.sync.ui.theme.GlowIndigo
+import com.openhealth.sync.ui.theme.GlowMint
+import com.openhealth.sync.ui.theme.MeshBackground
+import com.openhealth.sync.ui.theme.NeonMint
+import com.openhealth.sync.ui.theme.NeonRose
+import com.openhealth.sync.ui.theme.PulsingGlowBorder
+import com.openhealth.sync.ui.theme.TextPrimary
+import com.openhealth.sync.ui.theme.TextSecondary
+import com.openhealth.sync.ui.theme.TextTertiary
+import com.openhealth.sync.ui.theme.Void
+import com.openhealth.sync.ui.theme.VoidBorder
+import com.openhealth.sync.ui.theme.VoidSurface
 import com.openhealth.sync.util.AppLogger
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: SyncViewModel by viewModels {
         val app = application as SyncApplication
-        SyncViewModel.provideFactory(
-            app.container.googleHealthManager,
-            app.container.huaweiHealthManager,
-            this
-        )
+        SyncViewModel.provideFactory(app.container.googleHealthManager, app.container.huaweiHealthManager, this)
+    }
+
+    private val dashboardViewModel: DashboardViewModel by viewModels {
+        val app = application as SyncApplication
+        DashboardViewModel.provideFactory(app.container.googleHealthManager)
     }
 
     private val importViewModel: ImportViewModel by viewModels {
         val app = application as SyncApplication
-        ImportViewModel.provideFactory(
-            app.container.googleHealthManager,
-            this
-        )
+        ImportViewModel.provideFactory(app.container.googleHealthManager, this)
     }
 
     private val googlePermissionLauncher = registerForActivityResult(
         PermissionController.createRequestPermissionResultContract()
     ) { granted ->
-        AppLogger.i("MainActivity", "Returned from Health Connect permission request: $granted")
+        AppLogger.i("MainActivity", "HC permissions returned: $granted")
         viewModel.refreshStatuses()
-
-        val required = viewModel.googleManager.permissions
-        if (!granted.containsAll(required)) {
-            AppLogger.w("MainActivity", "Health Connect permissions were not granted")
-            Toast.makeText(
-                this,
-                "Health Connect не выдал разрешения. Нажмите Google Health ещё раз и разрешите доступ BitLut.",
-                Toast.LENGTH_LONG
-            ).show()
+        if (!granted.containsAll(viewModel.googleManager.permissions)) {
+            Toast.makeText(this, getString(R.string.toast_hc_no_permissions), Toast.LENGTH_LONG).show()
         }
     }
 
     private val huaweiAuthorizationLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        AppLogger.i(
-            "MainActivity",
-            "Huawei authorization returned resultCode=${result.resultCode} hasData=${result.data != null}"
-        )
-
         val success = viewModel.huaweiHealthManager.handleAuthorizationResult(
-            resultCode = result.resultCode,
-            data = result.data
+            resultCode = result.resultCode, data = result.data
         )
-
         viewModel.onHuaweiAuthorizationResult(success)
         viewModel.refreshStatuses()
-
-        if (success) {
-            Toast.makeText(this, "Huawei Health подключен. Можно запускать синхронизацию.", Toast.LENGTH_LONG).show()
-        } else {
-            Toast.makeText(
-                this,
-                "Huawei authorization returned. Sync will verify real API access.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
+        Toast.makeText(
+            this,
+            getString(if (success) R.string.toast_huawei_connected else R.string.toast_huawei_auth_returned),
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setupPeriodicSync()
-
         setContent {
-
-            var showOnboarding by rememberSaveable {
-                mutableStateOf(true)
-            }
-
-
+            var showOnboarding by rememberSaveable { mutableStateOf(true) }
             BitLutExpressiveTheme {
-
                 if (showOnboarding) {
-                    OnboardingScreen(
-                        onContinue = {
-                            showOnboarding = false
-                        }
-                    )
+                    OnboardingScreen(onContinue = { showOnboarding = false })
                     return@BitLutExpressiveTheme
                 }
-
                 val uiState by viewModel.uiState.collectAsState()
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Box(modifier = Modifier.fillMaxSize()) {
                     if (uiState.showImportScreen) {
-                        ImportScreen(
-                            viewModel = importViewModel,
-                            onBack = { viewModel.hideImportScreen() }
-                        )
+                        ImportScreen(viewModel = importViewModel, onBack = { viewModel.hideImportScreen() })
                     } else {
-                        MainExpressiveLayout(
+                        BitLutNavHost(
                             uiState = uiState,
+                            dashboardViewModel = dashboardViewModel,
                             onGoogleClick = { requestGooglePermissionsOrOpenProvider() },
                             onHuaweiClick = { requestHuaweiAuthorizationOrInstallHms() },
                             onSyncClick = { triggerImmediateSync() },
@@ -186,172 +184,60 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        viewModel.refreshStatuses()
-    }
+    override fun onResume() { super.onResume(); viewModel.refreshStatuses() }
 
     private fun requestGooglePermissionsOrOpenProvider() {
         val status = HealthConnectClient.getSdkStatus(this)
-        AppLogger.i("MainActivity", "Health Connect SDK status before permission request: $status")
-
         if (status == HealthConnectClient.SDK_AVAILABLE) {
-            val permissions = viewModel.googleManager.permissions
-            AppLogger.i("MainActivity", "Opening Health Connect permission screen for: $permissions")
-            Toast.makeText(this, "Открываю запрос разрешений Health Connect", Toast.LENGTH_SHORT).show()
-            googlePermissionLauncher.launch(permissions)
-            return
+            Toast.makeText(this, getString(R.string.toast_hc_opening), Toast.LENGTH_SHORT).show()
+            googlePermissionLauncher.launch(viewModel.googleManager.permissions)
+        } else {
+            Toast.makeText(this, getString(R.string.toast_hc_required), Toast.LENGTH_LONG).show()
+            openUriWithFallback(
+                "market://details?id=com.google.android.apps.healthdata",
+                "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata"
+            )
         }
-
-        AppLogger.w("MainActivity", "Health Connect is not available; opening provider page")
-        Toast.makeText(this, "Health Connect is required. Opening install page.", Toast.LENGTH_LONG).show()
-        openHealthConnectInstallPage()
-    }
-
-    private fun openHealthConnectManagement() {
-        val intents = listOf(
-            Intent("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS").apply {
-                putExtra(Intent.EXTRA_PACKAGE_NAME, packageName)
-            },
-            Intent("androidx.health.ACTION_HEALTH_CONNECT_SETTINGS"),
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.parse("package:com.google.android.apps.healthdata")
-            }
-        )
-
-        for (intent in intents) {
-            try {
-                startActivity(intent)
-                AppLogger.i("MainActivity", "Opened Health Connect management/settings")
-                return
-            } catch (e: Exception) {
-                AppLogger.w("MainActivity", "Health Connect management fallback failed: ${e.message}")
-            }
-        }
-
-        openHealthConnectInstallPage()
-    }
-
-    private fun openHealthConnectInstallPage() {
-        openUriWithFallback(
-            primary = "market://details?id=com.google.android.apps.healthdata",
-            fallback = "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata"
-        )
     }
 
     private fun requestHuaweiAuthorizationOrInstallHms() {
         if (!HuaweiConfig.hasDeveloperAppId()) {
-            AppLogger.e("MainActivity", "Huawei App ID is not configured")
-            Toast.makeText(this, "Huawei App ID is not configured.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.toast_huawei_app_id_missing), Toast.LENGTH_LONG).show()
             return
         }
-
-        AppLogger.i(
-            "MainActivity",
-            "Huawei authorization preflight: ${HmsCoreHelper.prerequisiteStatus(this)}"
-        )
-
         if (!HmsCoreHelper.isInstalled(this)) {
-            AppLogger.e("MainActivity", "Cannot start Huawei authorization: HMS Core is missing")
-            Toast.makeText(
-                this,
-                "Install or update HMS Core first, then return to BitLut.",
-                Toast.LENGTH_LONG
-            ).show()
-            HmsCoreHelper.openHmsCoreInstall(this)
-            return
+            Toast.makeText(this, getString(R.string.toast_huawei_hms_missing), Toast.LENGTH_LONG).show()
+            HmsCoreHelper.openInstallPage(this); return
         }
-
         if (!HmsCoreHelper.isHuaweiHealthInstalled(this)) {
-            AppLogger.e("MainActivity", "Cannot start Huawei authorization: Huawei Health is missing")
-            Toast.makeText(
-                this,
-                "Install Huawei Health first, sign in, then return to BitLut.",
-                Toast.LENGTH_LONG
-            ).show()
-            HmsCoreHelper.openHuaweiHealth(this)
-            return
+            Toast.makeText(this, getString(R.string.toast_huawei_health_missing), Toast.LENGTH_LONG).show()
+            HmsCoreHelper.openHuaweiHealth(this); return
         }
-
         runCatching {
-            val huaweiIdIntent = viewModel.huaweiHealthManager.getHuaweiIdAuthorizationIntent()
-            val settingIntent = viewModel.huaweiHealthManager.getAuthorizationIntent()
-
-            val intent = when {
-                HmsCoreHelper.canResolveIntent(this, huaweiIdIntent) -> {
-                    AppLogger.i("MainActivity", "Using Huawei ID Health Kit authorization flow")
-                    huaweiIdIntent
-                }
-                HmsCoreHelper.canResolveIntent(this, settingIntent) -> {
-                    AppLogger.i("MainActivity", "Using SettingController Health Kit authorization flow")
-                    settingIntent
-                }
-                else -> {
-                    AppLogger.e(
-                        "MainActivity",
-                        "No Huawei authorization intent can be resolved. ${HmsCoreHelper.prerequisiteStatus(this)}"
-                    )
-                    Toast.makeText(
-                        this,
-                        "Huawei authorization screen is unavailable. Update HMS Core, Huawei Health and AppGallery.",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    if (!HmsCoreHelper.isAppGalleryInstalled(this)) {
-                        HmsCoreHelper.openAppGallery(this)
-                    } else {
-                        HmsCoreHelper.openHuaweiHealth(this)
-                    }
-                    return
-                }
-            }
-
-            AppLogger.i(
-                "MainActivity",
-                "Launching Huawei authorization for ${viewModel.huaweiHealthManager.requestedScopeNames()}"
-            )
-            Toast.makeText(this, "Opening Huawei Health authorization", Toast.LENGTH_SHORT).show()
-            huaweiAuthorizationLauncher.launch(intent)
-        }.onFailure { error ->
-            AppLogger.e("MainActivity", "Cannot start Huawei Health authorization", error)
-            Toast.makeText(
-                this,
-                "Huawei Health authorization could not be opened. Update HMS Core and Huawei Health, then try again.",
-                Toast.LENGTH_LONG
-            ).show()
-
-            if (HmsCoreHelper.isHuaweiHealthInstalled(this)) {
-                HmsCoreHelper.openHuaweiHealth(this)
-            } else {
-                HmsCoreHelper.openInstallPage(this)
-            }
+            Toast.makeText(this, getString(R.string.toast_huawei_opening_auth), Toast.LENGTH_SHORT).show()
+            huaweiAuthorizationLauncher.launch(viewModel.huaweiHealthManager.getAuthorizationIntent())
+        }.onFailure {
+            Toast.makeText(this, getString(R.string.toast_huawei_auth_failed), Toast.LENGTH_LONG).show()
+            HmsCoreHelper.openHuaweiHealth(this)
         }
     }
 
     private fun triggerImmediateSync() {
         viewModel.markSyncStarted()
-
         val req = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
-
         val wm = WorkManager.getInstance(applicationContext)
-        wm.enqueueUniqueWork(
-            "BitLutManualSync",
-            ExistingWorkPolicy.KEEP,
-            req
-        )
+        wm.enqueueUniqueWork("BitLutManualSync", ExistingWorkPolicy.KEEP, req)
         wm.getWorkInfoByIdLiveData(req.id).observe(this) { info ->
-            if (info?.state?.isFinished == true) {
+            if (info?.state?.isFinished == true)
                 viewModel.markSyncCompleted(info.state == WorkInfo.State.SUCCEEDED)
-            }
         }
     }
 
     private fun setupPeriodicSync() {
         WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
-            HuaweiConfig.SYNC_WORKER_TAG,
-            ExistingPeriodicWorkPolicy.KEEP,
+            HuaweiConfig.SYNC_WORKER_TAG, ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<SyncWorker>(1, TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
@@ -359,13 +245,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openUriWithFallback(primary: String, fallback: String) {
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(primary)))
-        }.onFailure {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallback)))
-        }
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(primary))) }
+            .onFailure { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallback))) }
     }
 }
+
+// ── Status resolvers ──────────────────────────────────────────────────────────
 
 @Composable
 private fun resolveSyncStatus(key: String): String = when (key) {
@@ -373,13 +258,14 @@ private fun resolveSyncStatus(key: String): String = when (key) {
     "sync_status_syncing" -> stringResource(R.string.sync_status_syncing)
     "sync_status_success" -> stringResource(R.string.sync_status_success)
     "sync_status_error"   -> stringResource(R.string.sync_status_error)
-    else                  -> key
+    else -> key
 }
 
 @Composable
 private fun resolveLastSync(key: String): String =
     if (key == "sync_no_data") stringResource(R.string.sync_no_data) else key
 
+// ── Main layout ───────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -391,163 +277,376 @@ fun MainExpressiveLayout(
     onImportClick: () -> Unit
 ) {
     var showLogs by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    var contentVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(80); contentVisible = true }
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (contentVisible) 1f else 0f,
+        animationSpec = tween(600, easing = FastOutSlowInEasing),
+        label = "contentAlpha"
+    )
 
-    if (showLogs) {
-        val logs by AppLogger.logs.collectAsState()
-        AlertDialog(
-            onDismissRequest = { showLogs = false },
-            title = { Text("Системные логи") },
-            text = {
-                LazyColumn(modifier = Modifier.fillMaxWidth().height(340.dp)) {
-                    items(logs) { log ->
-                        Text(log, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
-                        HorizontalDivider()
-                    }
-                }
+    if (showLogs) { LogsDialog(onDismiss = { showLogs = false }) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        MeshBackground()
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = stringResource(R.string.app_bar_title),
+                            fontWeight = FontWeight.Black,
+                            fontSize = 20.sp,
+                            color = TextPrimary,
+                            letterSpacing = (-0.5).sp
+                        )
+                    },
+                    actions = {
+                        IconButton(onClick = { showLogs = true }) {
+                            Icon(Icons.Rounded.Info, contentDescription = null, tint = TextSecondary)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                )
             },
-            confirmButton = { TextButton(onClick = { showLogs = false }) { Text("Закрыть") } },
-            dismissButton = {
-                TextButton(onClick = {
-                    val text = logs.joinToString(separator = "\n")
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("BitLut logs", text))
-                    Toast.makeText(context, "Логи скопированы", Toast.LENGTH_SHORT).show()
-                }) { Text("Копировать") }
-            }
-        )
-    }
-
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("BitLut Health", fontWeight = FontWeight.Black) }) },
-        floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End) {
-                SmallFloatingActionButton(
-                    onClick = { showLogs = true },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                ) { Icon(Icons.Rounded.Info, contentDescription = "Logs") }
-
+            floatingActionButton = {
                 FloatingActionButton(
                     onClick = onSyncClick,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ) { Icon(Icons.Rounded.Refresh, contentDescription = "Sync") }
-            }
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Spacer(Modifier.height(8.dp))
-
-            Card(shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(24.dp)) {
-                    Text("Синхронизация", style = MaterialTheme.typography.labelLarge)
-                    Text(resolveSyncStatus(uiState.syncStatus), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("Последняя успешная: ${uiState.lastSyncTime}", style = MaterialTheme.typography.bodySmall)
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White,
+                    elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Brush.linearGradient(listOf(ElectricIndigo, ElectricIndigoLt)))
+                ) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = null)
                 }
             }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .alpha(contentAlpha)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Spacer(Modifier.height(4.dp))
 
-            Text("Источники данных", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
-
-            SourceCard(
-                title = "Google Health Connect",
-                status = when {
-                    !uiState.isGoogleAvailable -> "Health Connect не готов"
-                    uiState.hasGooglePermissions -> "Подключено"
-                    else -> "Требуется доступ"
-                },
-                buttonText = if (uiState.hasGooglePermissions) "Подключено" else "Связать",
-                onClick = {
-                    if (!uiState.hasGooglePermissions) {
-                        onGoogleClick()
+                // Status hero
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
+                    glowColor = if (uiState.syncStatus == "sync_status_success") GlowMint else GlowIndigo
+                ) {
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Text(
+                            text = stringResource(R.string.sync_section_title),
+                            fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            color = ElectricIndigoLt, letterSpacing = 1.sp
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = resolveSyncStatus(uiState.syncStatus),
+                            fontSize = 28.sp, fontWeight = FontWeight.Black,
+                            color = TextPrimary, letterSpacing = (-1).sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.sync_last_success, resolveLastSync(uiState.lastSyncTime)),
+                            fontSize = 13.sp, color = TextTertiary
+                        )
                     }
                 }
-            )
 
-            SourceCard(
-                title = "Huawei Health",
-                status = if (uiState.isHuaweiAuthorized) "Подключено" else "Ожидает разрешения Huawei",
-                buttonText = if (uiState.isHuaweiAuthorized) "Обновить" else "Проверить доступ",
-                onClick = onHuaweiClick
-            )
+                Text(
+                    text = stringResource(R.string.sync_sources_title),
+                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary, letterSpacing = 0.8.sp,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+                )
 
-            if (!uiState.isHuaweiAuthorized) {
-                HuaweiApprovalInfoCard()
-            }
+                // Google Health card
+                if (uiState.hasGooglePermissions) {
+                    PulsingGlowBorder(
+                        color = NeonMint,
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SourceCardContent(
+                            emoji = "🟢",
+                            title = stringResource(R.string.google_card_title),
+                            status = stringResource(R.string.google_status_connected),
+                            statusColor = NeonMint,
+                            buttonText = stringResource(R.string.google_button_connected),
+                            onClick = {}
+                        )
+                    }
+                } else {
+                    GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+                        SourceCardContent(
+                            emoji = "⚪",
+                            title = stringResource(R.string.google_card_title),
+                            status = if (!uiState.isGoogleAvailable)
+                                stringResource(R.string.google_status_not_ready)
+                            else
+                                stringResource(R.string.google_status_needs_access),
+                            statusColor = TextSecondary,
+                            buttonText = stringResource(R.string.google_button_connect),
+                            onClick = onGoogleClick
+                        )
+                    }
+                }
 
-            Button(
-                onClick = onSyncClick,
-                enabled = !uiState.isSyncing && uiState.hasGooglePermissions,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (uiState.isSyncing) "Синхронизация..." else "Синхронизировать сейчас")
-            }
+                // Huawei Health card
+                GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+                    SourceCardContent(
+                        emoji = if (uiState.isHuaweiAuthorized) "🟣" else "🔴",
+                        title = stringResource(R.string.huawei_card_title),
+                        status = if (uiState.isHuaweiAuthorized)
+                            stringResource(R.string.huawei_status_connected)
+                        else
+                            stringResource(R.string.huawei_status_pending),
+                        statusColor = if (uiState.isHuaweiAuthorized) ElectricIndigoLt else NeonRose,
+                        buttonText = if (uiState.isHuaweiAuthorized)
+                            stringResource(R.string.huawei_button_refresh)
+                        else
+                            stringResource(R.string.huawei_button_check),
+                        onClick = onHuaweiClick
+                    )
+                }
 
-            OutlinedButton(
-                onClick = onImportClick,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Icon(Icons.Rounded.FileOpen, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                Text("Импорт из архива Huawei Health")
+                // Huawei pending info
+                if (!uiState.isHuaweiAuthorized) {
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        glowColor = Color(0x22F43F5E)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text(
+                                text = stringResource(R.string.huawei_approval_title),
+                                fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(R.string.huawei_approval_body),
+                                fontSize = 13.sp, color = TextSecondary, lineHeight = 19.sp
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(R.string.huawei_approval_action),
+                                fontSize = 13.sp, color = TextSecondary, lineHeight = 19.sp
+                            )
+                        }
+                    }
+                }
+
+                // Import button
+                GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onImportClick
+                            )
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "📦  " + stringResource(R.string.sync_import_button),
+                            fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(ElectricIndigo.copy(alpha = 0.3f), ElectricIndigoLt.copy(alpha = 0.2f))
+                                    )
+                                )
+                                .border(1.dp, ElectricIndigo.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                                .padding(10.dp)
+                        ) {
+                            Icon(Icons.Rounded.FileOpen, contentDescription = null, tint = ElectricIndigoLt)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(88.dp))
             }
         }
     }
 }
 
+// ── Source card content ───────────────────────────────────────────────────────
 
 @Composable
-private fun HuaweiApprovalInfoCard() {
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                "Huawei Health: доступ на проверке",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                "BitLut уже настроен для Huawei Health Kit, но Huawei отдельно проверяет доступ к данным здоровья. Пока заявка на Health Service Kit находится на ручной проверке, авторизация может возвращать ошибки 50005 или 50011.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Text(
-                "Что можно сделать сейчас: откройте Huawei Health, войдите в тот же Huawei ID, примите настройки конфиденциальности Health Kit и повторите попытку позже.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-    }
-}
-
-@Composable
-private fun SourceCard(
+private fun SourceCardContent(
+    emoji: String,
     title: String,
     status: String,
+    statusColor: Color,
     buttonText: String,
     onClick: () -> Unit
 ) {
-    Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+    Row(
+        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Row(
-            modifier = Modifier.padding(20.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(status, style = MaterialTheme.typography.bodyMedium)
+            Text(emoji, fontSize = 20.sp)
+            Column {
+                Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text(status, fontSize = 12.sp, color = statusColor)
             }
-            Button(onClick = onClick) { Text(buttonText) }
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(ElectricIndigo.copy(alpha = 0.25f), ElectricIndigoLt.copy(alpha = 0.15f))
+                    )
+                )
+                .border(1.dp, ElectricIndigo.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick
+                )
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        ) {
+            Text(buttonText, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = ElectricIndigoLt)
         }
     }
 }
 
+// ── Logs dialog ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun LogsDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val logs by AppLogger.logs.collectAsState()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = VoidSurface,
+        titleContentColor = TextPrimary,
+        textContentColor = TextSecondary,
+        title = { Text(stringResource(R.string.logs_title), fontWeight = FontWeight.Bold) },
+        text = {
+            LazyColumn(modifier = Modifier.fillMaxWidth().height(340.dp)) {
+                items(logs) { log ->
+                    Text(log, fontSize = 11.sp, modifier = Modifier.padding(vertical = 3.dp), color = TextSecondary)
+                    HorizontalDivider(color = VoidBorder)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.logs_close), color = ElectricIndigoLt)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = {
+                val text = logs.joinToString("\n")
+                val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cb.setPrimaryClip(ClipData.newPlainText("BitLut logs", text))
+                Toast.makeText(context, context.getString(R.string.logs_copied), Toast.LENGTH_SHORT).show()
+            }) {
+                Text(stringResource(R.string.logs_copy), color = TextSecondary)
+            }
+        }
+    )
+}
+
+// ── Bottom nav host ───────────────────────────────────────────────────────────
+
+@Composable
+private fun BitLutNavHost(
+    uiState: SyncUiState,
+    dashboardViewModel: DashboardViewModel,
+    onGoogleClick: () -> Unit,
+    onHuaweiClick: () -> Unit,
+    onSyncClick: () -> Unit,
+    onImportClick: () -> Unit
+) {
+    var selectedTab by remember { mutableStateOf(0) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        MeshBackground()
+
+        androidx.compose.material3.Scaffold(
+            containerColor = Color.Transparent,
+            bottomBar = {
+                BitLutBottomNav(
+                    selected = selectedTab,
+                    onSelect = { selectedTab = it }
+                )
+            }
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when (selectedTab) {
+                    0 -> DashboardScreen(viewModel = dashboardViewModel)
+                    1 -> MainExpressiveLayout(
+                        uiState = uiState,
+                        onGoogleClick = onGoogleClick,
+                        onHuaweiClick = onHuaweiClick,
+                        onSyncClick = onSyncClick,
+                        onImportClick = onImportClick
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BitLutBottomNav(selected: Int, onSelect: (Int) -> Unit) {
+    NavigationBar(
+        containerColor = Color(0xCC0C0C1E),
+        contentColor = com.openhealth.sync.ui.theme.TextSecondary,
+        tonalElevation = 0.dp,
+        modifier = Modifier
+            .selectableGroup()
+    ) {
+        NavigationBarItem(
+            selected = selected == 0,
+            onClick = { onSelect(0) },
+            icon = { Icon(Icons.Rounded.Dashboard, contentDescription = null) },
+            label = { Text("Dashboard", fontSize = 11.sp) },
+            colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                selectedIconColor = com.openhealth.sync.ui.theme.NeonMint,
+                selectedTextColor = com.openhealth.sync.ui.theme.NeonMint,
+                unselectedIconColor = com.openhealth.sync.ui.theme.TextTertiary,
+                unselectedTextColor = com.openhealth.sync.ui.theme.TextTertiary,
+                indicatorColor = com.openhealth.sync.ui.theme.ElectricIndigo.copy(alpha = 0.15f)
+            )
+        )
+        NavigationBarItem(
+            selected = selected == 1,
+            onClick = { onSelect(1) },
+            icon = { Icon(Icons.Rounded.Sync, contentDescription = null) },
+            label = { Text("Sync", fontSize = 11.sp) },
+            colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                selectedIconColor = com.openhealth.sync.ui.theme.NeonMint,
+                selectedTextColor = com.openhealth.sync.ui.theme.NeonMint,
+                unselectedIconColor = com.openhealth.sync.ui.theme.TextTertiary,
+                unselectedTextColor = com.openhealth.sync.ui.theme.TextTertiary,
+                indicatorColor = com.openhealth.sync.ui.theme.ElectricIndigo.copy(alpha = 0.15f)
+            )
+        )
+    }
+}
