@@ -382,7 +382,7 @@ class GoogleHealthManager(private val context: Context) {
     private fun exerciseTypeName(type: Int): String = when (type) {
         ExerciseSessionRecord.EXERCISE_TYPE_RUNNING        -> "Running"
         ExerciseSessionRecord.EXERCISE_TYPE_WALKING        -> "Walking"
-        ExerciseSessionRecord.EXERCISE_TYPE_CYCLING        -> "Cycling"
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING         -> "Cycling"
         ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
         ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL  -> "Swimming"
         ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "Strength"
@@ -391,11 +391,6 @@ class GoogleHealthManager(private val context: Context) {
         else -> "Workout"
     }
 
-    fun writeHeartRateBatch(records: List<HeartRateData>): Boolean {
-        if (records.isNotEmpty())
-            AppLogger.w(TAG, "Skipping ${records.size} heart-rate samples: scope not approved yet")
-        return true
-    }
 
     private fun offset(instant: Instant): ZoneOffset = zoneRules.getOffset(instant)
 }
