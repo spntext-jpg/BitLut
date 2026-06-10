@@ -67,6 +67,9 @@ import kotlin.math.roundToInt
 fun DashboardScreen(viewModel: DashboardViewModel) {
     val state by viewModel.state.collectAsState()
 
+    // Refresh data every time this screen is composed (tab switch)
+    LaunchedEffect(Unit) { viewModel.refresh() }
+
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(80); visible = true }
     val alpha by animateFloatAsState(
@@ -251,6 +254,34 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
                             WorkoutRow(workout)
                             Spacer(Modifier.height(10.dp))
                         }
+                    }
+                }
+            }
+
+            // Empty state if all zeros but permissions OK
+            if (state.stepsToday == 0L && state.weeklySteps.all { it.steps == 0L } && state.recentWorkouts.isEmpty()) {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    glowColor = com.openhealth.sync.ui.theme.GlowMint
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("✅", fontSize = 32.sp, textAlign = TextAlign.Center)
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "Google Health Connected",
+                            fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                            color = TextPrimary, textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "No activity recorded today yet. Wear your device and data will appear here.",
+                            fontSize = 14.sp, color = TextSecondary,
+                            textAlign = TextAlign.Center, lineHeight = 20.sp
+                        )
                     }
                 }
             }

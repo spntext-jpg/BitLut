@@ -48,18 +48,14 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
             return Result.failure()
         }
 
-        /*
-         * Do NOT stop here only because localHuaweiAuthorized=false.
-         *
-         * Huawei Health may show BitLut as authorized while ActivityResult data is empty,
-         * so the local pref can be stale/false. Real permission must be verified by
-         * DataController.read(). If Huawei denies read access, readSnapshot will throw.
-         */
+        // If Huawei approval is still pending (50005 known), skip Huawei sync entirely
+        if (huaweiManager.isPendingApproval()) {
+            AppLogger.w(TAG, "Huawei Health Kit approval pending — skipping Huawei sync. Data from Google Health is still available on Dashboard.")
+            return Result.success()
+        }
+
         if (!localHuaweiAuthorized) {
-            AppLogger.w(
-                TAG,
-                "Local Huawei authorization flag is false, but sync will verify real Huawei API access by reading data"
-            )
+            AppLogger.w(TAG, "Local Huawei authorization flag is false — will attempt real API read to verify")
         }
 
         val endTime = System.currentTimeMillis()

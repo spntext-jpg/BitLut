@@ -37,6 +37,8 @@ class DashboardViewModel(
 
     init { load() }
 
+    fun refresh() { load() }
+
     fun load() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
