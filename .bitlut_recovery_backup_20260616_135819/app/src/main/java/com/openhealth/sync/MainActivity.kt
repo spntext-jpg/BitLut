@@ -10,12 +10,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
-import androidx.lifecycle.lifecycleScope
 import com.openhealth.sync.ui.DashboardScreen
 import com.openhealth.sync.ui.DashboardViewModel
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 import com.openhealth.sync.util.AppLogger
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -31,7 +29,7 @@ class MainActivity : ComponentActivity() {
         dashboardViewModel.refresh()
 
         val app = application as SyncApplication
-        if (!granted.containsAll(app.container.googleHealthManager.permissions)) {
+        if (!granted.containsAll(app.container.googleHealthManager.dashboardPermissions)) {
             Toast.makeText(this, getString(R.string.toast_hc_no_permissions), Toast.LENGTH_LONG).show()
         }
     }
@@ -43,7 +41,8 @@ class MainActivity : ComponentActivity() {
             BitLutExpressiveTheme {
                 DashboardScreen(
                     viewModel = dashboardViewModel,
-                    onSyncClick = { refreshOrRequestGoogleHealthPermissions() }
+                    onRequestPermissions = { requestGooglePermissionsOrOpenProvider() },
+                    onRefresh = { dashboardViewModel.refresh() }
                 )
             }
         }
@@ -54,28 +53,17 @@ class MainActivity : ComponentActivity() {
         dashboardViewModel.refresh()
     }
 
-    private fun refreshOrRequestGoogleHealthPermissions() {
-        lifecycleScope.launch {
-            val app = application as SyncApplication
-            if (app.container.googleHealthManager.hasAllPermissions()) {
-                dashboardViewModel.refresh()
-            } else {
-                requestGooglePermissionsOrOpenProvider()
-            }
-        }
-    }
-
     private fun requestGooglePermissionsOrOpenProvider() {
         val status = HealthConnectClient.getSdkStatus(this)
         if (status == HealthConnectClient.SDK_AVAILABLE) {
             Toast.makeText(this, getString(R.string.toast_hc_opening), Toast.LENGTH_SHORT).show()
             val app = application as SyncApplication
-            googlePermissionLauncher.launch(app.container.googleHealthManager.permissions)
+            googlePermissionLauncher.launch(app.container.googleHealthManager.dashboardPermissions)
         } else {
             Toast.makeText(this, getString(R.string.toast_hc_required), Toast.LENGTH_LONG).show()
             openUriWithFallback(
-                "market://details?id=com.google.android.apps.healthdata",
-                "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata"
+                primary = "market://details?id=com.google.android.apps.healthdata",
+                fallback = "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata"
             )
         }
     }

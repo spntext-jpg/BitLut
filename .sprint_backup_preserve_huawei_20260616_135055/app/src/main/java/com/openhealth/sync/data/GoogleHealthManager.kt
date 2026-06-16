@@ -51,33 +51,22 @@ data class ActivitySessionData(
 
 class GoogleHealthManager(private val context: Context) {
 
-    // Visible sprint mode: Google Health dashboard only.
-    // Huawei import and Health Connect write pipeline stay in the codebase for post-approval enablement.
-    // KISS: runtime UI asks only for the permissions needed by the current visible product.
-    val dashboardPermissions: Set<String> = setOf(
-        HealthPermission.getReadPermission(StepsRecord::class),
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
-    )
-
-    // Future Huawei import mode. Do not use at runtime until Huawei Health Kit approval is granted.
-    val importPermissions: Set<String> = setOf(
-        HealthPermission.getReadPermission(StepsRecord::class),
+    val permissions: Set<String> = setOf(
         HealthPermission.getWritePermission(StepsRecord::class),
-        HealthPermission.getReadPermission(DistanceRecord::class),
+        HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getWritePermission(DistanceRecord::class),
-        HealthPermission.getReadPermission(FloorsClimbedRecord::class),
+        HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getWritePermission(FloorsClimbedRecord::class),
-        HealthPermission.getReadPermission(ElevationGainedRecord::class),
+        HealthPermission.getReadPermission(FloorsClimbedRecord::class),
         HealthPermission.getWritePermission(ElevationGainedRecord::class),
-        HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(ElevationGainedRecord::class),
         HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
-        HealthPermission.getReadPermission(SleepSessionRecord::class),
-        HealthPermission.getWritePermission(SleepSessionRecord::class)
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getWritePermission(SleepSessionRecord::class),
+        HealthPermission.getReadPermission(SleepSessionRecord::class)
     )
-
-    val permissions: Set<String> = dashboardPermissions
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
 
