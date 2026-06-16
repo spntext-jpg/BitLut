@@ -87,6 +87,7 @@ import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardScreen
+import com.openhealth.sync.ui.SyncPillButton
 import com.openhealth.sync.ui.DashboardViewModel
 import com.openhealth.sync.ui.ImportScreen
 import com.openhealth.sync.ui.ImportViewModel
@@ -100,6 +101,7 @@ import com.openhealth.sync.ui.theme.GlassCard
 import com.openhealth.sync.ui.theme.GlowIndigo
 import com.openhealth.sync.ui.theme.GlowMint
 import com.openhealth.sync.ui.theme.MeshBackground
+import com.openhealth.sync.ui.theme.NeonAmber
 import com.openhealth.sync.ui.theme.NeonMint
 import com.openhealth.sync.ui.theme.NeonRose
 import com.openhealth.sync.ui.theme.PulsingGlowBorder
@@ -310,19 +312,7 @@ fun MainExpressiveLayout(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                 )
             },
-            floatingActionButton = {
-                FloatingActionButton(
-                    onClick = onSyncClick,
-                    containerColor = Color.Transparent,
-                    contentColor = Color.White,
-                    elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(Brush.linearGradient(listOf(ElectricIndigo, ElectricIndigoLt)))
-                ) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = null)
-                }
-            }
+
         ) { padding ->
             Column(
                 modifier = Modifier
@@ -369,7 +359,7 @@ fun MainExpressiveLayout(
                 )
 
                 // Google Health card
-                if (uiState.hasGooglePermissions) {
+                if (uiState.hasGooglePermissions && !uiState.needsPermissionRefresh) {
                     PulsingGlowBorder(
                         color = NeonMint,
                         shape = RoundedCornerShape(24.dp),
@@ -387,14 +377,15 @@ fun MainExpressiveLayout(
                 } else {
                     GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
                         SourceCardContent(
-                            emoji = "⚪",
+                            emoji = if (uiState.needsPermissionRefresh) "🟡" else "⚪",
                             title = stringResource(R.string.google_card_title),
-                            status = if (!uiState.isGoogleAvailable)
-                                stringResource(R.string.google_status_not_ready)
-                            else
-                                stringResource(R.string.google_status_needs_access),
-                            statusColor = TextSecondary,
-                            buttonText = stringResource(R.string.google_button_connect),
+                            status = when {
+                                uiState.needsPermissionRefresh -> "New permissions required"
+                                !uiState.isGoogleAvailable -> stringResource(R.string.google_status_not_ready)
+                                else -> stringResource(R.string.google_status_needs_access)
+                            },
+                            statusColor = if (uiState.needsPermissionRefresh) NeonAmber else TextSecondary,
+                            buttonText = if (uiState.needsPermissionRefresh) "Update access" else stringResource(R.string.google_button_connect),
                             onClick = onGoogleClick
                         )
                     }
@@ -480,7 +471,8 @@ fun MainExpressiveLayout(
                     }
                 }
 
-                Spacer(Modifier.height(88.dp))
+                SyncPillButton(onClick = onSyncClick)
+                Spacer(Modifier.height(72.dp))
             }
         }
     }
@@ -599,7 +591,7 @@ private fun BitLutNavHost(
         ) { padding ->
             Box(modifier = Modifier.padding(padding).fillMaxSize()) {
                 when (selectedTab) {
-                    0 -> DashboardScreen(viewModel = dashboardViewModel)
+                    0 -> DashboardScreen(viewModel = dashboardViewModel, onSyncClick = onSyncClick)
                     1 -> MainExpressiveLayout(
                         uiState = uiState,
                         onGoogleClick = onGoogleClick,

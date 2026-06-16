@@ -20,6 +20,7 @@ data class SyncUiState(
     val isGoogleAvailable: Boolean = false,
     val showImportScreen: Boolean = false,
     val hasGooglePermissions: Boolean = false,
+    val needsPermissionRefresh: Boolean = false,
     val isHuaweiAuthorized: Boolean = false,
     val isSyncing: Boolean = false,
     val syncStatus: String = "sync_status_idle",
@@ -46,6 +47,7 @@ class SyncViewModel(
                 it.copy(
                     isGoogleAvailable = isAvailable,
                     hasGooglePermissions = hasPerms,
+                    needsPermissionRefresh = isAvailable && !hasPerms,
                     isHuaweiAuthorized = huaweiHealthManager.isAuthorized(),
                     lastSyncTime = savedTime
                 )

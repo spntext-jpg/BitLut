@@ -48,14 +48,16 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
             return Result.failure()
         }
 
-        // If Huawei approval is still pending (50005 known), skip Huawei sync entirely
+        // Hard stop: if 50005 is known pending, never attempt Huawei read
         if (huaweiManager.isPendingApproval()) {
-            AppLogger.w(TAG, "Huawei Health Kit approval pending — skipping Huawei sync. Data from Google Health is still available on Dashboard.")
+            AppLogger.w(TAG, "Huawei Health Kit approval pending (50005) — skipping Huawei sync entirely.")
             return Result.success()
         }
 
+        // Also skip if not locally authorized to avoid pointless API calls
         if (!localHuaweiAuthorized) {
-            AppLogger.w(TAG, "Local Huawei authorization flag is false — will attempt real API read to verify")
+            AppLogger.w(TAG, "Huawei not locally authorized — skipping Huawei sync.")
+            return Result.success()
         }
 
         val endTime = System.currentTimeMillis()
