@@ -10,6 +10,7 @@ import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ElevationGainedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
+import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -391,6 +392,25 @@ class GoogleHealthManager(private val context: Context) {
         else -> "Workout"
     }
 
+
+
+    suspend fun readSleepLastNight(): Double {
+        val c = healthConnectClient ?: return 0.0
+        return try {
+            val now = LocalDate.now()
+            val start = now.minusDays(1).atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant()
+            val end = now.atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant()
+            val req = ReadRecordsRequest(
+                recordType = SleepSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end)
+            )
+            val sessions = c.readRecords(req).records
+            sessions.sumOf { it.endTime.toEpochMilli() - it.startTime.toEpochMilli() } / 3_600_000.0
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readSleepLastNight failed: ${e.message}")
+            0.0
+        }
+    }
 
     private fun offset(instant: Instant): ZoneOffset = zoneRules.getOffset(instant)
 }

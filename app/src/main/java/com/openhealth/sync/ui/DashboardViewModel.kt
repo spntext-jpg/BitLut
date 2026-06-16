@@ -22,6 +22,7 @@ data class DashboardUiState(
     val distanceMeters: Double = 0.0,
     val caloriesKcal: Double = 0.0,
     val weeklySteps: List<WeeklyBar> = emptyList(),
+    val sleepHours: Double = 0.0,
     val recentWorkouts: List<ActivitySessionData> = emptyList()
 ) {
     val stepsProgress: Float get() = (stepsToday.toFloat() / stepsGoal.toFloat()).coerceIn(0f, 1f)
@@ -51,6 +52,7 @@ class DashboardViewModel(
             val distance = googleManager.readDistanceToday()
             val calories = googleManager.readCaloriesToday()
             val weekly   = googleManager.readWeeklySteps().map { (date, s) -> WeeklyBar(date, s) }
+            val sleep    = googleManager.readSleepLastNight()
             val workouts = googleManager.readRecentWorkouts(5)
             _state.update {
                 it.copy(
@@ -59,6 +61,7 @@ class DashboardViewModel(
                     stepsToday      = steps,
                     distanceMeters  = distance,
                     caloriesKcal    = calories,
+                    sleepHours      = sleep,
                     weeklySteps     = weekly,
                     recentWorkouts  = workouts
                 )
