@@ -95,7 +95,17 @@ import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.onboarding.OnboardingScreen
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
+import com.openhealth.sync.ui.theme.Blue
+import com.openhealth.sync.ui.theme.Orange
+import com.openhealth.sync.ui.theme.Purple
+import com.openhealth.sync.ui.theme.GlowBlue
+import com.openhealth.sync.ui.theme.GlowOrange
 import com.openhealth.sync.ui.theme.ElectricIndigo
+import com.openhealth.sync.ui.theme.Blue
+import com.openhealth.sync.ui.theme.Orange
+import com.openhealth.sync.ui.theme.Purple
+import com.openhealth.sync.ui.theme.GlowBlue
+import com.openhealth.sync.ui.theme.GlowOrange
 import com.openhealth.sync.ui.theme.ElectricIndigoLt
 import com.openhealth.sync.ui.theme.GlassCard
 import com.openhealth.sync.ui.theme.GlowIndigo
@@ -335,7 +345,7 @@ fun MainExpressiveLayout(
                         Text(
                             text = stringResource(R.string.sync_section_title),
                             fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                            color = ElectricIndigoLt, letterSpacing = 1.sp
+                            color = Blue, letterSpacing = 1.sp
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
@@ -509,11 +519,9 @@ private fun SourceCardContent(
             modifier = Modifier
                 .clip(RoundedCornerShape(12.dp))
                 .background(
-                    Brush.linearGradient(
-                        listOf(ElectricIndigo.copy(alpha = 0.25f), ElectricIndigoLt.copy(alpha = 0.15f))
-                    )
+                    Brush.horizontalGradient(listOf(Blue.copy(alpha = 0.2f), Purple.copy(alpha = 0.15f)))
                 )
-                .border(1.dp, ElectricIndigo.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                .border(1.dp, Blue.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -521,7 +529,7 @@ private fun SourceCardContent(
                 )
                 .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
-            Text(buttonText, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = ElectricIndigoLt)
+            Text(buttonText, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Blue)
         }
     }
 }
@@ -548,7 +556,7 @@ private fun LogsDialog(onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.logs_close), color = ElectricIndigoLt)
+                Text(stringResource(R.string.logs_close), color = Blue)
             }
         },
         dismissButton = {
@@ -608,7 +616,7 @@ private fun BitLutNavHost(
 @Composable
 private fun BitLutBottomNav(selected: Int, onSelect: (Int) -> Unit) {
     NavigationBar(
-        containerColor = Color(0xCC0C0C1E),
+        containerColor = Color(0xEE0A1428),
         contentColor = com.openhealth.sync.ui.theme.TextSecondary,
         tonalElevation = 0.dp,
         modifier = Modifier

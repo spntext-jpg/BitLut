@@ -49,8 +49,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openhealth.sync.R
 import com.openhealth.sync.data.ActivitySessionData
+import com.openhealth.sync.ui.theme.Blue
+import com.openhealth.sync.ui.theme.Blue
 import com.openhealth.sync.ui.theme.ElectricIndigo
 import com.openhealth.sync.ui.theme.ElectricIndigoLt
+import com.openhealth.sync.ui.theme.Purple
+import com.openhealth.sync.ui.theme.Purple
 import com.openhealth.sync.ui.theme.GlassCard
 import com.openhealth.sync.ui.theme.GlowIndigo
 import com.openhealth.sync.ui.theme.GlowMint
@@ -256,7 +260,7 @@ fun SyncPillButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(50.dp))
-                .background(Brush.horizontalGradient(listOf(ElectricIndigo, ElectricIndigoLt)))
+                .background(Brush.horizontalGradient(listOf(Blue, Purple)))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
                 .padding(horizontal = 32.dp, vertical = 14.dp)
         ) {

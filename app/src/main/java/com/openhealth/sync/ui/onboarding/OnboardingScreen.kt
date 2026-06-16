@@ -4,9 +4,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,34 +41,29 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openhealth.sync.R
-import com.openhealth.sync.ui.theme.ElectricIndigo
-import com.openhealth.sync.ui.theme.ElectricIndigoLt
+import com.openhealth.sync.ui.theme.Blue
 import com.openhealth.sync.ui.theme.GlassCard
-import com.openhealth.sync.ui.theme.GlassBorder
-import com.openhealth.sync.ui.theme.GlassWhite
-import com.openhealth.sync.ui.theme.GlowIndigo
-import com.openhealth.sync.ui.theme.GlowMint
+import com.openhealth.sync.ui.theme.GlowBlue
+import com.openhealth.sync.ui.theme.GlowPurple
 import com.openhealth.sync.ui.theme.MeshBackground
-import com.openhealth.sync.ui.theme.NeonMint
+import com.openhealth.sync.ui.theme.Orange
+import com.openhealth.sync.ui.theme.Purple
 import com.openhealth.sync.ui.theme.TextPrimary
 import com.openhealth.sync.ui.theme.TextSecondary
-import com.openhealth.sync.ui.theme.VoidBorder
 import kotlinx.coroutines.delay
 
 @Composable
 fun OnboardingScreen(onContinue: () -> Unit) {
     var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { delay(100); visible = true }
-
+    LaunchedEffect(Unit) { delay(120); visible = true }
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(800, easing = FastOutSlowInEasing),
-        label = "onboardingAlpha"
+        animationSpec = tween(700, easing = FastOutSlowInEasing),
+        label = "onboardAlpha"
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
         MeshBackground()
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -75,42 +72,15 @@ fun OnboardingScreen(onContinue: () -> Unit) {
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(64.dp))
-
-            // Logo wordmark
-            Text(
-                text = "BitLut",
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Black,
-                color = TextPrimary,
-                letterSpacing = (-2).sp
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = stringResource(R.string.onboarding_subtitle),
-                fontSize = 15.sp,
-                color = TextSecondary,
-                textAlign = TextAlign.Center,
-                lineHeight = 22.sp
-            )
-
+            Spacer(Modifier.height(72.dp))
+            Text("BitLut", fontSize = 52.sp, fontWeight = FontWeight.Black, color = TextPrimary, letterSpacing = (-2).sp)
+            Spacer(Modifier.height(6.dp))
+            Text(stringResource(R.string.onboarding_subtitle), fontSize = 15.sp, color = TextSecondary, textAlign = TextAlign.Center, lineHeight = 22.sp)
             Spacer(Modifier.height(48.dp))
 
-            // Steps glass card
-            GlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(28.dp),
-                glowColor = GlowIndigo
-            ) {
-                Column(modifier = Modifier.padding(28.dp)) {
-                    Text(
-                        text = stringResource(R.string.onboarding_steps_title),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
+            GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), glowColor = GlowBlue) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(stringResource(R.string.onboarding_steps_title), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                     Spacer(Modifier.height(20.dp))
                     listOf(
                         stringResource(R.string.onboarding_step1),
@@ -119,67 +89,35 @@ fun OnboardingScreen(onContinue: () -> Unit) {
                         stringResource(R.string.onboarding_step4),
                         stringResource(R.string.onboarding_step5)
                     ).forEachIndexed { i, step ->
-                        OnboardingStep(number = (i + 1).toString(), text = step)
+                        OnboardingStepRow((i + 1).toString(), step)
                         if (i < 4) Spacer(Modifier.height(14.dp))
                     }
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
 
-            // Import hint card
-            GlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                glowColor = GlowMint
-            ) {
-                Row(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Text("✦", fontSize = 18.sp, color = NeonMint)
-                    Text(
-                        text = stringResource(R.string.onboarding_import_hint),
-                        fontSize = 14.sp,
-                        color = NeonMint,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.weight(1f)
-                    )
+            GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), glowColor = GlowPurple) {
+                Row(modifier = Modifier.padding(18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                    Text("✦", fontSize = 16.sp, color = Orange)
+                    Text(stringResource(R.string.onboarding_import_hint), fontSize = 14.sp, color = Orange, lineHeight = 20.sp, modifier = Modifier.weight(1f))
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(36.dp))
 
-            // CTA button
             Button(
                 onClick = onContinue,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Transparent
-                )
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                contentPadding = PaddingValues(0.dp)
             ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(ElectricIndigo, ElectricIndigoLt)
-                            ),
-                            shape = RoundedCornerShape(18.dp)
-                        ),
+                    modifier = Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Blue, Purple))),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = stringResource(R.string.onboarding_continue),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        letterSpacing = 0.3.sp
-                    )
+                    Text(stringResource(R.string.onboarding_continue), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                 }
             }
 
@@ -189,38 +127,14 @@ fun OnboardingScreen(onContinue: () -> Unit) {
 }
 
 @Composable
-private fun OnboardingStep(number: String, text: String) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.Top,
-        modifier = Modifier.fillMaxWidth()
-    ) {
+private fun OnboardingStepRow(number: String, text: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
         Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(ElectricIndigo, ElectricIndigoLt)
-                    )
-                ),
+            modifier = Modifier.size(28.dp).clip(CircleShape).background(Brush.horizontalGradient(listOf(Blue, Purple))),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = number,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+            Text(number, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
-        Text(
-            text = text,
-            fontSize = 15.sp,
-            color = TextSecondary,
-            lineHeight = 22.sp,
-            modifier = Modifier
-                .weight(1f)
-                .padding(top = 3.dp)
-        )
+        Text(text, fontSize = 14.sp, color = TextSecondary, lineHeight = 21.sp, modifier = Modifier.weight(1f).padding(top = 3.dp))
     }
 }

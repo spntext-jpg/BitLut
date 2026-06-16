@@ -27,87 +27,106 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+// ── Mesh background with brand gradient ───────────────────────────────────────
+
 @Composable
 fun MeshBackground(modifier: Modifier = Modifier) {
     val infinite = rememberInfiniteTransition(label = "mesh")
     val shift by infinite.animateFloat(
         initialValue = 0f, targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(12000, easing = FastOutSlowInEasing),
+            animation = tween(14000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ), label = "meshShift"
     )
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .drawBehind {
-                drawRect(color = Void)
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0x556366F1), Color(0x006366F1)),
-                        center = Offset(size.width * (0.1f + shift * 0.15f), size.height * (0.05f + shift * 0.1f)),
-                        radius = size.width * 0.55f
-                    ),
-                    radius = size.width * 0.55f,
-                    center = Offset(size.width * (0.1f + shift * 0.15f), size.height * (0.05f + shift * 0.1f))
+                // Base: brand gradient #0A1428 → #1D2B53 → #4B1D8C
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(GradStart, GradMid, GradEnd),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, size.height)
+                    )
                 )
+                // Blue nebula top-left — #19AEF9
                 drawCircle(
                     brush = Brush.radialGradient(
-                        colors = listOf(Color(0x2234D399), Color(0x0034D399)),
-                        center = Offset(size.width * (0.85f - shift * 0.1f), size.height * (0.75f + shift * 0.08f)),
+                        colors = listOf(Color(0x4019AEF9), Color(0x0019AEF9)),
+                        center = Offset(size.width * (0.05f + shift * 0.1f), size.height * 0.1f),
+                        radius = size.width * 0.5f
+                    ),
+                    radius = size.width * 0.5f,
+                    center = Offset(size.width * (0.05f + shift * 0.1f), size.height * 0.1f)
+                )
+                // Purple nebula bottom-right — #8B5CF6
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x358B5CF6), Color(0x008B5CF6)),
+                        center = Offset(size.width * (0.9f - shift * 0.08f), size.height * (0.8f + shift * 0.05f)),
                         radius = size.width * 0.45f
                     ),
                     radius = size.width * 0.45f,
-                    center = Offset(size.width * (0.85f - shift * 0.1f), size.height * (0.75f + shift * 0.08f))
+                    center = Offset(size.width * (0.9f - shift * 0.08f), size.height * (0.8f + shift * 0.05f))
                 )
-                drawRect(
-                    brush = Brush.linearGradient(
-                        colors = listOf(Color(0x00000000), Color(0x156366F1), Color(0x00000000)),
-                        start = Offset(0f, size.height * 0.35f),
-                        end = Offset(size.width, size.height * 0.65f)
-                    )
+                // Subtle orange accent center — #FF9839
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x18FF9839), Color(0x00FF9839)),
+                        center = Offset(size.width * 0.5f, size.height * (0.4f + shift * 0.1f)),
+                        radius = size.width * 0.3f
+                    ),
+                    radius = size.width * 0.3f,
+                    center = Offset(size.width * 0.5f, size.height * (0.4f + shift * 0.1f))
                 )
             }
     )
 }
 
-fun Modifier.glowEffect(color: Color = GlowIndigo, radius: Dp = 20.dp): Modifier = this.drawBehind {
+// ── Glow shadow effect ────────────────────────────────────────────────────────
+
+fun Modifier.glowEffect(color: Color = GlowBlue, radius: Dp = 24.dp): Modifier = this.drawBehind {
     drawIntoCanvas { canvas ->
         val paint = Paint().apply {
             asFrameworkPaint().apply {
                 isAntiAlias = true
                 this.color = android.graphics.Color.TRANSPARENT
-                setShadowLayer(radius.toPx(), 0f, 0f, color.copy(alpha = 0.4f).toArgb())
+                setShadowLayer(radius.toPx(), 0f, 4f, color.copy(alpha = 0.35f).toArgb())
             }
         }
         canvas.drawRoundRect(0f, 0f, size.width, size.height, 24.dp.toPx(), 24.dp.toPx(), paint)
     }
 }
 
+// ── Glass card — rgba(255,255,255,0.04) + border rgba(255,255,255,0.08) ───────
+
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    shape: RoundedCornerShape = RoundedCornerShape(24.dp),
-    glowColor: Color = GlowIndigo,
-    glowRadius: Dp = 24.dp,
+    shape: RoundedCornerShape = RoundedCornerShape(16.dp),
+    glowColor: Color = Color.Transparent,
+    glowRadius: Dp = 20.dp,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val glowMod = if (glowColor != Color.Transparent) modifier.glowEffect(glowColor, glowRadius) else modifier
     Box(
-        modifier = modifier
-            .glowEffect(glowColor, glowRadius)
+        modifier = glowMod
             .clip(shape)
             .background(
                 Brush.linearGradient(
-                    colors = listOf(Color(0x1AFFFFFF), Color(0x08FFFFFF)),
+                    colors = listOf(Color(0x0FFFFFFF), Color(0x06FFFFFF)),
                     start = Offset(0f, 0f),
-                    end = Offset(1000f, 1000f)
+                    end = Offset(800f, 800f)
                 )
             )
             .border(
                 BorderStroke(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(Color(0x30FFFFFF), Color(0x08FFFFFF), Color(0x18FFFFFF))
+                    1.dp,
+                    Brush.linearGradient(
+                        colors = listOf(Color(0x14FFFFFF), Color(0x08FFFFFF), Color(0x10FFFFFF))
                     )
                 ),
                 shape = shape
@@ -116,20 +135,22 @@ fun GlassCard(
     )
 }
 
+// ── Pulsing glow border for connected/active state ────────────────────────────
+
 @Composable
 fun PulsingGlowBorder(
     color: Color,
-    shape: RoundedCornerShape = RoundedCornerShape(24.dp),
+    shape: RoundedCornerShape = RoundedCornerShape(16.dp),
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val infinite = rememberInfiniteTransition(label = "glow_pulse")
+    val infinite = rememberInfiniteTransition(label = "pulse")
     val alpha by infinite.animateFloat(
-        initialValue = 0.3f, targetValue = 0.8f,
+        initialValue = 0.25f, targetValue = 0.7f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
+            animation = tween(2200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
-        ), label = "glowAlpha"
+        ), label = "pulseAlpha"
     )
     Box(
         modifier = modifier
@@ -137,19 +158,15 @@ fun PulsingGlowBorder(
             .clip(shape)
             .background(
                 Brush.linearGradient(
-                    colors = listOf(Color(0x1AFFFFFF), Color(0x08FFFFFF)),
-                    start = Offset(0f, 0f), end = Offset(1000f, 1000f)
+                    colors = listOf(Color(0x0FFFFFFF), Color(0x06FFFFFF)),
+                    start = Offset(0f, 0f), end = Offset(800f, 800f)
                 )
             )
             .border(
                 BorderStroke(
-                    width = 1.5.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            color.copy(alpha = alpha),
-                            color.copy(alpha = alpha * 0.3f),
-                            color.copy(alpha = alpha)
-                        )
+                    1.5.dp,
+                    Brush.linearGradient(
+                        colors = listOf(color.copy(alpha = alpha), color.copy(alpha = alpha * 0.3f), color.copy(alpha = alpha))
                     )
                 ),
                 shape = shape
