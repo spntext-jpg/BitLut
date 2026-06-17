@@ -79,6 +79,7 @@ import com.openhealth.sync.ui.theme.Purple
 import com.openhealth.sync.ui.theme.TextPrimary
 import com.openhealth.sync.ui.theme.TextSecondary
 import com.openhealth.sync.util.AppLogger
+import com.openhealth.sync.util.L10n
 
 /**
  * Main product shell for BitLut v1.5.
@@ -160,10 +161,10 @@ private enum class AppDestination(
     val subtitle: String,
     val icon: ImageVector
 ) {
-    Dashboard("Dashboard", "Health overview", Icons.Rounded.Dashboard),
-    Sync("Sync", "Google Health", Icons.Rounded.CloudSync),
+    Dashboard(L10n.t("Dashboard"), "Health overview", Icons.Rounded.Dashboard),
+    Sync(L10n.t("Sync"), L10n.t("Google Health"), Icons.Rounded.CloudSync),
     HuaweiImport("Huawei", "Import locked", Icons.Rounded.FileUpload),
-    Settings("Settings", "Release status", Icons.Rounded.Settings)
+    Settings(L10n.t("Settings"), "Release status", Icons.Rounded.Settings)
 }
 
 @Composable
@@ -366,23 +367,23 @@ private fun SyncScreen(
     ScreenColumn {
         ScreenHeader(
             icon = Icons.Rounded.CloudSync,
-            title = "Sync",
+            title = L10n.t("Sync"),
             subtitle = "Connect Google Health now. Huawei Health Kit stays prepared for the next approval stage."
         )
         ActionCard(
             icon = Icons.Rounded.Shield,
-            title = "Google Health Connect",
+            title = L10n.t("Google Health Connect"),
             body = if (state.hasPermissions) "Connected. BitLut can read steps and workouts for the dashboard." else "Required for steps, weekly activity and imported workouts.",
             accent = Blue,
-            primaryAction = if (state.hasPermissions) "Refresh dashboard" else "Connect Google Health",
+            primaryAction = if (state.hasPermissions) "Refresh dashboard" else L10n.t("Connect Google Health"),
             onPrimaryAction = if (state.hasPermissions) onRefreshDashboard else onConnectGoogleHealth
         )
         ActionCard(
             icon = Icons.Rounded.FileUpload,
-            title = "Huawei Health import",
+            title = L10n.t("Huawei Health import"),
             body = "Code is preserved, but the importer is locked until Huawei Health Kit approval. This keeps AppGallery review clean and avoids premature permissions.",
             accent = Orange,
-            primaryAction = "Pending Health Kit approval",
+            primaryAction = L10n.t("Pending Health Kit approval"),
             onPrimaryAction = {}
         )
     }
@@ -393,7 +394,7 @@ private fun LockedHuaweiImportScreen() {
     ScreenColumn {
         ScreenHeader(
             icon = Icons.Rounded.Lock,
-            title = "Huawei Import",
+            title = L10n.t("Huawei Import"),
             subtitle = "Prepared, hidden from runtime sync, and ready to unlock after Health Kit approval."
         )
         ActionCard(
@@ -413,7 +414,7 @@ private fun SettingsScreen() {
     ScreenColumn {
         ScreenHeader(
             icon = Icons.Rounded.Settings,
-            title = "Settings",
+            title = L10n.t("Settings"),
             subtitle = "Release state, privacy posture and staged feature flags."
         )
         ActionCard(

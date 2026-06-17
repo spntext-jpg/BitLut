@@ -23,6 +23,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -49,30 +51,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openhealth.sync.R
 import com.openhealth.sync.data.ActivitySessionData
-import com.openhealth.sync.ui.theme.Blue
-import com.openhealth.sync.ui.theme.Blue
-import com.openhealth.sync.ui.theme.ElectricIndigo
-import com.openhealth.sync.ui.theme.ElectricIndigoLt
-import com.openhealth.sync.ui.theme.Purple
-import com.openhealth.sync.ui.theme.Purple
-import com.openhealth.sync.ui.theme.GlassCard
-import com.openhealth.sync.ui.theme.GlowIndigo
-import com.openhealth.sync.ui.theme.GlowMint
-import com.openhealth.sync.ui.theme.MeshBackground
-import com.openhealth.sync.ui.theme.NeonAmber
-import com.openhealth.sync.ui.theme.NeonMint
-import com.openhealth.sync.ui.theme.TextPrimary
-import com.openhealth.sync.ui.theme.TextSecondary
-import com.openhealth.sync.ui.theme.TextTertiary
-import com.openhealth.sync.ui.theme.VoidBorder
+import com.openhealth.sync.util.L10n
 import kotlinx.coroutines.delay
+import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.roundToInt
+
+private val CleanWhite = Color(0xFFFFFFFF)
+private val Ink = Color(0xFF101418)
+private val InkSoft = Color(0xFF59616A)
+private val Metal = Color(0xFFBAB8BA)
+private val Lime = Color(0xFFC1FF05)
+private val Purple = Color(0xFF9E6FC3)
+private val Orange = Color(0xFFFF7D32)
+private val AirBlue = Color(0xFFC8E1FC)
+private val CardBorder = Color(0x1A101418)
+private val CardGlass = Color(0xCCFFFFFF)
 
 @Composable
 fun DashboardScreen(viewModel: DashboardViewModel, onSyncClick: () -> Unit) {
@@ -80,302 +78,369 @@ fun DashboardScreen(viewModel: DashboardViewModel, onSyncClick: () -> Unit) {
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { delay(100); visible = true }
+    LaunchedEffect(Unit) { delay(80); visible = true }
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(500, easing = FastOutSlowInEasing),
-        label = "dashAlpha"
+        animationSpec = tween(360, easing = FastOutSlowInEasing),
+        label = "dashboardAlpha"
     )
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        MeshBackground()
-
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.linearGradient(
+                    listOf(CleanWhite, AirBlue.copy(alpha = 0.42f), CleanWhite)
+                )
+            )
+    ) {
         when {
-            state.isLoading -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = ElectricIndigo, modifier = Modifier.size(48.dp), strokeWidth = 3.dp)
-                }
-            }
+            state.isLoading -> LoadingState()
+            !state.hasPermissions -> PermissionState(onConnect = onSyncClick)
+            else -> DashboardContent(alpha = alpha, state = state, onRefresh = onSyncClick)
+        }
+    }
+}
 
-            !state.hasPermissions -> {
-                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    GlassCard(shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("🔒", fontSize = 40.sp, textAlign = TextAlign.Center)
-                            Spacer(Modifier.height(16.dp))
-                            Text(stringResource(R.string.dashboard_lock_title), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary, textAlign = TextAlign.Center)
-                            Spacer(Modifier.height(8.dp))
-                            Text(stringResource(R.string.dashboard_lock_body), fontSize = 14.sp, color = TextSecondary, textAlign = TextAlign.Center, lineHeight = 20.sp)
-                        }
-                    }
-                }
-            }
+@Composable
+private fun LoadingState() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(color = Orange, strokeWidth = 4.dp, modifier = Modifier.size(54.dp))
+    }
+}
 
-            else -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(alpha)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+@Composable
+private fun PermissionState(onConnect: () -> Unit) {
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        PremiumCard(modifier = Modifier.fillMaxWidth(), radius = 32) {
+            Column(
+                modifier = Modifier.padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text("✦", fontSize = 42.sp, color = Orange, textAlign = TextAlign.Center)
+                Text(
+                    text = stringResource(R.string.dashboard_lock_title),
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Ink,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 30.sp
+                )
+                Text(
+                    text = stringResource(R.string.dashboard_lock_body),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = InkSoft,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 22.sp
+                )
+                Button(
+                    onClick = onConnect,
+                    colors = ButtonDefaults.buttonColors(containerColor = Orange, contentColor = Color.White),
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
-                    Spacer(Modifier.height(16.dp))
-
-                    // ── Steps hero ────────────────────────────────────────────
-                    val weeklyTotal = state.weeklySteps.sumOf { it.steps }
-                    GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(32.dp), glowColor = GlowIndigo) {
-                        Column(modifier = Modifier.padding(24.dp)) {
-                            // Top row: label + weekly total
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(R.string.dashboard_today), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ElectricIndigoLt, letterSpacing = 1.2.sp)
-                                if (weeklyTotal > 0) {
-                                    Text(
-                                        stringResource(R.string.dashboard_weekly_total, "%,d".format(weeklyTotal)),
-                                        fontSize = 11.sp, color = TextTertiary
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(4.dp))
-
-                            // Steps + ring
-                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (state.stepsToday > 0) "%,d".format(state.stepsToday) else "—",
-                                        fontSize = 48.sp, fontWeight = FontWeight.Black, color = TextPrimary, letterSpacing = (-2).sp
-                                    )
-                                    Text(
-                                        "${stringResource(R.string.dashboard_steps)}  ·  ${stringResource(R.string.dashboard_goal, "%,d".format(state.stepsGoal))}",
-                                        fontSize = 13.sp, color = TextSecondary
-                                    )
-                                    Spacer(Modifier.height(16.dp))
-                                    Box(modifier = Modifier.fillMaxWidth(0.85f).height(6.dp).clip(CircleShape).background(VoidBorder)) {
-                                        val progress by animateFloatAsState(targetValue = state.stepsProgress, animationSpec = tween(1200, easing = FastOutSlowInEasing), label = "prog")
-                                        Box(modifier = Modifier.fillMaxWidth(progress.coerceAtLeast(0.01f)).height(6.dp).clip(CircleShape).background(Brush.horizontalGradient(listOf(ElectricIndigo, NeonMint))))
-                                    }
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(stringResource(R.string.dashboard_pct_goal, (state.stepsProgress * 100).roundToInt()), fontSize = 12.sp, color = TextTertiary)
-                                }
-                                Spacer(Modifier.width(16.dp))
-                                StepsRing(progress = state.stepsProgress, steps = state.stepsToday)
-                            }
-                        }
-                    }
-
-                    // ── Stats row ─────────────────────────────────────────────
-                    val hasDistance = state.distanceMeters > 0
-                    val hasCalories = state.caloriesKcal > 0
-                    val hasSleep    = state.sleepHours > 0
-                    if (hasDistance || hasCalories || hasSleep) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            if (hasDistance) StatCard(Modifier.weight(1f), "📍", stringResource(R.string.dashboard_distance),
-                                if (state.distanceMeters >= 1000) "${"%.1f".format(state.distanceMeters / 1000)} km" else "${state.distanceMeters.roundToInt()} m", NeonMint)
-                            if (hasCalories) StatCard(Modifier.weight(1f), "🔥", stringResource(R.string.dashboard_calories), "${state.caloriesKcal.roundToInt()} kcal", NeonAmber)
-                            if (hasSleep)    StatCard(Modifier.weight(1f), "🌙", stringResource(R.string.dashboard_sleep), "${"%.1f".format(state.sleepHours)}h", ElectricIndigoLt)
-                        }
-                    }
-
-                    // ── Weekly chart with step counts ─────────────────────────
-                    if (state.weeklySteps.any { it.steps > 0 }) {
-                        GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
-                            Column(modifier = Modifier.padding(20.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text(stringResource(R.string.dashboard_7day), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ElectricIndigoLt, letterSpacing = 1.2.sp)
-                                    Text(stringResource(R.string.dashboard_avg, "%,d".format(state.weeklyAvg)), fontSize = 12.sp, color = TextSecondary)
-                                }
-                                Spacer(Modifier.height(16.dp))
-                                WeeklyChart(bars = state.weeklySteps)
-                                // Step counts below chart
-                                Spacer(Modifier.height(8.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                    state.weeklySteps.forEach { bar ->
-                                        val isToday = bar.date == LocalDate.now()
-                                        Text(
-                                            text = if (bar.steps > 0) "%,d".format(bar.steps) else "—",
-                                            fontSize = 9.sp,
-                                            color = if (isToday) NeonMint else TextTertiary,
-                                            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                                            modifier = Modifier.weight(1f),
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // ── Workouts with stats ───────────────────────────────────
-                    if (state.recentWorkouts.isNotEmpty()) {
-                        GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), glowColor = GlowMint) {
-                            Column(modifier = Modifier.padding(20.dp)) {
-                                // Summary stats above workout list
-                                val totalWorkoutMin = state.recentWorkouts.sumOf { (it.endTimeMs - it.startTimeMs) / 60_000L }
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text(stringResource(R.string.dashboard_workouts), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ElectricIndigoLt, letterSpacing = 1.2.sp)
-                                    Text(
-                                        stringResource(R.string.dashboard_workout_duration, totalWorkoutMin.toInt()) + "  ·  ${state.recentWorkouts.size} sessions",
-                                        fontSize = 11.sp, color = TextSecondary
-                                    )
-                                }
-                                Spacer(Modifier.height(14.dp))
-                                state.recentWorkouts.forEachIndexed { idx, workout ->
-                                    WorkoutRow(workout)
-                                    if (idx < state.recentWorkouts.lastIndex) {
-                                        Spacer(Modifier.height(10.dp))
-                                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(VoidBorder))
-                                        Spacer(Modifier.height(10.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // ── Empty state ───────────────────────────────────────────
-                    if (state.stepsToday == 0L && state.weeklySteps.none { it.steps > 0 } && state.recentWorkouts.isEmpty()) {
-                        GlassCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), glowColor = GlowMint) {
-                            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("✅", fontSize = 32.sp, textAlign = TextAlign.Center)
-                                Spacer(Modifier.height(12.dp))
-                                Text(stringResource(R.string.dashboard_empty_title), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary, textAlign = TextAlign.Center)
-                                Spacer(Modifier.height(8.dp))
-                                Text(stringResource(R.string.dashboard_empty_body), fontSize = 14.sp, color = TextSecondary, textAlign = TextAlign.Center, lineHeight = 20.sp)
-                            }
-                        }
-                    }
-
-                    SyncPillButton(onClick = onSyncClick)
-                    Spacer(Modifier.height(72.dp))
+                    Text(stringResource(R.string.dashboard_lock_cta), fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
 }
 
-// ── Sync pill ─────────────────────────────────────────────────────────────────
+@Composable
+private fun DashboardContent(alpha: Float, state: DashboardUiState, onRefresh: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .alpha(alpha)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Spacer(Modifier.height(18.dp))
+        Header(onRefresh = onRefresh)
+
+        val weeklyTotal = state.weeklySteps.sumOf { it.steps }
+        HeroStepsCard(
+            steps = state.stepsToday,
+            goal = state.stepsGoal,
+            progress = state.stepsProgress,
+            weeklyTotal = weeklyTotal
+        )
+
+        if (state.weeklySteps.any { it.steps > 0 }) {
+            WeeklyStepsCard(bars = state.weeklySteps, average = state.weeklyAvg)
+        }
+
+        WorkoutsCard(workouts = state.recentWorkouts)
+
+        if (state.stepsToday == 0L && state.weeklySteps.none { it.steps > 0 } && state.recentWorkouts.isEmpty()) {
+            EmptyStateCard()
+        }
+
+        Spacer(Modifier.height(80.dp))
+    }
+}
 
 @Composable
-fun SyncPillButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+private fun Header(onRefresh: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.dashboard_title),
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Black,
+                color = Ink,
+                letterSpacing = (-0.8).sp
+            )
+            Text(
+                text = stringResource(R.string.dashboard_subtitle),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = InkSoft,
+                lineHeight = 20.sp
+            )
+        }
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(50.dp))
-                .background(Brush.horizontalGradient(listOf(Blue, Purple)))
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-                .padding(horizontal = 32.dp, vertical = 14.dp)
+                .size(54.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Brush.linearGradient(listOf(Lime, Orange)))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onRefresh),
+            contentAlignment = Alignment.Center
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Icons.Rounded.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                Text(stringResource(R.string.sync_now_button), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White, letterSpacing = 0.3.sp)
+            Icon(Icons.Rounded.Refresh, contentDescription = null, tint = Ink, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun HeroStepsCard(steps: Long, goal: Long, progress: Float, weeklyTotal: Long) {
+    PremiumCard(modifier = Modifier.fillMaxWidth(), radius = 32, glow = Lime.copy(alpha = 0.38f)) {
+        Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                LabelPill(text = stringResource(R.string.dashboard_today), color = Lime, textColor = Ink)
+                Text(
+                    text = stringResource(R.string.dashboard_weekly_total, number(weeklyTotal)),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = InkSoft
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (steps > 0) number(steps) else stringResource(R.string.empty_dash),
+                        fontSize = 66.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Ink,
+                        letterSpacing = (-2.4).sp,
+                        lineHeight = 68.sp
+                    )
+                    Text(
+                        text = "${stringResource(R.string.dashboard_steps)} · ${stringResource(R.string.dashboard_goal, number(goal))}",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Orange
+                    )
+                }
+                StepsRing(progress = progress, steps = steps)
+            }
+            ProgressBar(progress = progress)
+            Text(
+                text = stringResource(R.string.dashboard_pct_goal, (progress * 100).roundToInt()),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = InkSoft
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeeklyStepsCard(bars: List<WeeklyBar>, average: Long) {
+    PremiumCard(modifier = Modifier.fillMaxWidth(), radius = 28, glow = Orange.copy(alpha = 0.24f)) {
+        Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                LabelPill(text = stringResource(R.string.dashboard_7day), color = Orange, textColor = Color.White)
+                Text(stringResource(R.string.dashboard_avg, number(average)), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = InkSoft)
+            }
+            WeeklyChart(bars)
+        }
+    }
+}
+
+@Composable
+private fun WorkoutsCard(workouts: List<ActivitySessionData>) {
+    PremiumCard(modifier = Modifier.fillMaxWidth(), radius = 28, glow = Purple.copy(alpha = 0.22f)) {
+        Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                LabelPill(text = stringResource(R.string.dashboard_workouts), color = Purple, textColor = Color.White)
+                Text(stringResource(R.string.dashboard_sessions_count, workouts.size), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = InkSoft)
+            }
+            if (workouts.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.dashboard_empty_body),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = InkSoft,
+                    lineHeight = 21.sp
+                )
+            } else {
+                workouts.forEachIndexed { index, workout ->
+                    WorkoutRow(workout)
+                    if (index < workouts.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(CardBorder))
+                }
             }
         }
     }
 }
 
-// ── Steps ring ────────────────────────────────────────────────────────────────
-
 @Composable
-private fun StepsRing(progress: Float, steps: Long) {
-    val anim by animateFloatAsState(targetValue = progress, animationSpec = tween(1400, easing = FastOutSlowInEasing), label = "ring")
-    Box(modifier = Modifier.size(96.dp), contentAlignment = Alignment.Center) {
-        Box(modifier = Modifier.size(96.dp).drawBehind {
-            val stroke = 8.dp.toPx()
-            val radius = (size.minDimension - stroke) / 2
-            drawCircle(color = VoidBorder, radius = radius, style = Stroke(width = stroke, cap = StrokeCap.Round))
-            if (anim > 0f) drawArc(brush = Brush.sweepGradient(listOf(ElectricIndigo, NeonMint, ElectricIndigo)), startAngle = -90f, sweepAngle = 360f * anim, useCenter = false, style = Stroke(width = stroke, cap = StrokeCap.Round))
-        })
-        Text(
-            text = if (steps >= 1000) "${"%.1f".format(steps / 1000.0)}k" else if (steps > 0) steps.toString() else "—",
-            fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary, textAlign = TextAlign.Center
-        )
+private fun EmptyStateCard() {
+    PremiumCard(modifier = Modifier.fillMaxWidth(), radius = 28, glow = AirBlue.copy(alpha = 0.6f)) {
+        Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("✓", fontSize = 34.sp, color = Orange, textAlign = TextAlign.Center)
+            Text(stringResource(R.string.dashboard_empty_title), fontSize = 22.sp, fontWeight = FontWeight.Black, color = Ink, textAlign = TextAlign.Center)
+            Text(stringResource(R.string.dashboard_empty_body), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = InkSoft, textAlign = TextAlign.Center, lineHeight = 21.sp)
+        }
     }
 }
-
-// ── Weekly chart ──────────────────────────────────────────────────────────────
 
 @Composable
 private fun WeeklyChart(bars: List<WeeklyBar>) {
     val maxSteps = bars.maxOfOrNull { it.steps }?.takeIf { it > 0 } ?: 1L
     val today = LocalDate.now()
-    Row(modifier = Modifier.fillMaxWidth().height(80.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
+    Row(modifier = Modifier.fillMaxWidth().height(142.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
         bars.forEach { bar ->
             val isToday = bar.date == today
-            val fraction = (bar.steps.toFloat() / maxSteps.toFloat()).coerceIn(if (bar.steps > 0) 0.05f else 0f, 1f)
-            val anim by animateFloatAsState(targetValue = fraction, animationSpec = tween(1000, easing = FastOutSlowInEasing), label = "bar")
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom, modifier = Modifier.weight(1f).height(80.dp)) {
-                if (anim > 0f) Box(modifier = Modifier.width(20.dp).height((64 * anim).dp).clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)).background(
-                    if (isToday) Brush.verticalGradient(listOf(NeonMint, ElectricIndigo))
-                    else Brush.verticalGradient(listOf(ElectricIndigo.copy(alpha = 0.6f), ElectricIndigo.copy(alpha = 0.2f)))
-                ))
-                else Box(modifier = Modifier.width(20.dp).height(3.dp).clip(CircleShape).background(VoidBorder))
-                Spacer(Modifier.height(4.dp))
+            val fraction = (bar.steps.toFloat() / maxSteps.toFloat()).coerceIn(if (bar.steps > 0) 0.08f else 0f, 1f)
+            val anim by animateFloatAsState(targetValue = fraction, animationSpec = tween(800, easing = FastOutSlowInEasing), label = "weeklyBar")
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom, modifier = Modifier.weight(1f).height(142.dp)) {
                 Text(
-                    bar.date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()).take(2),
-                    fontSize = 10.sp,
-                    color = if (isToday) NeonMint else TextTertiary,
-                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal
+                    text = if (bar.steps > 0) compactNumber(bar.steps) else "—",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isToday) Orange else InkSoft,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .width(26.dp)
+                        .height((76 * anim).dp.coerceAtLeast(4.dp))
+                        .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 6.dp, bottomEnd = 6.dp))
+                        .background(if (isToday) Brush.verticalGradient(listOf(Orange, Lime)) else Brush.verticalGradient(listOf(Purple.copy(alpha = 0.85f), AirBlue)))
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = bar.date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()).take(2).replaceFirstChar { it.uppercase(Locale.getDefault()) },
+                    fontSize = 12.sp,
+                    fontWeight = if (isToday) FontWeight.Black else FontWeight.Bold,
+                    color = if (isToday) Ink else InkSoft
                 )
             }
         }
     }
 }
 
-// ── Stat card ─────────────────────────────────────────────────────────────────
-
 @Composable
-private fun StatCard(modifier: Modifier, emoji: String, label: String, value: String, color: Color) {
-    GlassCard(modifier = modifier, shape = RoundedCornerShape(20.dp), glowColor = color.copy(alpha = 0.2f)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(emoji, fontSize = 22.sp)
-            Spacer(Modifier.height(8.dp))
-            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text(label, fontSize = 12.sp, color = TextSecondary)
-        }
+private fun StepsRing(progress: Float, steps: Long) {
+    val anim by animateFloatAsState(targetValue = progress, animationSpec = tween(1000, easing = FastOutSlowInEasing), label = "stepsRing")
+    Box(modifier = Modifier.size(112.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(112.dp).drawBehind {
+            val stroke = 11.dp.toPx()
+            val radius = (size.minDimension - stroke) / 2
+            drawCircle(color = AirBlue.copy(alpha = 0.7f), radius = radius, style = Stroke(width = stroke, cap = StrokeCap.Round))
+            if (anim > 0f) {
+                drawArc(
+                    brush = Brush.sweepGradient(listOf(Lime, Orange, Purple, Lime)),
+                    startAngle = -90f,
+                    sweepAngle = 360f * anim,
+                    useCenter = false,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round)
+                )
+            }
+        })
+        Text(
+            text = if (steps >= 1000) "${"%.1f".format(Locale.US, steps / 1000.0)}k" else if (steps > 0) steps.toString() else "—",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Black,
+            color = Ink,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
-// ── Workout row ───────────────────────────────────────────────────────────────
+@Composable
+private fun ProgressBar(progress: Float) {
+    val anim by animateFloatAsState(targetValue = progress.coerceIn(0f, 1f), animationSpec = tween(900, easing = FastOutSlowInEasing), label = "progress")
+    Box(modifier = Modifier.fillMaxWidth().height(12.dp).clip(CircleShape).background(AirBlue.copy(alpha = 0.75f))) {
+        Box(modifier = Modifier.fillMaxWidth(anim.coerceAtLeast(0.02f)).height(12.dp).clip(CircleShape).background(Brush.horizontalGradient(listOf(Lime, Orange))))
+    }
+}
 
 @Composable
 private fun WorkoutRow(workout: ActivitySessionData) {
-    val durationMin = ((workout.endTimeMs - workout.startTimeMs) / 60_000L).toInt()
+    val durationMin = ((workout.endTimeMs - workout.startTimeMs) / 60_000L).toInt().coerceAtLeast(0)
     val date = Instant.ofEpochMilli(workout.startTimeMs).atZone(ZoneId.systemDefault()).toLocalDate()
-    val todayStr = stringResource(R.string.dashboard_today_label)
-    val yestStr  = stringResource(R.string.dashboard_yesterday)
-    val dateStr  = when (date) {
-        LocalDate.now()              -> todayStr
-        LocalDate.now().minusDays(1) -> yestStr
-        else -> date.format(DateTimeFormatter.ofPattern("MMM d"))
-    }
-    val emoji = when {
-        workout.title.contains("Run",      ignoreCase = true) -> "🏃"
-        workout.title.contains("Walk",     ignoreCase = true) -> "🚶"
-        workout.title.contains("Cycl",     ignoreCase = true) -> "🚴"
-        workout.title.contains("Swim",     ignoreCase = true) -> "🏊"
-        workout.title.contains("Strength", ignoreCase = true) -> "🏋️"
-        workout.title.contains("Yoga",     ignoreCase = true) -> "🧘"
-        workout.title.contains("Hik",      ignoreCase = true) -> "🥾"
-        else -> "⚡"
+    val dateText = when (date) {
+        LocalDate.now() -> stringResource(R.string.dashboard_today_label)
+        LocalDate.now().minusDays(1) -> stringResource(R.string.dashboard_yesterday)
+        else -> L10n.shortDate(date)
     }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(ElectricIndigo.copy(alpha = 0.3f), NeonMint.copy(alpha = 0.15f)))), contentAlignment = Alignment.Center) {
-                Text(emoji, fontSize = 20.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.size(50.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(listOf(Orange.copy(alpha = 0.92f), Lime.copy(alpha = 0.82f)))), contentAlignment = Alignment.Center) {
+                Text(workoutIcon(workout.title), fontSize = 22.sp)
             }
-            Column {
-                Text(workout.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                Text(
-                    stringResource(R.string.dashboard_workout_duration, durationMin) + "  ·  $dateStr",
-                    fontSize = 12.sp, color = TextSecondary
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(L10n.workoutTitle(workout.title), fontSize = 17.sp, fontWeight = FontWeight.Black, color = Ink, maxLines = 1)
+                Text("${stringResource(R.string.dashboard_workout_duration, durationMin)} · $dateText", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = InkSoft)
             }
         }
-        // Duration badge
-        Box(modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(ElectricIndigo.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 5.dp)) {
-            Text(
-                stringResource(R.string.dashboard_workout_duration, durationMin),
-                fontSize = 12.sp, color = ElectricIndigoLt, fontWeight = FontWeight.SemiBold
-            )
+        Box(modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(Purple.copy(alpha = 0.16f)).padding(horizontal = 11.dp, vertical = 7.dp)) {
+            Text(stringResource(R.string.dashboard_workout_duration, durationMin), fontSize = 13.sp, fontWeight = FontWeight.Black, color = Purple)
         }
     }
 }
+
+@Composable
+private fun PremiumCard(modifier: Modifier = Modifier, radius: Int = 24, glow: Color = Orange.copy(alpha = 0.18f), content: @Composable () -> Unit) {
+    Box(
+        modifier = modifier
+            .drawBehind { drawCircle(color = glow, radius = size.minDimension * 0.62f, center = center) }
+            .clip(RoundedCornerShape(radius.dp))
+            .background(CardGlass)
+            .drawBehind { drawRoundRect(color = CardBorder, cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius.dp.toPx(), radius.dp.toPx()), style = Stroke(width = 1.dp.toPx())) }
+    ) { content() }
+}
+
+@Composable
+private fun LabelPill(text: String, color: Color, textColor: Color) {
+    Box(modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(color).padding(horizontal = 12.dp, vertical = 7.dp)) {
+        Text(text = text.uppercase(Locale.getDefault()), fontSize = 12.sp, fontWeight = FontWeight.Black, color = textColor, letterSpacing = 0.8.sp)
+    }
+}
+
+private fun workoutIcon(title: String): String {
+    val t = title.lowercase(Locale.getDefault())
+    return when {
+        "run" in t -> "🏃"
+        "walk" in t -> "🚶"
+        "cycl" in t || "bike" in t -> "🚴"
+        "swim" in t -> "🏊"
+        "strength" in t || "weight" in t -> "🏋️"
+        "yoga" in t -> "🧘"
+        "hik" in t -> "🥾"
+        else -> "⚡"
+    }
+}
+
+private fun number(value: Long): String = NumberFormat.getIntegerInstance(Locale.getDefault()).format(value)
+private fun compactNumber(value: Long): String = if (value >= 10_000) "${NumberFormat.getIntegerInstance(Locale.getDefault()).format(value / 1000)}k" else number(value)
