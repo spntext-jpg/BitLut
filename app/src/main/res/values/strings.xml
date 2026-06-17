@@ -102,6 +102,7 @@
     <string name="onboarding_step5">Once Huawei approves, sync will work automatically</string>
     <string name="onboarding_steps_title">Getting started</string>
     <string name="onboarding_subtitle">Sync Huawei Health → Google Health Connect</string>
+    <string name="settings_title">Settings</string>
     <string name="sync_button_now">Sync now</string>
     <string name="sync_button_syncing">Syncing…</string>
     <string name="sync_import_button">Import from Huawei Health archive</string>
@@ -115,6 +116,7 @@
     <string name="sync_status_idle">Waiting for action</string>
     <string name="sync_status_success">Success</string>
     <string name="sync_status_syncing">Syncing…</string>
+    <string name="sync_title">Synchronization</string>
     <string name="toast_hc_no_permissions">Health Connect did not grant permissions. Tap Google Health again and allow BitLut access.</string>
     <string name="toast_hc_opening">Opening Health Connect permission screen</string>
     <string name="toast_hc_required">Health Connect is required. Opening install page.</string>

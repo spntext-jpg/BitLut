@@ -1,11 +1,11 @@
 package com.openhealth.sync.config
 
 /**
- * Central runtime switches for staged releases.
+ * Runtime switches for staged releases.
  *
- * v1.5 is a Google Health Connect dashboard-first release for AppGallery review.
- * Huawei import remains compiled and easy to re-enable after Huawei Health Kit approval,
- * but it must not request permissions, start background work, or import data while disabled.
+ * v1.5 is a Google Health Connect dashboard-first AppGallery review build.
+ * Huawei import is preserved in code and visible as a locked sync method,
+ * but no Huawei runtime import flow is enabled before Health Kit approval.
  */
 object FeatureFlags {
     const val HUAWEI_IMPORT_ENABLED: Boolean = false
