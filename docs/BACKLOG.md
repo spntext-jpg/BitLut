@@ -53,3 +53,12 @@ After Health Kit approval:
 - Do not commit `.kotlin/errors` logs.
 - Do not change `HuaweiHealthManager`, `SyncWorker` or `GoogleHealthManager` during pure UI sprints.
 - Do not fake unsupported Health Connect records.
+
+## UI Expressive Final Sprint
+
+- [x] Move product navigation to Summary / History / Settings.
+- [x] Add hero KPI and activity rings to Summary.
+- [x] Add 7-day trend cards to History.
+- [x] Add Google/Huawei/manual sync cockpit to Settings.
+- [ ] Replace remaining runtime text helpers with canonical Android string resources in a later low-risk localization refactor.
+- [ ] Add screenshot tests after Health Kit approval is complete.

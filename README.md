@@ -145,3 +145,9 @@ Summary / History UI
 ## Open source
 
 BitLut is a free open-source project for Huawei users who want transparent and independent control over their health data.
+
+<!-- BitLut UI Sprint Note -->
+
+## Current Product Shape
+
+BitLut is now organized around three production tabs: **Summary**, **History** and **Settings**. Summary focuses on the most important health KPIs, History shows 7-day trends, and Settings controls Google Health Connect, Huawei Health and manual sync.

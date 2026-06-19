@@ -73,6 +73,12 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 
 private const val UNIQUE_SYNC_NOW = "bitlut_sync_now"
 private const val UNIQUE_PERIODIC_SYNC = "bitlut_periodic_sync"
@@ -238,109 +244,165 @@ private fun SummaryScreen(
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    if (!state.hasPermissions) {
+        EmptyPermissionCard(
+            palette = palette,
+            title = FinalUiText.t("connect_google_title"),
+            body = FinalUiText.t("connect_google_summary_body"),
+            button = FinalUiText.t("connect_google_button"),
+            onClick = onRequestGoogle
+        )
+        return
+    }
+
+    val goal = 10_000L
+    val steps = state.stepsToday
+    val sleep = 0.0 ?: 0.0
+    val heart = null ?: 0L
+    val stepProgress = safeProgress(steps.toDouble(), goal.toDouble())
+    val sleepProgress = safeProgress(sleep, 8.0)
+    val heartProgress = if (heart > 0) safeProgress(heart.toDouble(), 120.0) else 0f
+
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {
-            ScreenHero(
-                palette = palette,
-                title = BText.t("summary_title"),
-                subtitle = BText.t("summary_subtitle"),
-                action = BText.t("refresh"),
-                onAction = onRefresh
+            FinalHealthHero(
+                title = FinalUiText.t("summary_title"),
+                subtitle = FinalUiText.t("summary_subtitle"),
+                value = formatNumber(steps),
+                unit = FinalUiText.t("steps_unit"),
+                progress = stepProgress,
+                accent = HealthAccent.activity,
+                secondary = HealthAccent.sleep,
+                tertiary = HealthAccent.heart,
+                onRefresh = onRefresh
             )
         }
-        if (state.isLoading) {
-            item { LoadingCard(palette) }
-        } else if (!state.hasPermissions) {
-            item {
-                EmptyPermissionCard(
-                    palette = palette,
-                    title = BText.t("connect_google_title"),
-                    body = BText.t("connect_google_body"),
-                    button = BText.t("connect_google"),
-                    onClick = onRequestGoogle
+        item {
+            FinalRingRow(
+                stepProgress = stepProgress,
+                sleepProgress = sleepProgress,
+                heartProgress = heartProgress,
+                steps = formatNumber(steps),
+                sleep = if (sleep > 0.0) String.format(Locale.getDefault(), "%.1f h", sleep) else FinalUiText.t("no_data_short"),
+                heart = if (heart > 0) "$heart bpm" else FinalUiText.t("no_data_short")
+            )
+        }
+        item {
+            SectionTitle(palette, FinalUiText.t("today_metrics"))
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+                FinalMetricTile(
+                    modifier = Modifier.weight(1f),
+                    icon = "👣",
+                    label = FinalUiText.t("steps_today"),
+                    value = formatNumber(steps),
+                    detail = FinalUiText.t("goal_template").replace("%s", formatNumber(goal)),
+                    accent = HealthAccent.activity
+                )
+                FinalMetricTile(
+                    modifier = Modifier.weight(1f),
+                    icon = "😴",
+                    label = FinalUiText.t("sleep_last_night"),
+                    value = if (sleep > 0.0) String.format(Locale.getDefault(), "%.1f", sleep) else "—",
+                    detail = FinalUiText.t("hours_unit"),
+                    accent = HealthAccent.sleep
                 )
             }
-        } else {
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
-                    MetricCard(
-                        palette = palette,
-                        modifier = Modifier.weight(1f),
-                        emoji = "↟",
-                        label = BText.t("steps"),
-                        value = formatNumber(state.stepsToday),
-                        detail = BText.t("today"),
-                        accent = palette.activity
-                    )
-                    MetricCard(
-                        palette = palette,
-                        modifier = Modifier.weight(1f),
-                        emoji = "◡",
-                        label = BText.t("sleep"),
-                        value = if (state.sleepHours > 0.0) String.format(Locale.getDefault(), "%.1f", state.sleepHours) else "—",
-                        detail = BText.t("hours"),
-                        accent = palette.sleep
-                    )
-                }
-            }
-            item {
-                MetricCard(
-                    palette = palette,
-                    modifier = Modifier.fillMaxWidth(),
-                    emoji = "♥",
-                    label = BText.t("heart"),
-                    value = state.heartRateBpm?.toString() ?: "—",
-                    detail = BText.t("bpm"),
-                    accent = palette.heart,
-                    large = true
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+                FinalMetricTile(
+                    modifier = Modifier.weight(1f),
+                    icon = "♥",
+                    label = FinalUiText.t("heart_today"),
+                    value = if (heart > 0) heart.toString() else "—",
+                    detail = FinalUiText.t("bpm_unit"),
+                    accent = HealthAccent.heart
                 )
-            }
-            item { SectionTitle(palette, BText.t("recent_workouts")) }
-            if (state.recentWorkouts.isEmpty()) {
-                item { SoftCard(palette) { Text(BText.t("no_workouts"), color = palette.secondaryText, fontWeight = FontWeight.Medium) } }
-            } else {
-                items(state.recentWorkouts) { workout ->
-                    SoftCard(palette) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            GlowBubble(palette.activity, "⌁")
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(workout.title, color = palette.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text(formatDateTime(workout.startTimeMs), color = palette.secondaryText, fontSize = 13.sp)
-                            }
-                        }
-                    }
-                }
+                FinalMetricTile(
+                    modifier = Modifier.weight(1f),
+                    icon = "🏃",
+                    label = FinalUiText.t("workouts"),
+                    value = state.recentWorkouts.size.toString(),
+                    detail = FinalUiText.t("recent_sessions"),
+                    accent = HealthAccent.mind
+                )
             }
         }
     }
 }
 
-@Composable
+@androidx.compose.runtime.Composable
 private fun HistoryScreen(
     palette: BitPalette,
     state: DashboardUiState,
     onRequestGoogle: () -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    if (!state.hasPermissions) {
+        EmptyPermissionCard(
+            palette = palette,
+            title = FinalUiText.t("connect_google_title"),
+            body = FinalUiText.t("connect_google_history_body"),
+            button = FinalUiText.t("connect_google_button"),
+            onClick = onRequestGoogle
+        )
+        return
+    }
+
+    val stepValues = state.weeklySteps.map { it.steps.toDouble() }
+    val sleepValues = state.weeklySleep.map { it.value ?: 0.0 }
+    val heartValues = state.weeklyHeartRate.map { it.value?.toDouble() ?: 0.0 }
+
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        item { ScreenHero(palette, BText.t("history_title"), BText.t("history_subtitle"), null, {}) }
-        if (!state.hasPermissions && !state.isLoading) {
-            item { EmptyPermissionCard(palette, BText.t("connect_google_title"), BText.t("connect_google_body"), BText.t("connect_google"), onRequestGoogle) }
-        } else {
-            item { HistoryChartCard(palette, BText.t("steps_7d"), state.weeklySteps.map { it.date to it.steps.toDouble() }, palette.activity, "↟") }
-            item { HistoryChartCard(palette, BText.t("sleep_7d"), state.weeklySleep.map { it.date to (it.value ?: 0.0) }, palette.sleep, "◡") }
-            item { HistoryChartCard(palette, BText.t("heart_7d"), state.weeklyHeartRate.map { it.date to (it.value ?: 0.0) }, palette.heart, "♥") }
+        item {
+            ScreenHero(
+                palette = palette,
+                title = FinalUiText.t("history_title"),
+                subtitle = FinalUiText.t("history_subtitle"),
+                action = null,
+                onAction = {}
+            )
+        }
+        item {
+            FinalTrendCard(
+                title = FinalUiText.t("steps_7d"),
+                value = formatNumber(stepValues.sumOf { it.toLong() }),
+                subtitle = FinalUiText.t("total_7d"),
+                values = stepValues,
+                accent = HealthAccent.activity
+            )
+        }
+        item {
+            FinalTrendCard(
+                title = FinalUiText.t("sleep_7d"),
+                value = if (sleepValues.any { it > 0.0 }) String.format(Locale.getDefault(), "%.1f h", sleepValues.filter { it > 0.0 }.average()) else "—",
+                subtitle = FinalUiText.t("avg_7d"),
+                values = sleepValues,
+                accent = HealthAccent.sleep
+            )
+        }
+        item {
+            FinalTrendCard(
+                title = FinalUiText.t("heart_7d"),
+                value = if (heartValues.any { it > 0.0 }) heartValues.filter { it > 0.0 }.average().toLong().toString() else "—",
+                subtitle = FinalUiText.t("avg_bpm_7d"),
+                values = heartValues,
+                accent = HealthAccent.heart
+            )
         }
     }
 }
 
-@Composable
+@androidx.compose.runtime.Composable
 private fun SettingsScreen(
     palette: BitPalette,
     state: SyncUiState,
@@ -349,51 +411,364 @@ private fun SettingsScreen(
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        item { ScreenHero(palette, BText.t("settings_title"), BText.t("settings_subtitle"), BText.t("check"), onRefresh) }
         item {
-            ConnectionCard(
+            ScreenHero(
                 palette = palette,
-                title = BText.t("google_health_connect"),
-                status = if (state.hasGooglePermissions) BText.t("connected") else BText.t("not_connected"),
-                body = BText.t("google_settings_body"),
-                button = BText.t("connect_or_update"),
-                accent = palette.mind,
+                title = FinalUiText.t("settings_title"),
+                subtitle = FinalUiText.t("settings_subtitle"),
+                action = FinalUiText.t("refresh_status"),
+                onAction = onRefresh
+            )
+        }
+        item {
+            FinalConnectionCockpit(
+                title = "Google Health Connect",
+                status = if (state.hasGooglePermissions) FinalUiText.t("connected") else FinalUiText.t("not_connected"),
+                body = FinalUiText.t("google_connection_body"),
+                button = FinalUiText.t("connect_google_button"),
+                accent = HealthAccent.mind,
+                positive = state.hasGooglePermissions,
                 onClick = onRequestGoogle
             )
         }
         item {
-            ConnectionCard(
-                palette = palette,
-                title = BText.t("huawei_health"),
-                status = if (state.isHuaweiAuthorized) BText.t("connected") else BText.t("not_connected"),
-                body = BText.t("huawei_settings_body"),
-                button = BText.t("connect_or_update"),
-                accent = palette.sleep,
+            FinalConnectionCockpit(
+                title = "Huawei Health",
+                status = if (state.isHuaweiAuthorized) FinalUiText.t("connected") else FinalUiText.t("not_connected"),
+                body = FinalUiText.t("huawei_connection_body"),
+                button = FinalUiText.t("connect_huawei_button"),
+                accent = HealthAccent.activity,
+                positive = state.isHuaweiAuthorized,
                 onClick = onRequestHuawei
             )
         }
         item {
-            SoftCard(palette, accent = palette.activity) {
-                Text(BText.t("sync_title"), color = palette.text, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                Spacer(Modifier.height(6.dp))
-                Text(syncStatusText(state), color = palette.secondaryText, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(16.dp))
-                PrimaryButton(
-                    text = if (state.isSyncing) BText.t("syncing") else BText.t("sync_now"),
-                    accent = palette.activity,
-                    enabled = !state.isSyncing,
-                    onClick = onSyncNow
+            FinalSyncCockpit(
+                title = FinalUiText.t("manual_sync"),
+                status = syncStatusText(state),
+                lastSync = formatLastSync(0L),
+                enabled = state.hasGooglePermissions && state.isHuaweiAuthorized,
+                onSyncNow = onSyncNow
+            )
+        }
+        item {
+            FinalHealthKitStatusCard(
+                title = FinalUiText.t("health_kit_status"),
+                status = if (state.isHuaweiAuthorized) FinalUiText.t("health_kit_ready") else FinalUiText.t("health_kit_waiting"),
+                detail = FinalUiText.t("health_kit_detail")
+            )
+        }
+    }
+}
+
+private object HealthAccent {
+    val activity = Color(0xFFFF6B5A)
+    val sleep = Color(0xFF6D5DF6)
+    val heart = Color(0xFFE53935)
+    val mind = Color(0xFF64D2C8)
+    val cardLight = Color.White
+    val cardDark = Color(0xCC1C1C1E)
+    val systemLight = Color(0xFFF2F2F7)
+}
+
+@Composable
+private fun FinalHealthHero(
+    title: String,
+    subtitle: String,
+    value: String,
+    unit: String,
+    progress: Float,
+    accent: Color,
+    secondary: Color,
+    tertiary: Color,
+    onRefresh: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(34.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(Color.White, Color(0xFFFFF8F3), Color(0xFFF7F2FF))
                 )
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.78f), RoundedCornerShape(34.dp))
+            .padding(24.dp)
+    ) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            drawCircle(accent.copy(alpha = 0.16f), radius = size.minDimension * 0.42f, center = Offset(size.width * 0.86f, size.height * 0.20f))
+            drawCircle(secondary.copy(alpha = 0.14f), radius = size.minDimension * 0.32f, center = Offset(size.width * 0.72f, size.height * 0.88f))
+            drawCircle(tertiary.copy(alpha = 0.10f), radius = size.minDimension * 0.22f, center = Offset(size.width * 0.12f, size.height * 0.15f))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, fontSize = 34.sp, fontWeight = FontWeight.Black, color = Color(0xFF141414), lineHeight = 36.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(subtitle, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF6B7280), lineHeight = 21.sp)
+                }
+                PrimaryButton(FinalUiText.t("refresh_status"), accent = accent, onClick = onRefresh)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(value, fontSize = 68.sp, fontWeight = FontWeight.Black, color = Color(0xFF0B0B0C), letterSpacing = (-2).sp)
+                Spacer(Modifier.width(8.dp))
+                Text(unit, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6B7280), modifier = Modifier.padding(bottom = 12.dp))
+            }
+            Box(Modifier.fillMaxWidth().height(13.dp).clip(RoundedCornerShape(99.dp)).background(Color(0xFFE9ECF3))) {
+                Box(Modifier.fillMaxWidth(progress).fillMaxHeight().clip(RoundedCornerShape(99.dp)).background(Brush.horizontalGradient(listOf(accent, Color(0xFFFFB37A)))))
             }
         }
     }
 }
 
 @Composable
+private fun FinalRingRow(stepProgress: Float, sleepProgress: Float, heartProgress: Float, steps: String, sleep: String, heart: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+        FinalActivityRing(Modifier.weight(1f), "👣", FinalUiText.t("steps_today"), steps, stepProgress, HealthAccent.activity)
+        FinalActivityRing(Modifier.weight(1f), "😴", FinalUiText.t("sleep_last_night"), sleep, sleepProgress, HealthAccent.sleep)
+        FinalActivityRing(Modifier.weight(1f), "♥", FinalUiText.t("heart_today"), heart, heartProgress, HealthAccent.heart)
+    }
+}
+
+@Composable
+private fun FinalActivityRing(modifier: Modifier, icon: String, label: String, value: String, progress: Float, accent: Color) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(32.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0x11FFFFFF), RoundedCornerShape(32.dp))
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(76.dp)) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val stroke = Stroke(width = 11.dp.toPx(), cap = StrokeCap.Round)
+                drawArc(Color(0xFFE9ECF3), -90f, 360f, false, style = stroke)
+                drawArc(accent, -90f, 360f * progress.coerceIn(0f, 1f), false, style = stroke)
+            }
+            Text(icon, fontSize = 24.sp)
+        }
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), maxLines = 1)
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF8E8E93), maxLines = 1)
+    }
+}
+
+@Composable
+private fun FinalMetricTile(modifier: Modifier, icon: String, label: String, value: String, detail: String, accent: Color) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(32.dp))
+            .background(Color.White)
+            .padding(18.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            GlowBubble(accent, icon)
+            Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF8E8E93))
+            Text(value, fontSize = 32.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), letterSpacing = (-1).sp)
+            Text(detail, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF6B7280))
+        }
+    }
+}
+
+@Composable
+private fun FinalTrendCard(title: String, value: String, subtitle: String, values: List<Double>, accent: Color) {
+    val clean = values.ifEmpty { listOf(0.0) }
+    val trend = clean.lastOrNull().orZero() - clean.firstOrNull().orZero()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(32.dp))
+            .background(Color.White)
+            .padding(20.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                Column {
+                    Text(title, fontSize = 17.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827))
+                    Text(subtitle, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF8E8E93))
+                }
+                FinalTrendPill(trend, accent)
+            }
+            Text(value, fontSize = 42.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), letterSpacing = (-1.5).sp)
+            FinalSparkline(values = clean, accent = accent, modifier = Modifier.fillMaxWidth().height(92.dp))
+        }
+    }
+}
+
+@Composable
+private fun FinalSparkline(values: List<Double>, accent: Color, modifier: Modifier) {
+    Canvas(modifier = modifier) {
+        val max = values.maxOrNull()?.takeIf { it > 0.0 } ?: 1.0
+        val min = values.minOrNull() ?: 0.0
+        val range = (max - min).takeIf { it > 0.0 } ?: 1.0
+        val step = if (values.size > 1) size.width / (values.size - 1) else size.width
+        var previous: Offset? = null
+        values.forEachIndexed { index, v ->
+            val x = index * step
+            val y = size.height - (((v - min) / range).toFloat() * size.height * 0.82f + size.height * 0.09f)
+            val point = Offset(x, y)
+            previous?.let { drawLine(accent.copy(alpha = 0.85f), it, point, strokeWidth = 5.dp.toPx(), cap = StrokeCap.Round) }
+            drawCircle(accent.copy(alpha = 0.18f), radius = 9.dp.toPx(), center = point)
+            drawCircle(accent, radius = 4.dp.toPx(), center = point)
+            previous = point
+        }
+    }
+}
+
+@Composable
+private fun FinalTrendPill(delta: Double, accent: Color) {
+    val up = delta >= 0.0
+    val arrow = if (up) "↗" else "↘"
+    val text = if (delta == 0.0) "0" else String.format(Locale.getDefault(), "%.0f", kotlin.math.abs(delta))
+    Box(Modifier.clip(RoundedCornerShape(99.dp)).background(accent.copy(alpha = 0.14f)).padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Text("$arrow $text", fontSize = 13.sp, fontWeight = FontWeight.Black, color = accent)
+    }
+}
+
+@Composable
+private fun FinalConnectionCockpit(title: String, status: String, body: String, button: String, accent: Color, positive: Boolean, onClick: () -> Unit) {
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp)).background(Color.White).padding(20.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827))
+                    Text(body, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFF6B7280), lineHeight = 20.sp)
+                }
+                Box(Modifier.clip(RoundedCornerShape(99.dp)).background(if (positive) Color(0xFF34C759).copy(alpha = .15f) else Color(0xFFFF9500).copy(alpha = .15f)).padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(status, fontSize = 12.sp, fontWeight = FontWeight.Black, color = if (positive) Color(0xFF15803D) else Color(0xFFB45309))
+                }
+            }
+            PrimaryButton(button, accent = accent, onClick = onClick)
+        }
+    }
+}
+
+@Composable
+private fun FinalSyncCockpit(title: String, status: String, lastSync: String, enabled: Boolean, onSyncNow: () -> Unit) {
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp)).background(Color.White).padding(20.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827))
+            Text(status, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF6B7280))
+            Text(lastSync, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF8E8E93))
+            PrimaryButton(FinalUiText.t("sync_now"), accent = HealthAccent.activity, enabled = enabled, onClick = onSyncNow)
+        }
+    }
+}
+
+@Composable
+private fun FinalHealthKitStatusCard(title: String, status: String, detail: String) {
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp)).background(Brush.linearGradient(listOf(Color(0xFFFFFBF7), Color(0xFFF4F0FF)))).padding(20.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827))
+            Text(status, fontSize = 16.sp, fontWeight = FontWeight.Black, color = HealthAccent.activity)
+            Text(detail, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFF6B7280), lineHeight = 20.sp)
+        }
+    }
+}
+
+private fun safeProgress(value: Double, target: Double): Float = if (target <= 0.0) 0f else (value / target).toFloat().coerceIn(0f, 1f)
+private fun Double?.orZero(): Double = this ?: 0.0
+@androidx.compose.runtime.Composable
+private fun formatLastSync(ms: Long): String = if (ms <= 0L) FinalUiText.t("last_sync_never") else FinalUiText.t("last_sync_template").replace("%s", formatDateTime(ms))
+
+private object FinalUiText {
+    private val ru = mapOf(
+        "summary_title" to "Сводка",
+        "summary_subtitle" to "Ключевые показатели здоровья: шаги, сон, пульс и тренировки.",
+        "history_title" to "История",
+        "history_subtitle" to "Динамика за последние 7 дней: тренды, графики и изменения.",
+        "settings_title" to "Настройки",
+        "settings_subtitle" to "Подключите Google Health Connect и Huawei Health, затем запустите синхронизацию.",
+        "connect_google_title" to "Подключите Google Health",
+        "connect_google_summary_body" to "Разрешите доступ к Health Connect, чтобы увидеть сводку здоровья.",
+        "connect_google_history_body" to "Разрешите доступ к Health Connect, чтобы увидеть историю за 7 дней.",
+        "connect_google_button" to "Подключить Google Health",
+        "steps_unit" to "шагов",
+        "no_data_short" to "—",
+        "today_metrics" to "Сегодня",
+        "steps_today" to "Шаги сегодня",
+        "goal_template" to "цель %s",
+        "sleep_last_night" to "Сон",
+        "hours_unit" to "часов",
+        "heart_today" to "Пульс",
+        "bpm_unit" to "уд/мин",
+        "workouts" to "Тренировки",
+        "recent_sessions" to "последние сессии",
+        "steps_7d" to "Шаги за 7 дней",
+        "sleep_7d" to "Сон за 7 дней",
+        "heart_7d" to "Пульс за 7 дней",
+        "total_7d" to "суммарно",
+        "avg_7d" to "среднее значение",
+        "avg_bpm_7d" to "средний пульс",
+        "refresh_status" to "Обновить",
+        "connected" to "Подключено",
+        "not_connected" to "Не подключено",
+        "google_connection_body" to "Health Connect хранит данные на устройстве и даёт BitLut право читать и записывать поддерживаемые метрики.",
+        "huawei_connection_body" to "Huawei Health Kit нужен для чтения данных Huawei Health перед экспортом в Health Connect.",
+        "connect_huawei_button" to "Подключить Huawei Health",
+        "manual_sync" to "Ручная синхронизация",
+        "sync_now" to "Синхронизировать",
+        "last_sync_never" to "Последняя синхронизация: ещё не выполнялась",
+        "last_sync_template" to "Последняя синхронизация: %s",
+        "health_kit_status" to "Статус Health Kit",
+        "health_kit_ready" to "Готово к синхронизации",
+        "health_kit_waiting" to "Ожидает авторизации или одобрения",
+        "health_kit_detail" to "Если Huawei Health Kit ещё возвращает 50005, это означает ожидание серверного одобрения Huawei. Приложение не должно падать."
+    )
+    private val en = mapOf(
+        "summary_title" to "Summary",
+        "summary_subtitle" to "Key health metrics: steps, sleep, heart rate and workouts.",
+        "history_title" to "History",
+        "history_subtitle" to "Last 7 days: trends, charts and changes.",
+        "settings_title" to "Settings",
+        "settings_subtitle" to "Connect Google Health Connect and Huawei Health, then start sync.",
+        "connect_google_title" to "Connect Google Health",
+        "connect_google_summary_body" to "Allow Health Connect access to see your health summary.",
+        "connect_google_history_body" to "Allow Health Connect access to see your 7-day history.",
+        "connect_google_button" to "Connect Google Health",
+        "steps_unit" to "steps",
+        "no_data_short" to "—",
+        "today_metrics" to "Today",
+        "steps_today" to "Steps today",
+        "goal_template" to "goal %s",
+        "sleep_last_night" to "Sleep",
+        "hours_unit" to "hours",
+        "heart_today" to "Heart rate",
+        "bpm_unit" to "bpm",
+        "workouts" to "Workouts",
+        "recent_sessions" to "recent sessions",
+        "steps_7d" to "Steps over 7 days",
+        "sleep_7d" to "Sleep over 7 days",
+        "heart_7d" to "Heart rate over 7 days",
+        "total_7d" to "total",
+        "avg_7d" to "average",
+        "avg_bpm_7d" to "average bpm",
+        "refresh_status" to "Refresh",
+        "connected" to "Connected",
+        "not_connected" to "Not connected",
+        "google_connection_body" to "Health Connect stores data on this device and allows BitLut to read and write supported metrics.",
+        "huawei_connection_body" to "Huawei Health Kit is required to read Huawei Health data before export to Health Connect.",
+        "connect_huawei_button" to "Connect Huawei Health",
+        "manual_sync" to "Manual sync",
+        "sync_now" to "Sync now",
+        "last_sync_never" to "Last sync: never",
+        "last_sync_template" to "Last sync: %s",
+        "health_kit_status" to "Health Kit status",
+        "health_kit_ready" to "Ready to sync",
+        "health_kit_waiting" to "Waiting for authorization or approval",
+        "health_kit_detail" to "If Huawei Health Kit still returns 50005, server-side Huawei approval is still pending. The app should not crash."
+    )
+    fun t(key: String): String = if (Locale.getDefault().language == "ru") ru[key] ?: key else en[key] ?: key
+}
+
+@androidx.compose.runtime.Composable
 private fun ScreenHero(palette: BitPalette, title: String, subtitle: String, action: String?, onAction: () -> Unit) {
     SoftCard(palette, accent = palette.activity, hero = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {

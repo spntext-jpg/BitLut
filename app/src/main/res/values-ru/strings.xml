@@ -112,4 +112,9 @@
     <string name="onboarding_step5">Смотрите данные в Сводке и Истории.</string>
     <string name="onboarding_import_hint">Для live-синхронизации Huawei Health Kit может потребоваться одобрение.</string>
     <string name="onboarding_continue">Продолжить</string>
+    <string name="summary_title_final">Сводка</string>
+    <string name="history_title_final">История</string>
+    <string name="settings_title_final">Настройки</string>
+    <string name="sync_now_final">Синхронизировать</string>
+    <string name="health_kit_status_final">Статус Health Kit</string>
 </resources>

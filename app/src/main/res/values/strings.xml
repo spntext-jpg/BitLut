@@ -112,4 +112,9 @@
     <string name="onboarding_step5">View your data in Summary and History.</string>
     <string name="onboarding_import_hint">Huawei Health Kit access may require approval before live sync works.</string>
     <string name="onboarding_continue">Continue</string>
+    <string name="summary_title_final">Summary</string>
+    <string name="history_title_final">History</string>
+    <string name="settings_title_final">Settings</string>
+    <string name="sync_now_final">Sync now</string>
+    <string name="health_kit_status_final">Health Kit status</string>
 </resources>
