@@ -40,3 +40,5 @@ compile_errors.log
 bitlut_*_patch.py
 .kotlin/errors/
 *.orig
+# BitLut generated artifacts / AI patch guardrails
+hotfix.sh

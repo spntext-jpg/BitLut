@@ -64,3 +64,14 @@ After Health Kit approval:
 - [ ] Add screenshot tests after Health Kit approval is complete.
 
 - [x] Sprint: expand Health Connect permissions, localize workout names, and simplify Summary hierarchy.
+
+
+## UI Architecture Cleanup
+
+- [x] Remove generated patch artifacts and backup files.
+- [x] Remove duplicate imports from `MainActivity.kt`.
+- [x] Extract final UI shell from `MainActivity.kt` when safe.
+- [x] Remove unreferenced zombie `DashboardScreen.kt` when safe.
+- [ ] Move `FinalUiText` to `strings.xml` / `values-ru/strings.xml`.
+- [ ] Split `FinalBitLutShell.kt` into `SummaryScreen.kt`, `HistoryScreen.kt`, `SettingsScreen.kt` after the shell extraction is stable.
+- [ ] Add JVM tests for workout title localization and Huawei export parser samples.
