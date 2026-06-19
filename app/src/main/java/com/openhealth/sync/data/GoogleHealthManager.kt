@@ -23,6 +23,7 @@ import com.openhealth.sync.util.AppLogger
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import com.openhealth.sync.config.HealthPermissionPolicy
 
 private const val TAG = "GoogleHealthManager"
 
@@ -51,6 +52,8 @@ data class ActivitySessionData(
 )
 
 class GoogleHealthManager(private val context: Context) {
+    fun requiredPermissions(): Set<String> = HealthPermissionPolicy.runtimePermissions
+
 
     // Visible sprint mode: Google Health dashboard only.
     // Huawei import and Health Connect write pipeline stay in the codebase for post-approval enablement.

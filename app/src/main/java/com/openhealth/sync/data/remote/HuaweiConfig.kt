@@ -16,3 +16,18 @@ object HuaweiConfig {
 
     fun hasDeveloperAppId(): Boolean = APP_ID.isNotBlank() && APP_ID != "0"
 }
+
+
+/*
+ * Basic Sport Health Data coverage requested for Health Kit approval:
+ * - Step
+ * - Distance, ascent & altitude
+ * - Active Hours / moderate-to-high intensity
+ * - Daily Activity Summary
+ * - Activity record
+ * - Activity
+ *
+ * Keep actual Huawei scope constants in this file aligned with the scopes approved in AppGallery
+ * Connect. SyncWorker and HuaweiHealthManager must treat 50005 as a server-side approval/cache state,
+ * not as a recoverable user-action error.
+ */
