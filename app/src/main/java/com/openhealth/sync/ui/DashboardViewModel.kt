@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 data class WeeklyBar(val date: LocalDate, val steps: Long)
+data class WeeklyMetric(val date: LocalDate, val value: Double?)
 
 data class DashboardUiState(
     val isLoading: Boolean = true,
@@ -23,6 +24,9 @@ data class DashboardUiState(
     val caloriesKcal: Double = 0.0,
     val weeklySteps: List<WeeklyBar> = emptyList(),
     val sleepHours: Double = 0.0,
+    val heartRateBpm: Long? = null,
+    val weeklySleep: List<WeeklyMetric> = emptyList(),
+    val weeklyHeartRate: List<WeeklyMetric> = emptyList(),
     val recentWorkouts: List<ActivitySessionData> = emptyList()
 ) {
     val stepsProgress: Float get() = (stepsToday.toFloat() / stepsGoal.toFloat()).coerceIn(0f, 1f)
@@ -53,6 +57,9 @@ class DashboardViewModel(
             val calories = googleManager.readCaloriesToday()
             val weekly   = googleManager.readWeeklySteps().map { (date, s) -> WeeklyBar(date, s) }
             val sleep    = googleManager.readSleepLastNight()
+            val heart     = googleManager.readAverageHeartRateToday()
+            val weeklySleep = googleManager.readWeeklySleep().map { (date, value) -> WeeklyMetric(date, value) }
+            val weeklyHeart = googleManager.readWeeklyAverageHeartRate().map { (date, value) -> WeeklyMetric(date, value?.toDouble()) }
             val workouts = googleManager.readRecentWorkouts(5)
             _state.update {
                 it.copy(
@@ -62,6 +69,9 @@ class DashboardViewModel(
                     distanceMeters  = distance,
                     caloriesKcal    = calories,
                     sleepHours      = sleep,
+                    heartRateBpm    = heart,
+                    weeklySleep     = weeklySleep,
+                    weeklyHeartRate = weeklyHeart,
                     weeklySteps     = weekly,
                     recentWorkouts  = workouts
                 )

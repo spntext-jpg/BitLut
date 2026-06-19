@@ -53,8 +53,8 @@ android {
         applicationId = "com.openhealth.sync"
         minSdk = 26
         targetSdk = 35
-        val envVersionName = System.getenv("RELEASE_VERSION")?.takeIf { it.isNotBlank() } ?: "1.5.0"
-        val envVersionCode = System.getenv("RELEASE_VERSION_CODE")?.toIntOrNull() ?: 25
+        val envVersionName = System.getenv("RELEASE_VERSION")?.takeIf { it.isNotBlank() } ?: "1.6.0"
+        val envVersionCode = System.getenv("RELEASE_VERSION_CODE")?.toIntOrNull() ?: 26
         versionCode = envVersionCode
         versionName = envVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

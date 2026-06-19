@@ -10,6 +10,7 @@ import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ElevationGainedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
+import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -422,6 +423,80 @@ class GoogleHealthManager(private val context: Context) {
         } catch (e: Exception) {
             AppLogger.e(TAG, "readSleepLastNight failed: ${e.message}")
             0.0
+        }
+    }
+
+
+
+    suspend fun readAverageHeartRateToday(): Long? {
+        val c = healthConnectClient ?: return null
+        return try {
+            val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val req = ReadRecordsRequest(
+                recordType = HeartRateRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+            )
+            val samples = c.readRecords(req).records.flatMap { it.samples }
+            if (samples.isEmpty()) null else samples.map { it.beatsPerMinute }.average().toLong()
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readAverageHeartRateToday failed: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun readWeeklySleep(): List<Pair<LocalDate, Double>> {
+        val c = healthConnectClient ?: return emptyList()
+        return try {
+            val today = LocalDate.now()
+            val start = today.minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val end = today.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val req = ReadRecordsRequest(
+                recordType = SleepSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end)
+            )
+            val records = c.readRecords(req).records
+            (0..6).map { offsetDays ->
+                val date = today.minusDays((6 - offsetDays).toLong())
+                val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val hours = records
+                    .filter { it.endTime > dayStart && it.startTime < dayEnd }
+                    .sumOf { session ->
+                        val clippedStart = maxOf(session.startTime, dayStart)
+                        val clippedEnd = minOf(session.endTime, dayEnd)
+                        (clippedEnd.toEpochMilli() - clippedStart.toEpochMilli()).coerceAtLeast(0L)
+                    } / 3_600_000.0
+                date to hours
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readWeeklySleep failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun readWeeklyAverageHeartRate(): List<Pair<LocalDate, Long?>> {
+        val c = healthConnectClient ?: return emptyList()
+        return try {
+            val today = LocalDate.now()
+            val start = today.minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val end = Instant.now()
+            val req = ReadRecordsRequest(
+                recordType = HeartRateRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end)
+            )
+            val records = c.readRecords(req).records
+            (0..6).map { offsetDays ->
+                val date = today.minusDays((6 - offsetDays).toLong())
+                val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val samples = records.flatMap { it.samples }
+                    .filter { it.time >= dayStart && it.time < dayEnd }
+                val avg = if (samples.isEmpty()) null else samples.map { it.beatsPerMinute }.average().toLong()
+                date to avg
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readWeeklyAverageHeartRate failed: ${e.message}")
+            emptyList()
         }
     }
 

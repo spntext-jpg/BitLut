@@ -1,4 +1,169 @@
-package com.openhealth.sync
+from pathlib import Path
+import re
+
+ROOT = Path('.')
+MAIN = ROOT / 'app/src/main/java/com/openhealth/sync/MainActivity.kt'
+GOOGLE = ROOT / 'app/src/main/java/com/openhealth/sync/data/GoogleHealthManager.kt'
+DASH_VM = ROOT / 'app/src/main/java/com/openhealth/sync/ui/DashboardViewModel.kt'
+FLAGS = ROOT / 'app/src/main/java/com/openhealth/sync/config/FeatureFlags.kt'
+MANIFEST = ROOT / 'app/src/main/AndroidManifest.xml'
+BUILD = ROOT / 'app/build.gradle.kts'
+
+for p in [MAIN, GOOGLE, DASH_VM, MANIFEST, BUILD]:
+    if not p.exists():
+        raise SystemExit(f'Missing required file: {p}')
+
+# 1) Activate Huawei import feature flag safely.
+FLAGS.parent.mkdir(parents=True, exist_ok=True)
+FLAGS.write_text('''package com.openhealth.sync.config
+
+/**
+ * Runtime feature switches.
+ * Huawei import is enabled because AppGallery approval is complete and Health Kit review is in progress.
+ * The actual sync flow remains guarded by runtime permission/auth checks in Settings and SyncWorker.
+ */
+object FeatureFlags {
+    const val HUAWEI_IMPORT_ENABLED: Boolean = true
+}
+''')
+
+# 2) Ensure manifest includes read permissions for sleep/heart and write permissions needed for Huawei -> Health Connect export.
+manifest = MANIFEST.read_text()
+needed_permissions = [
+    'android.permission.ACTIVITY_RECOGNITION',
+    'android.permission.INTERNET',
+    'android.permission.health.READ_STEPS',
+    'android.permission.health.WRITE_STEPS',
+    'android.permission.health.READ_DISTANCE',
+    'android.permission.health.WRITE_DISTANCE',
+    'android.permission.health.READ_FLOORS_CLIMBED',
+    'android.permission.health.WRITE_FLOORS_CLIMBED',
+    'android.permission.health.READ_ELEVATION_GAINED',
+    'android.permission.health.WRITE_ELEVATION_GAINED',
+    'android.permission.health.READ_ACTIVE_CALORIES_BURNED',
+    'android.permission.health.WRITE_ACTIVE_CALORIES_BURNED',
+    'android.permission.health.READ_EXERCISE',
+    'android.permission.health.WRITE_EXERCISE',
+    'android.permission.health.READ_SLEEP',
+    'android.permission.health.WRITE_SLEEP',
+    'android.permission.health.READ_HEART_RATE',
+]
+for perm in needed_permissions:
+    line = f'    <uses-permission android:name="{perm}" />'
+    if perm not in manifest:
+        manifest = manifest.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">', '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n' + line)
+MANIFEST.write_text(manifest)
+
+# 3) Bump local fallback version for finalization if it still has old fallback values.
+build = BUILD.read_text()
+build = re.sub(r'\?:\s*"1\.\d+\.\d+"', '?: "1.6.0"', build, count=1)
+build = re.sub(r'\?:\s*\d+\n\s*versionCode', '?: 26\n        versionCode', build, count=1)
+BUILD.write_text(build)
+
+# 4) Harden GoogleHealthManager with heart-rate read support and weekly history helpers.
+g = GOOGLE.read_text()
+if 'import androidx.health.connect.client.records.HeartRateRecord' not in g:
+    g = g.replace('import androidx.health.connect.client.records.FloorsClimbedRecord\n', 'import androidx.health.connect.client.records.FloorsClimbedRecord\nimport androidx.health.connect.client.records.HeartRateRecord\n')
+
+# Add heart rate read permission into the permission set.
+if 'HealthPermission.getReadPermission(HeartRateRecord::class)' not in g:
+    g = g.replace(
+        'HealthPermission.getWritePermission(SleepSessionRecord::class),\n        HealthPermission.getReadPermission(SleepSessionRecord::class)',
+        'HealthPermission.getWritePermission(SleepSessionRecord::class),\n        HealthPermission.getReadPermission(SleepSessionRecord::class),\n        HealthPermission.getReadPermission(HeartRateRecord::class)'
+    )
+
+helpers_marker = '    private fun offset(instant: Instant): ZoneOffset = zoneRules.getOffset(instant)\n}'
+if 'suspend fun readAverageHeartRateToday()' not in g:
+    helpers = r'''
+
+    suspend fun readAverageHeartRateToday(): Long? {
+        val c = healthConnectClient ?: return null
+        return try {
+            val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val req = ReadRecordsRequest(
+                recordType = HeartRateRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+            )
+            val samples = c.readRecords(req).records.flatMap { it.samples }
+            if (samples.isEmpty()) null else samples.map { it.beatsPerMinute }.average().toLong()
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readAverageHeartRateToday failed: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun readWeeklySleep(): List<Pair<LocalDate, Double>> {
+        val c = healthConnectClient ?: return emptyList()
+        return try {
+            val today = LocalDate.now()
+            val start = today.minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val end = today.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val req = ReadRecordsRequest(
+                recordType = SleepSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end)
+            )
+            val records = c.readRecords(req).records
+            (0..6).map { offsetDays ->
+                val date = today.minusDays((6 - offsetDays).toLong())
+                val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val hours = records
+                    .filter { it.endTime > dayStart && it.startTime < dayEnd }
+                    .sumOf { session ->
+                        val clippedStart = maxOf(session.startTime, dayStart)
+                        val clippedEnd = minOf(session.endTime, dayEnd)
+                        (clippedEnd.toEpochMilli() - clippedStart.toEpochMilli()).coerceAtLeast(0L)
+                    } / 3_600_000.0
+                date to hours
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readWeeklySleep failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun readWeeklyAverageHeartRate(): List<Pair<LocalDate, Long?>> {
+        val c = healthConnectClient ?: return emptyList()
+        return try {
+            val today = LocalDate.now()
+            val start = today.minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val end = Instant.now()
+            val req = ReadRecordsRequest(
+                recordType = HeartRateRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end)
+            )
+            val records = c.readRecords(req).records
+            (0..6).map { offsetDays ->
+                val date = today.minusDays((6 - offsetDays).toLong())
+                val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val samples = records.flatMap { it.samples }
+                    .filter { it.time >= dayStart && it.time < dayEnd }
+                val avg = if (samples.isEmpty()) null else samples.map { it.beatsPerMinute }.average().toLong()
+                date to avg
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readWeeklyAverageHeartRate failed: ${e.message}")
+            emptyList()
+        }
+    }
+'''
+    g = g.replace(helpers_marker, helpers + '\n' + helpers_marker)
+GOOGLE.write_text(g)
+
+# 5) Expand dashboard state for heart and weekly history.
+vm = DASH_VM.read_text()
+if 'data class WeeklyMetric' not in vm:
+    vm = vm.replace('data class WeeklyBar(val date: LocalDate, val steps: Long)\n', 'data class WeeklyBar(val date: LocalDate, val steps: Long)\ndata class WeeklyMetric(val date: LocalDate, val value: Double?)\n')
+if 'val heartRateBpm' not in vm:
+    vm = vm.replace('val sleepHours: Double = 0.0,\n    val recentWorkouts', 'val sleepHours: Double = 0.0,\n    val heartRateBpm: Long? = null,\n    val weeklySleep: List<WeeklyMetric> = emptyList(),\n    val weeklyHeartRate: List<WeeklyMetric> = emptyList(),\n    val recentWorkouts')
+if 'val heart     = googleManager.readAverageHeartRateToday()' not in vm:
+    vm = vm.replace('val sleep    = googleManager.readSleepLastNight()\n            val workouts', 'val sleep    = googleManager.readSleepLastNight()\n            val heart     = googleManager.readAverageHeartRateToday()\n            val weeklySleep = googleManager.readWeeklySleep().map { (date, value) -> WeeklyMetric(date, value) }\n            val weeklyHeart = googleManager.readWeeklyAverageHeartRate().map { (date, value) -> WeeklyMetric(date, value?.toDouble()) }\n            val workouts')
+    vm = vm.replace('sleepHours      = sleep,\n                    weeklySteps', 'sleepHours      = sleep,\n                    heartRateBpm    = heart,\n                    weeklySleep     = weeklySleep,\n                    weeklyHeartRate = weeklyHeart,\n                    weeklySteps')
+DASH_VM.write_text(vm)
+
+# 6) Replace MainActivity with final 3-tab shell. Huawei auth/sync are active but guarded.
+MAIN.write_text(r'''package com.openhealth.sync
 
 import android.content.Context
 import android.os.Bundle
@@ -72,7 +237,6 @@ import com.openhealth.sync.util.AppLogger
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import androidx.compose.foundation.layout.ColumnScope
 
 private const val UNIQUE_SYNC_NOW = "bitlut_sync_now"
 private const val UNIQUE_PERIODIC_SYNC = "bitlut_periodic_sync"
@@ -514,7 +678,7 @@ private fun SoftCard(
     modifier: Modifier = Modifier.fillMaxWidth(),
     accent: Color = palette.activity,
     hero: Boolean = false,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable Column.() -> Unit
 ) {
     val shape = RoundedCornerShape(if (hero) 32.dp else 28.dp)
     val bg by animateColorAsState(palette.card, label = "cardBg")
@@ -709,3 +873,7 @@ private fun formatDateTime(ms: Long): String = java.text.SimpleDateFormat(
     if (Locale.getDefault().language == "ru") "dd.MM.yyyy HH:mm" else "MMM d, yyyy HH:mm",
     Locale.getDefault()
 ).format(java.util.Date(ms))
+''')
+
+print('Final Health sync + 3-tab Material 3 Expressive UI patch applied.')
+print('Run: ./gradlew :app:compileDebugKotlin --no-daemon && ./gradlew :app:assembleDebug --no-daemon')
