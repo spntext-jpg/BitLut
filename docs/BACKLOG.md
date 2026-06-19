@@ -75,3 +75,18 @@ After Health Kit approval:
 - [ ] Move `FinalUiText` to `strings.xml` / `values-ru/strings.xml`.
 - [ ] Split `FinalBitLutShell.kt` into `SummaryScreen.kt`, `HistoryScreen.kt`, `SettingsScreen.kt` after the shell extraction is stable.
 - [ ] Add JVM tests for workout title localization and Huawei export parser samples.
+
+## UI Localization Architecture Cleanup
+
+Status: completed in current cleanup sprint.
+
+- Removed hardcoded UI localization maps from Kotlin.
+- Standard Android string resources are the single source of truth for UI text.
+- Kept domain localization utilities only for non-UI logic such as workout/date formatting.
+- Added `scripts/verify_ui_localization_architecture.py` guardrail.
+- Removed zombie dashboard UI when no longer referenced.
+
+Next:
+
+- Split Summary, History and Settings into dedicated screen files.
+- Add unit tests for workout localization and Huawei export parser.

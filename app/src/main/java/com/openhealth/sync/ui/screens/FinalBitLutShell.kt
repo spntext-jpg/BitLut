@@ -79,6 +79,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.res.stringResource
 
 private enum class MainTab(val key: String, val icon: String) {
     Summary("tab_summary", "◌"),
@@ -110,7 +111,16 @@ fun FinalBitLutShell(
                         selected = selected == tab,
                         onClick = { selected = tab },
                         icon = { Text(tab.icon, fontSize = 20.sp) },
-                        label = { Text(BText.t(tab.key), fontWeight = FontWeight.SemiBold) }
+                        label = {
+                            Text(
+                                text = when (tab) {
+                                    MainTab.Summary -> stringResource(R.string.tab_summary)
+                                    MainTab.History -> stringResource(R.string.tab_history)
+                                    MainTab.Settings -> stringResource(R.string.tab_settings)
+                                },
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     )
                 }
             }
@@ -141,9 +151,9 @@ private fun SummaryScreen(
     if (!state.hasPermissions) {
         EmptyPermissionCard(
             palette = palette,
-            title = FinalUiText.t("connect_google_title"),
-            body = FinalUiText.t("connect_google_summary_body"),
-            button = FinalUiText.t("connect_google_button"),
+            title = stringResource(R.string.connect_google_title),
+            body = stringResource(R.string.connect_google_summary_body),
+            button = stringResource(R.string.connect_google_button),
             onClick = onRequestGoogle
         )
         return
@@ -164,10 +174,10 @@ private fun SummaryScreen(
     ) {
         item {
             FinalHealthHero(
-                title = FinalUiText.t("summary_title"),
-                subtitle = FinalUiText.t("summary_subtitle"),
+                title = stringResource(R.string.summary_title),
+                subtitle = stringResource(R.string.summary_subtitle),
                 value = formatNumber(steps),
-                unit = FinalUiText.t("steps_unit"),
+                unit = stringResource(R.string.steps_unit),
                 progress = stepProgress,
                 accent = HealthAccent.activity,
                 secondary = HealthAccent.sleep,
@@ -181,29 +191,29 @@ private fun SummaryScreen(
                 sleepProgress = sleepProgress,
                 heartProgress = heartProgress,
                 steps = formatNumber(steps),
-                sleep = if (sleep > 0.0) String.format(Locale.getDefault(), "%.1f h", sleep) else FinalUiText.t("no_data_short"),
-                heart = if (heart > 0) "$heart bpm" else FinalUiText.t("no_data_short")
+                sleep = if (sleep > 0.0) String.format(Locale.getDefault(), "%.1f h", sleep) else stringResource(R.string.no_data_short),
+                heart = if (heart > 0) "$heart bpm" else stringResource(R.string.no_data_short)
             )
         }
         item {
-            SectionTitle(palette, FinalUiText.t("today_metrics"))
+            SectionTitle(palette, stringResource(R.string.today_metrics))
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
                 FinalMetricTile(
                     modifier = Modifier.weight(1f),
                     icon = "👣",
-                    label = FinalUiText.t("steps_today"),
+                    label = stringResource(R.string.steps_today),
                     value = formatNumber(steps),
-                    detail = FinalUiText.t("goal_template").replace("%s", formatNumber(goal)),
+                    detail = stringResource(R.string.goal_template).replace("%s", formatNumber(goal)),
                     accent = HealthAccent.activity
                 )
                 FinalMetricTile(
                     modifier = Modifier.weight(1f),
                     icon = "😴",
-                    label = FinalUiText.t("sleep_last_night"),
+                    label = stringResource(R.string.sleep_last_night),
                     value = if (sleep > 0.0) String.format(Locale.getDefault(), "%.1f", sleep) else "—",
-                    detail = FinalUiText.t("hours_unit"),
+                    detail = stringResource(R.string.hours_unit),
                     accent = HealthAccent.sleep
                 )
             }
@@ -213,17 +223,17 @@ private fun SummaryScreen(
                 FinalMetricTile(
                     modifier = Modifier.weight(1f),
                     icon = "♥",
-                    label = FinalUiText.t("heart_today"),
+                    label = stringResource(R.string.heart_today),
                     value = if (heart > 0) heart.toString() else "—",
-                    detail = FinalUiText.t("bpm_unit"),
+                    detail = stringResource(R.string.bpm_unit),
                     accent = HealthAccent.heart
                 )
                 FinalMetricTile(
                     modifier = Modifier.weight(1f),
                     icon = "🏃",
-                    label = FinalUiText.t("workouts"),
+                    label = stringResource(R.string.workouts),
                     value = state.recentWorkouts.size.toString(),
-                    detail = FinalUiText.t("recent_sessions"),
+                    detail = stringResource(R.string.recent_sessions),
                     accent = HealthAccent.mind
                 )
             }
@@ -233,7 +243,7 @@ private fun SummaryScreen(
 
 @Composable
 private fun SummaryRefreshButton(accent: Color, onRefresh: () -> Unit) {
-    PrimaryButton(text = FinalUiText.t("refresh_short"), accent = accent, onClick = onRefresh)
+    PrimaryButton(text = stringResource(R.string.refresh_short), accent = accent, onClick = onRefresh)
 }
 
 @Composable
@@ -245,9 +255,9 @@ private fun HistoryScreen(
     if (!state.hasPermissions) {
         EmptyPermissionCard(
             palette = palette,
-            title = FinalUiText.t("connect_google_title"),
-            body = FinalUiText.t("connect_google_history_body"),
-            button = FinalUiText.t("connect_google_button"),
+            title = stringResource(R.string.connect_google_title),
+            body = stringResource(R.string.connect_google_history_body),
+            button = stringResource(R.string.connect_google_button),
             onClick = onRequestGoogle
         )
         return
@@ -265,35 +275,35 @@ private fun HistoryScreen(
         item {
             ScreenHero(
                 palette = palette,
-                title = FinalUiText.t("history_title"),
-                subtitle = FinalUiText.t("history_subtitle"),
+                title = stringResource(R.string.history_title),
+                subtitle = stringResource(R.string.history_subtitle),
                 action = null,
                 onAction = {}
             )
         }
         item {
             FinalTrendCard(
-                title = FinalUiText.t("steps_7d"),
+                title = stringResource(R.string.steps_7d),
                 value = formatNumber(stepValues.sumOf { it.toLong() }),
-                subtitle = FinalUiText.t("total_7d"),
+                subtitle = stringResource(R.string.total_7d),
                 values = stepValues,
                 accent = HealthAccent.activity
             )
         }
         item {
             FinalTrendCard(
-                title = FinalUiText.t("sleep_7d"),
+                title = stringResource(R.string.sleep_7d),
                 value = if (sleepValues.any { it > 0.0 }) String.format(Locale.getDefault(), "%.1f h", sleepValues.filter { it > 0.0 }.average()) else "—",
-                subtitle = FinalUiText.t("avg_7d"),
+                subtitle = stringResource(R.string.avg_7d),
                 values = sleepValues,
                 accent = HealthAccent.sleep
             )
         }
         item {
             FinalTrendCard(
-                title = FinalUiText.t("heart_7d"),
+                title = stringResource(R.string.heart_7d),
                 value = if (heartValues.any { it > 0.0 }) heartValues.filter { it > 0.0 }.average().toLong().toString() else "—",
-                subtitle = FinalUiText.t("avg_bpm_7d"),
+                subtitle = stringResource(R.string.avg_bpm_7d),
                 values = heartValues,
                 accent = HealthAccent.heart
             )
@@ -318,18 +328,18 @@ private fun SettingsScreen(
         item {
             ScreenHero(
                 palette = palette,
-                title = FinalUiText.t("settings_title"),
-                subtitle = FinalUiText.t("settings_subtitle"),
-                action = FinalUiText.t("refresh_status"),
+                title = stringResource(R.string.settings_title),
+                subtitle = stringResource(R.string.settings_subtitle),
+                action = stringResource(R.string.refresh_status),
                 onAction = onRefresh
             )
         }
         item {
             FinalConnectionCockpit(
                 title = "Google Health Connect",
-                status = if (state.hasGooglePermissions) FinalUiText.t("connected") else FinalUiText.t("not_connected"),
-                body = FinalUiText.t("google_connection_body"),
-                button = FinalUiText.t("connect_google_button"),
+                status = if (state.hasGooglePermissions) stringResource(R.string.connected) else stringResource(R.string.not_connected),
+                body = stringResource(R.string.google_connection_body),
+                button = stringResource(R.string.connect_google_button),
                 accent = HealthAccent.mind,
                 positive = state.hasGooglePermissions,
                 onClick = onRequestGoogle
@@ -338,9 +348,9 @@ private fun SettingsScreen(
         item {
             FinalConnectionCockpit(
                 title = "Huawei Health",
-                status = if (state.isHuaweiAuthorized) FinalUiText.t("connected") else FinalUiText.t("not_connected"),
-                body = FinalUiText.t("huawei_connection_body"),
-                button = FinalUiText.t("connect_huawei_button"),
+                status = if (state.isHuaweiAuthorized) stringResource(R.string.connected) else stringResource(R.string.not_connected),
+                body = stringResource(R.string.huawei_connection_body),
+                button = stringResource(R.string.connect_huawei_button),
                 accent = HealthAccent.activity,
                 positive = state.isHuaweiAuthorized,
                 onClick = onRequestHuawei
@@ -348,7 +358,7 @@ private fun SettingsScreen(
         }
         item {
             FinalSyncCockpit(
-                title = FinalUiText.t("manual_sync"),
+                title = stringResource(R.string.manual_sync),
                 status = syncStatusText(state),
                 lastSync = formatLastSync(0L),
                 enabled = state.hasGooglePermissions && state.isHuaweiAuthorized,
@@ -357,9 +367,9 @@ private fun SettingsScreen(
         }
         item {
             FinalHealthKitStatusCard(
-                title = FinalUiText.t("health_kit_status"),
-                status = if (state.isHuaweiAuthorized) FinalUiText.t("health_kit_ready") else FinalUiText.t("health_kit_waiting"),
-                detail = FinalUiText.t("health_kit_detail")
+                title = stringResource(R.string.health_kit_status),
+                status = if (state.isHuaweiAuthorized) stringResource(R.string.health_kit_ready) else stringResource(R.string.health_kit_waiting),
+                detail = stringResource(R.string.health_kit_detail)
             )
         }
     }
@@ -411,7 +421,7 @@ private fun FinalHealthHero(
                     Spacer(Modifier.height(6.dp))
                     Text(subtitle, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF6B7280), lineHeight = 21.sp)
                 }
-                PrimaryButton(FinalUiText.t("refresh_status"), accent = accent, onClick = onRefresh)
+                PrimaryButton(stringResource(R.string.refresh_status), accent = accent, onClick = onRefresh)
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.Bottom) {
@@ -429,9 +439,9 @@ private fun FinalHealthHero(
 @Composable
 private fun FinalRingRow(stepProgress: Float, sleepProgress: Float, heartProgress: Float, steps: String, sleep: String, heart: String) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
-        FinalActivityRing(Modifier.weight(1f), "👣", FinalUiText.t("steps_today"), steps, stepProgress, HealthAccent.activity)
-        FinalActivityRing(Modifier.weight(1f), "😴", FinalUiText.t("sleep_last_night"), sleep, sleepProgress, HealthAccent.sleep)
-        FinalActivityRing(Modifier.weight(1f), "♥", FinalUiText.t("heart_today"), heart, heartProgress, HealthAccent.heart)
+        FinalActivityRing(Modifier.weight(1f), "👣", stringResource(R.string.steps_today), steps, stepProgress, HealthAccent.activity)
+        FinalActivityRing(Modifier.weight(1f), "😴", stringResource(R.string.sleep_last_night), sleep, sleepProgress, HealthAccent.sleep)
+        FinalActivityRing(Modifier.weight(1f), "♥", stringResource(R.string.heart_today), heart, heartProgress, HealthAccent.heart)
     }
 }
 
@@ -556,7 +566,7 @@ private fun FinalSyncCockpit(title: String, status: String, lastSync: String, en
             Text(title, fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827))
             Text(status, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF6B7280))
             Text(lastSync, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF8E8E93))
-            PrimaryButton(FinalUiText.t("sync_now"), accent = HealthAccent.activity, enabled = enabled, onClick = onSyncNow)
+            PrimaryButton(stringResource(R.string.sync_now), accent = HealthAccent.activity, enabled = enabled, onClick = onSyncNow)
         }
     }
 }
@@ -575,98 +585,7 @@ private fun FinalHealthKitStatusCard(title: String, status: String, detail: Stri
 private fun safeProgress(value: Double, target: Double): Float = if (target <= 0.0) 0f else (value / target).toFloat().coerceIn(0f, 1f)
 private fun Double?.orZero(): Double = this ?: 0.0
 @Composable
-private fun formatLastSync(ms: Long): String = if (ms <= 0L) FinalUiText.t("last_sync_never") else FinalUiText.t("last_sync_template").replace("%s", formatDateTime(ms))
-
-private object FinalUiText {
-    private val ru = mapOf(
-        "summary_title" to "Сводка",
-        "summary_subtitle" to "Ключевые показатели здоровья: шаги, сон, пульс и тренировки.",
-        "history_title" to "История",
-        "history_subtitle" to "Динамика за последние 7 дней: тренды, графики и изменения.",
-        "settings_title" to "Настройки",
-        "settings_subtitle" to "Подключите Google Health Connect и Huawei Health, затем запустите синхронизацию.",
-        "connect_google_title" to "Подключите Google Health",
-        "connect_google_summary_body" to "Разрешите доступ к Health Connect, чтобы увидеть сводку здоровья.",
-        "connect_google_history_body" to "Разрешите доступ к Health Connect, чтобы увидеть историю за 7 дней.",
-        "connect_google_button" to "Подключить Google Health",
-        "steps_unit" to "шагов",
-        "no_data_short" to "—",
-        "today_metrics" to "Сегодня",
-        "steps_today" to "Шаги сегодня",
-        "goal_template" to "цель %s",
-        "sleep_last_night" to "Сон",
-        "hours_unit" to "часов",
-        "heart_today" to "Пульс",
-        "bpm_unit" to "уд/мин",
-        "workouts" to "Тренировки",
-        "recent_sessions" to "последние сессии",
-        "steps_7d" to "Шаги за 7 дней",
-        "sleep_7d" to "Сон за 7 дней",
-        "heart_7d" to "Пульс за 7 дней",
-        "total_7d" to "суммарно",
-        "avg_7d" to "среднее значение",
-        "avg_bpm_7d" to "средний пульс",
-        "refresh_status" to "Обновить",
-        "connected" to "Подключено",
-        "not_connected" to "Не подключено",
-        "google_connection_body" to "Health Connect хранит данные на устройстве и даёт BitLut право читать и записывать поддерживаемые метрики.",
-        "huawei_connection_body" to "Huawei Health Kit нужен для чтения данных Huawei Health перед экспортом в Health Connect.",
-        "connect_huawei_button" to "Подключить Huawei Health",
-        "manual_sync" to "Ручная синхронизация",
-        "sync_now" to "Синхронизировать",
-        "last_sync_never" to "Последняя синхронизация: ещё не выполнялась",
-        "last_sync_template" to "Последняя синхронизация: %s",
-        "health_kit_status" to "Статус Health Kit",
-        "health_kit_ready" to "Готово к синхронизации",
-        "health_kit_waiting" to "Ожидает авторизации или одобрения",
-        "health_kit_detail" to "Если Huawei Health Kit ещё возвращает 50005, это означает ожидание серверного одобрения Huawei. Приложение не должно падать."
-    )
-    private val en = mapOf(
-        "summary_title" to "Summary",
-        "summary_subtitle" to "Key health metrics: steps, sleep, heart rate and workouts.",
-        "history_title" to "History",
-        "history_subtitle" to "Last 7 days: trends, charts and changes.",
-        "settings_title" to "Settings",
-        "settings_subtitle" to "Connect Google Health Connect and Huawei Health, then start sync.",
-        "connect_google_title" to "Connect Google Health",
-        "connect_google_summary_body" to "Allow Health Connect access to see your health summary.",
-        "connect_google_history_body" to "Allow Health Connect access to see your 7-day history.",
-        "connect_google_button" to "Connect Google Health",
-        "steps_unit" to "steps",
-        "no_data_short" to "—",
-        "today_metrics" to "Today",
-        "steps_today" to "Steps today",
-        "goal_template" to "goal %s",
-        "sleep_last_night" to "Sleep",
-        "hours_unit" to "hours",
-        "heart_today" to "Heart rate",
-        "bpm_unit" to "bpm",
-        "workouts" to "Workouts",
-        "recent_sessions" to "recent sessions",
-        "steps_7d" to "Steps over 7 days",
-        "sleep_7d" to "Sleep over 7 days",
-        "heart_7d" to "Heart rate over 7 days",
-        "total_7d" to "total",
-        "avg_7d" to "average",
-        "avg_bpm_7d" to "average bpm",
-        "refresh_status" to "Refresh",
-        "connected" to "Connected",
-        "not_connected" to "Not connected",
-        "google_connection_body" to "Health Connect stores data on this device and allows BitLut to read and write supported metrics.",
-        "huawei_connection_body" to "Huawei Health Kit is required to read Huawei Health data before export to Health Connect.",
-        "connect_huawei_button" to "Connect Huawei Health",
-        "manual_sync" to "Manual sync",
-        "sync_now" to "Sync now",
-        "last_sync_never" to "Last sync: never",
-        "last_sync_template" to "Last sync: %s",
-        "health_kit_status" to "Health Kit status",
-        "health_kit_ready" to "Ready to sync",
-        "health_kit_waiting" to "Waiting for authorization or approval",
-        "health_kit_detail" to "If Huawei Health Kit still returns 50005, server-side Huawei approval is still pending. The app should not crash."
-    )
-    fun t(key: String): String = if (Locale.getDefault().language == "ru") ru[key] ?: key else en[key] ?: key
-}
-
+private fun formatLastSync(ms: Long): String = if (ms <= 0L) stringResource(R.string.last_sync_never) else stringResource(R.string.last_sync_template).replace("%s", formatDateTime(ms))
 @Composable
 private fun ScreenHero(palette: BitPalette, title: String, subtitle: String, action: String?, onAction: () -> Unit) {
     SoftCard(palette, accent = palette.activity, hero = true) {
@@ -777,7 +696,7 @@ private fun LoadingCard(palette: BitPalette) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(color = palette.activity, strokeWidth = 3.dp)
             Spacer(Modifier.width(14.dp))
-            Text(BText.t("loading"), color = palette.secondaryText, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.loading), color = palette.secondaryText, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -877,113 +796,15 @@ private data class BitPalette(
 /*
  * UI sprint note:
  * Runtime copy must remain cleanly localized: Russian for ru devices, English fallback for all others.
- * New UI strings should be added to res/values and res/values-ru first. BText remains only as a
+ * New UI strings should be added to res/values and res/values-ru first.
  * compatibility adapter for the current Compose shell and should not grow with new product copy.
  */
-
-internal object BText {
-    private val ru = mapOf(
-        "tab_summary" to "Сводка",
-        "tab_history" to "История",
-        "tab_settings" to "Настройки",
-        "summary_title" to "Сводка здоровья",
-        "summary_subtitle" to "Шаги, сон и пульс из Android Health Connect. Данные Huawei Health синхронизируются через настройки.",
-        "history_title" to "История",
-        "history_subtitle" to "Динамика ключевых показателей за последние 7 дней.",
-        "settings_title" to "Настройки",
-        "settings_subtitle" to "Подключите Google Health Connect и Huawei Health, затем запустите синхронизацию.",
-        "refresh" to "Обновить",
-        "check" to "Проверить",
-        "steps" to "Шаги",
-        "sleep" to "Сон",
-        "heart" to "Пульс",
-        "today" to "сегодня",
-        "hours" to "часов",
-        "bpm" to "уд/мин",
-        "recent_workouts" to "Последние тренировки",
-        "no_workouts" to "Тренировок пока нет.",
-        "steps_7d" to "Шаги за 7 дней",
-        "sleep_7d" to "Сон за 7 дней",
-        "heart_7d" to "Пульс за 7 дней",
-        "connect_google_title" to "Подключите Google Health Connect",
-        "connect_google_body" to "BitLut нужны разрешения на чтение и запись, чтобы показывать данные и экспортировать импорт Huawei Health.",
-        "connect_google" to "Подключить Google Health",
-        "google_health_connect" to "Google Health Connect",
-        "huawei_health" to "Huawei Health",
-        "connected" to "Подключено",
-        "not_connected" to "Не подключено",
-        "google_settings_body" to "Разрешения Health Connect нужны для отображения сводки и записи импортированных данных.",
-        "huawei_settings_body" to "Авторизация Huawei Health Kit нужна для чтения данных Huawei Health перед экспортом в Health Connect.",
-        "connect_or_update" to "Подключить / обновить",
-        "sync_title" to "Синхронизация",
-        "sync_now" to "Синхронизировать",
-        "syncing" to "Синхронизация...",
-        "loading" to "Загружаем данные...",
-        "status_idle" to "Готово к проверке подключений.",
-        "status_syncing" to "Идёт синхронизация Huawei Health → Health Connect.",
-        "status_success" to "Синхронизация выполнена. Последнее обновление: ",
-        "status_error" to "Синхронизация не выполнена. Проверьте подключения и разрешения.",
-        "toast_hc_permissions" to "Выданы не все разрешения Health Connect.",
-        "toast_huawei_connected" to "Huawei Health подключён.",
-        "toast_huawei_pending" to "Huawei Health Kit пока не подтвердил доступ. Проверьте статус согласования.",
-        "toast_huawei_health_missing" to "Установите Huawei Health и войдите в аккаунт.",
-        "toast_huawei_start_failed" to "Не удалось открыть авторизацию Huawei Health."
-    )
-    private val en = mapOf(
-        "tab_summary" to "Summary",
-        "tab_history" to "History",
-        "tab_settings" to "Settings",
-        "summary_title" to "Health Summary",
-        "summary_subtitle" to "Steps, sleep and heart rate from Android Health Connect. Huawei Health sync is managed in Settings.",
-        "history_title" to "History",
-        "history_subtitle" to "Seven-day dynamics for key health metrics.",
-        "settings_title" to "Settings",
-        "settings_subtitle" to "Connect Google Health Connect and Huawei Health, then start sync.",
-        "refresh" to "Refresh",
-        "check" to "Check",
-        "steps" to "Steps",
-        "sleep" to "Sleep",
-        "heart" to "Heart",
-        "today" to "today",
-        "hours" to "hours",
-        "bpm" to "bpm",
-        "recent_workouts" to "Recent workouts",
-        "no_workouts" to "No workouts yet.",
-        "steps_7d" to "Steps over 7 days",
-        "sleep_7d" to "Sleep over 7 days",
-        "heart_7d" to "Heart rate over 7 days",
-        "connect_google_title" to "Connect Google Health Connect",
-        "connect_google_body" to "BitLut needs read and write permissions to show data and export imported Huawei Health data.",
-        "connect_google" to "Connect Google Health",
-        "google_health_connect" to "Google Health Connect",
-        "huawei_health" to "Huawei Health",
-        "connected" to "Connected",
-        "not_connected" to "Not connected",
-        "google_settings_body" to "Health Connect permissions are required to display the summary and write imported data.",
-        "huawei_settings_body" to "Huawei Health Kit authorization is required to read Huawei Health data before export to Health Connect.",
-        "connect_or_update" to "Connect / update",
-        "sync_title" to "Sync",
-        "sync_now" to "Sync now",
-        "syncing" to "Syncing...",
-        "loading" to "Loading data...",
-        "status_idle" to "Ready to check connections.",
-        "status_syncing" to "Syncing Huawei Health → Health Connect.",
-        "status_success" to "Sync completed. Last update: ",
-        "status_error" to "Sync failed. Check connections and permissions.",
-        "toast_hc_permissions" to "Not all Health Connect permissions were granted.",
-        "toast_huawei_connected" to "Huawei Health connected.",
-        "toast_huawei_pending" to "Huawei Health Kit has not confirmed access yet. Check approval status.",
-        "toast_huawei_health_missing" to "Install Huawei Health and sign in.",
-        "toast_huawei_start_failed" to "Could not open Huawei Health authorization."
-    )
-    fun t(key: String): String = if (Locale.getDefault().language == "ru") ru[key] ?: key else en[key] ?: key
-}
-
+@Composable
 private fun syncStatusText(state: SyncUiState): String = when (state.syncStatus) {
-    "sync_status_syncing" -> BText.t("status_syncing")
-    "sync_status_success" -> BText.t("status_success") + state.lastSyncTime
-    "sync_status_error" -> BText.t("status_error")
-    else -> BText.t("status_idle")
+    "sync_status_syncing" -> stringResource(R.string.status_syncing)
+    "sync_status_success" -> stringResource(R.string.status_success) + state.lastSyncTime
+    "sync_status_error" -> stringResource(R.string.status_error)
+    else -> stringResource(R.string.status_idle)
 }
 
 private fun formatNumber(value: Long): String = String.format(Locale.getDefault(), "%,d", value).replace(',', ' ')

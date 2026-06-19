@@ -70,7 +70,6 @@ import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 import com.openhealth.sync.util.AppLogger
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.Canvas
@@ -101,7 +100,7 @@ class MainActivity : ComponentActivity() {
         syncViewModel.refreshStatuses()
         dashboardViewModel.refresh()
         if (!granted.containsAll(syncViewModel.googleManager.permissions)) {
-            Toast.makeText(this, BText.t("toast_hc_permissions"), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.toast_hc_permissions), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -113,7 +112,7 @@ class MainActivity : ComponentActivity() {
         syncViewModel.refreshStatuses()
         Toast.makeText(
             this,
-            if (success) BText.t("toast_huawei_connected") else BText.t("toast_huawei_pending"),
+            if (success) getString(R.string.toast_huawei_connected) else getString(R.string.toast_huawei_pending),
             Toast.LENGTH_LONG
         ).show()
     }
@@ -145,13 +144,13 @@ class MainActivity : ComponentActivity() {
                 return
             }
             if (!HmsCoreHelper.isHuaweiHealthInstalled(this)) {
-                Toast.makeText(this, BText.t("toast_huawei_health_missing"), Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.toast_huawei_health_missing), Toast.LENGTH_LONG).show()
                 return
             }
             huaweiAuthorizationLauncher.launch(syncViewModel.huaweiHealthManager.getAuthorizationIntent())
         } catch (e: Exception) {
             AppLogger.e("MainActivity", "Huawei authorization start failed: ${e.message}", e)
-            Toast.makeText(this, BText.t("toast_huawei_start_failed"), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.toast_huawei_start_failed), Toast.LENGTH_LONG).show()
         }
     }
 
