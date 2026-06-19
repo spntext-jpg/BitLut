@@ -36,3 +36,7 @@ agconnect-services.json
 *.aab
 compile_errors.log
 *.sh
+*.bak
+bitlut_*_patch.py
+.kotlin/errors/
+*.orig

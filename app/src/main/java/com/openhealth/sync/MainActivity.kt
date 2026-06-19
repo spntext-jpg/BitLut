@@ -599,6 +599,14 @@ private data class BitPalette(
     }
 }
 
+
+/*
+ * UI sprint note:
+ * Runtime copy must remain cleanly localized: Russian for ru devices, English fallback for all others.
+ * New UI strings should be added to res/values and res/values-ru first. BText remains only as a
+ * compatibility adapter for the current Compose shell and should not grow with new product copy.
+ */
+
 private object BText {
     private val ru = mapOf(
         "tab_summary" to "Сводка",
