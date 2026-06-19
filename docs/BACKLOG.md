@@ -62,3 +62,5 @@ After Health Kit approval:
 - [x] Add Google/Huawei/manual sync cockpit to Settings.
 - [ ] Replace remaining runtime text helpers with canonical Android string resources in a later low-risk localization refactor.
 - [ ] Add screenshot tests after Health Kit approval is complete.
+
+- [x] Sprint: expand Health Connect permissions, localize workout names, and simplify Summary hierarchy.

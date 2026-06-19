@@ -117,4 +117,8 @@
     <string name="settings_title_final">Настройки</string>
     <string name="sync_now_final">Синхронизировать</string>
     <string name="health_kit_status_final">Статус Health Kit</string>
+    <string name="refresh_short">Обновить</string>
+    <string name="summary_steps_today">Шаги сегодня</string>
+    <string name="summary_heart_row">Пульс</string>
+    <string name="summary_sleep_row">Сон</string>
 </resources>

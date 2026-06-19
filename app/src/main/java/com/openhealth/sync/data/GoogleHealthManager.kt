@@ -24,6 +24,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import com.openhealth.sync.config.HealthPermissionPolicy
+import java.util.Locale
 
 private const val TAG = "GoogleHealthManager"
 
@@ -52,7 +53,7 @@ data class ActivitySessionData(
 )
 
 class GoogleHealthManager(private val context: Context) {
-    fun requiredPermissions(): Set<String> = HealthPermissionPolicy.runtimePermissions
+    fun requiredPermissions(): Set<String> = HealthPermissionPolicy.syncPermissions
 
 
     // Visible sprint mode: Google Health dashboard only.
@@ -397,17 +398,80 @@ class GoogleHealthManager(private val context: Context) {
         }
     }
 
-    private fun exerciseTypeName(type: Int): String = when (type) {
-        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING        -> "Running"
-        ExerciseSessionRecord.EXERCISE_TYPE_WALKING        -> "Walking"
-        ExerciseSessionRecord.EXERCISE_TYPE_BIKING         -> "Cycling"
-        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
-        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL  -> "Swimming"
-        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "Strength"
-        ExerciseSessionRecord.EXERCISE_TYPE_YOGA           -> "Yoga"
-        ExerciseSessionRecord.EXERCISE_TYPE_HIKING         -> "Hiking"
-        else -> "Workout"
+    private fun exerciseTypeName(type: Int): String {
+        val raw = when (type) {
+            ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "walking"
+            ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> "running"
+            ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> "cycling"
+            ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> "open water swimming"
+            ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> "pool swimming"
+            ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "strength training"
+            ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> "yoga"
+            ExerciseSessionRecord.EXERCISE_TYPE_TENNIS -> "tennis"
+            ExerciseSessionRecord.EXERCISE_TYPE_BASKETBALL -> "basketball"
+            ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AMERICAN -> "american football"
+            ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AUSTRALIAN -> "australian football"
+            ExerciseSessionRecord.EXERCISE_TYPE_SOCCER -> "football"
+            ExerciseSessionRecord.EXERCISE_TYPE_GOLF -> "golf"
+            ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> "hiking"
+            ExerciseSessionRecord.EXERCISE_TYPE_ROWING -> "rowing"
+            ExerciseSessionRecord.EXERCISE_TYPE_SKATING -> "skating"
+            ExerciseSessionRecord.EXERCISE_TYPE_SKIING -> "skiing"
+            ExerciseSessionRecord.EXERCISE_TYPE_SNOWBOARDING -> "snowboarding"
+            ExerciseSessionRecord.EXERCISE_TYPE_VOLLEYBALL -> "volleyball"
+            ExerciseSessionRecord.EXERCISE_TYPE_BADMINTON -> "badminton"
+            ExerciseSessionRecord.EXERCISE_TYPE_BASEBALL -> "baseball"
+            ExerciseSessionRecord.EXERCISE_TYPE_BOXING -> "boxing"
+            ExerciseSessionRecord.EXERCISE_TYPE_DANCING -> "dancing"
+            ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL -> "elliptical"
+            ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> "hiit"
+            ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> "pilates"
+            ExerciseSessionRecord.EXERCISE_TYPE_TABLE_TENNIS -> "table tennis"
+            ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> "weightlifting"
+            ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT -> "workout"
+            else -> "workout"
+        }
+        return localizeWorkoutName(raw)
     }
+
+    private fun localizeWorkoutName(name: String): String {
+        val normalized = name.trim().lowercase(Locale.ROOT)
+        val ru = Locale.getDefault().language == "ru"
+        if (!ru) return normalized.replaceFirstChar { it.titlecase(Locale.ROOT) }
+        return when (normalized) {
+            "walking", "walk" -> "Ходьба"
+            "running", "run" -> "Бег"
+            "cycling", "biking", "bike" -> "Велосипед"
+            "open water swimming" -> "Плавание в открытой воде"
+            "pool swimming", "swimming", "swim" -> "Плавание"
+            "strength training" -> "Силовая тренировка"
+            "weightlifting" -> "Тяжёлая атлетика"
+            "yoga" -> "Йога"
+            "tennis" -> "Теннис"
+            "table tennis" -> "Настольный теннис"
+            "basketball" -> "Баскетбол"
+            "football", "soccer" -> "Футбол"
+            "american football" -> "Американский футбол"
+            "australian football" -> "Австралийский футбол"
+            "golf" -> "Гольф"
+            "hiking" -> "Поход"
+            "rowing" -> "Гребля"
+            "skating" -> "Катание на коньках"
+            "skiing" -> "Лыжи"
+            "snowboarding" -> "Сноуборд"
+            "volleyball" -> "Волейбол"
+            "badminton" -> "Бадминтон"
+            "baseball" -> "Бейсбол"
+            "boxing" -> "Бокс"
+            "dancing" -> "Танцы"
+            "elliptical" -> "Эллиптический тренажёр"
+            "hiit" -> "Интервальная тренировка"
+            "pilates" -> "Пилатес"
+            "workout", "other workout", "huawei activity", "activity" -> "Тренировка"
+            else -> name.replaceFirstChar { it.titlecase(Locale.getDefault()) }
+        }
+    }
+
 
 
 

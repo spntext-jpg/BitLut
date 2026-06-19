@@ -117,4 +117,8 @@
     <string name="settings_title_final">Settings</string>
     <string name="sync_now_final">Sync now</string>
     <string name="health_kit_status_final">Health Kit status</string>
+    <string name="refresh_short">Refresh</string>
+    <string name="summary_steps_today">Steps today</string>
+    <string name="summary_heart_row">Heart rate</string>
+    <string name="summary_sleep_row">Sleep</string>
 </resources>

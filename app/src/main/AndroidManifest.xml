@@ -49,7 +49,10 @@
         </intent>
     </queries>
 
-    <application
+        <uses-permission android:name="android.permission.health.READ_ACTIVITY_INTENSITY" />
+    <uses-permission android:name="android.permission.health.WRITE_ACTIVITY_INTENSITY" />
+    <uses-permission android:name="android.permission.health.WRITE_HEART_RATE" />
+<application
         android:name=".SyncApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

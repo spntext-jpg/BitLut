@@ -295,7 +295,7 @@ private fun SummaryScreen(
             SectionTitle(palette, FinalUiText.t("today_metrics"))
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
                 FinalMetricTile(
                     modifier = Modifier.weight(1f),
                     icon = "👣",
@@ -315,7 +315,7 @@ private fun SummaryScreen(
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
                 FinalMetricTile(
                     modifier = Modifier.weight(1f),
                     icon = "♥",
@@ -337,7 +337,12 @@ private fun SummaryScreen(
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
+private fun SummaryRefreshButton(accent: Color, onRefresh: () -> Unit) {
+    PrimaryButton(text = FinalUiText.t("refresh_short"), accent = accent, onClick = onRefresh)
+}
+
+@Composable
 private fun HistoryScreen(
     palette: BitPalette,
     state: DashboardUiState,
@@ -402,7 +407,7 @@ private fun HistoryScreen(
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun SettingsScreen(
     palette: BitPalette,
     state: SyncUiState,
@@ -529,7 +534,7 @@ private fun FinalHealthHero(
 
 @Composable
 private fun FinalRingRow(stepProgress: Float, sleepProgress: Float, heartProgress: Float, steps: String, sleep: String, heart: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
         FinalActivityRing(Modifier.weight(1f), "👣", FinalUiText.t("steps_today"), steps, stepProgress, HealthAccent.activity)
         FinalActivityRing(Modifier.weight(1f), "😴", FinalUiText.t("sleep_last_night"), sleep, sleepProgress, HealthAccent.sleep)
         FinalActivityRing(Modifier.weight(1f), "♥", FinalUiText.t("heart_today"), heart, heartProgress, HealthAccent.heart)
@@ -675,7 +680,7 @@ private fun FinalHealthKitStatusCard(title: String, status: String, detail: Stri
 
 private fun safeProgress(value: Double, target: Double): Float = if (target <= 0.0) 0f else (value / target).toFloat().coerceIn(0f, 1f)
 private fun Double?.orZero(): Double = this ?: 0.0
-@androidx.compose.runtime.Composable
+@Composable
 private fun formatLastSync(ms: Long): String = if (ms <= 0L) FinalUiText.t("last_sync_never") else FinalUiText.t("last_sync_template").replace("%s", formatDateTime(ms))
 
 private object FinalUiText {
@@ -768,7 +773,7 @@ private object FinalUiText {
     fun t(key: String): String = if (Locale.getDefault().language == "ru") ru[key] ?: key else en[key] ?: key
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun ScreenHero(palette: BitPalette, title: String, subtitle: String, action: String?, onAction: () -> Unit) {
     SoftCard(palette, accent = palette.activity, hero = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {
