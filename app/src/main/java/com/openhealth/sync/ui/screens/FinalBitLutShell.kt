@@ -90,6 +90,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import com.openhealth.sync.ui.ImportScreen
+import com.openhealth.sync.ui.ImportViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
@@ -105,7 +107,8 @@ fun FinalBitLutShell(
     onRequestGoogle: () -> Unit,
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
-    onImportArchive: () -> Unit = {}) {
+    onImportArchive: () -> Unit = {},
+    importViewModel: ImportViewModel) {
     var selected by rememberSaveable { mutableStateOf(MainTab.Today) }
     var showArchiveImport by rememberSaveable { mutableStateOf(false) }
     val dashboardState = dashboardStateProvider()
@@ -151,11 +154,17 @@ fun FinalBitLutShell(
                 .background(palette.backgroundBrush)
                 .padding(padding)
         ) {
-            when (selected) {
+            
+            if (showArchiveImport) {
+                ImportScreen(
+                    viewModel = importViewModel,
+                    onBack = { showArchiveImport = false }
+                )
+            } else when (selected) {
                 MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, onRequestGoogle)
                 MainTab.SevenDays -> HistoryScreen(palette, dashboardState, onRequestGoogle)
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, onRequestGoogle, onRequestHuawei, onSyncNow,
-                    onImportArchive = onImportArchive)
+                    onImportArchive = { showArchiveImport = true })
             }
         }
     }

@@ -78,11 +78,25 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
+import com.openhealth.sync.ui.ImportViewModel
+import androidx.lifecycle.ViewModelProvider
 
 private const val UNIQUE_SYNC_NOW = "bitlut_sync_now"
 private const val UNIQUE_PERIODIC_SYNC = "bitlut_periodic_sync"
 
 class MainActivity : ComponentActivity() {
+
+    private val importViewModel: ImportViewModel by lazy {
+        ViewModelProvider(
+            this,
+            ImportViewModel.provideFactory(
+                (application as SyncApplication).container.googleHealthManager,
+                this
+            )
+        )[ImportViewModel::class.java]
+    }
+
+
 
     private val archiveImportLauncher =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
@@ -139,7 +153,7 @@ class MainActivity : ComponentActivity() {
         setupPeriodicSync()
         setContent {
             BitLutExpressiveTheme {
-                FinalBitLutShell(
+FinalBitLutShell(
                     dashboardStateProvider = { dashboardViewModel.state.collectAsState().value },
                     syncStateProvider = { syncViewModel.uiState.collectAsState().value },
                     onRefresh = {
@@ -153,7 +167,9 @@ class MainActivity : ComponentActivity() {
                 onImportArchive = {
                     openHuaweiArchiveImport()
                 }
-            )
+            ,
+                    importViewModel = importViewModel
+                )
             }
         }
     }
