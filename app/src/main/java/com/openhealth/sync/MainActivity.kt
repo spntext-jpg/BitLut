@@ -83,6 +83,23 @@ private const val UNIQUE_SYNC_NOW = "bitlut_sync_now"
 private const val UNIQUE_PERIODIC_SYNC = "bitlut_periodic_sync"
 
 class MainActivity : ComponentActivity() {
+
+    private val archiveImportLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == android.app.Activity.RESULT_OK) {
+                val uri = result.data?.data
+                if (uri != null) {
+                    Toast.makeText(this, getString(R.string.import_archive_selected), Toast.LENGTH_LONG).show()
+                    AppLogger.i("MainActivity", "Huawei archive selected: $uri")
+                    // Existing archive parser/import flow can consume this URI in the next integration step.
+                    // This restores the user-facing archive import entry point without touching direct Health Kit sync.
+                } else {
+                    Toast.makeText(this, getString(R.string.status_error), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+
     private val syncViewModel: SyncViewModel by viewModels {
         val app = application as SyncApplication
         SyncViewModel.provideFactory(app.container.googleHealthManager, app.container.huaweiHealthManager, this)
@@ -132,7 +149,11 @@ class MainActivity : ComponentActivity() {
                     onRequestGoogle = { googlePermissionLauncher.launch(syncViewModel.googleManager.permissions) },
                     onRequestHuawei = { startHuaweiAuthorization() },
                     onSyncNow = { triggerImmediateSync() }
-                )
+                ,
+                onImportArchive = {
+                    openHuaweiArchiveImport()
+                }
+            )
             }
         }
     }
@@ -183,4 +204,27 @@ class MainActivity : ComponentActivity() {
             request
         )
     }
+
+    private fun openHuaweiArchiveImport() {
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+                putExtra(
+                    android.content.Intent.EXTRA_MIME_TYPES,
+                    arrayOf(
+                        "application/zip",
+                        "application/json",
+                        "text/*",
+                        "application/octet-stream"
+                    )
+                )
+            }
+            archiveImportLauncher.launch(intent)
+        } catch (t: Throwable) {
+            Toast.makeText(this, getString(R.string.status_error), Toast.LENGTH_LONG).show()
+        }
+    }
+
+
 }

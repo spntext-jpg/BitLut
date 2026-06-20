@@ -81,11 +81,20 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
+import com.openhealth.sync.ui.ImportScreen
 
-private enum class MainTab(val key: String, val icon: String) {
-    Summary("tab_today", "◉"),
-    History("tab_history", "⌁"),
-    Settings("tab_settings", "⚙")
+private enum class MainTab(val key: String, val icon: ImageVector) {
+    Today("tab_today", Icons.Rounded.Today),
+    SevenDays("tab_7days", Icons.Rounded.TrendingUp),
+    Settings("tab_settings", Icons.Rounded.Settings)
 }
 
 @Composable
@@ -95,9 +104,10 @@ fun FinalBitLutShell(
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit,
     onRequestHuawei: () -> Unit,
-    onSyncNow: () -> Unit
-) {
-    var selected by rememberSaveable { mutableStateOf(MainTab.Summary) }
+    onSyncNow: () -> Unit,
+    onImportArchive: () -> Unit = {}) {
+    var selected by rememberSaveable { mutableStateOf(MainTab.Today) }
+    var showArchiveImport by rememberSaveable { mutableStateOf(false) }
     val dashboardState = dashboardStateProvider()
     val syncState = syncStateProvider()
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -111,14 +121,22 @@ fun FinalBitLutShell(
                     NavigationBarItem(
                         selected = selected == tab,
                         onClick = { selected = tab },
-                        icon = { Text(tab.icon, fontSize = 20.sp) },
+                        icon = {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        },
                         label = {
                             Text(
                                 text = when (tab) {
-                                    MainTab.Summary -> stringResource(R.string.tab_summary)
-                                    MainTab.History -> stringResource(R.string.tab_history)
+                                    MainTab.Today -> stringResource(R.string.tab_today)
+                                    MainTab.SevenDays -> stringResource(R.string.tab_7days)
                                     MainTab.Settings -> stringResource(R.string.tab_settings)
                                 },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -134,9 +152,10 @@ fun FinalBitLutShell(
                 .padding(padding)
         ) {
             when (selected) {
-                MainTab.Summary -> SummaryScreen(palette, dashboardState, onRefresh, onRequestGoogle)
-                MainTab.History -> HistoryScreen(palette, dashboardState, onRequestGoogle)
-                MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, onRequestGoogle, onRequestHuawei, onSyncNow)
+                MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, onRequestGoogle)
+                MainTab.SevenDays -> HistoryScreen(palette, dashboardState, onRequestGoogle)
+                MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, onRequestGoogle, onRequestHuawei, onSyncNow,
+                    onImportArchive = onImportArchive)
             }
         }
     }
@@ -290,66 +309,70 @@ private fun HistoryScreen(
 @Composable
 private fun SettingsScreen(
     palette: BitPalette,
-    state: SyncUiState,
+    syncState: SyncUiState,
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit,
     onRequestHuawei: () -> Unit,
-    onSyncNow: () -> Unit
+    onSyncNow: () -> Unit,
+    onImportArchive: () -> Unit
 ) {
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            ScreenHero(
+            MinimalHeader(
                 palette = palette,
-                title = stringResource(R.string.settings_title),
-                subtitle = stringResource(R.string.settings_subtitle),
-                action = stringResource(R.string.refresh_status),
-                onAction = onRefresh
+                title = stringResource(R.string.tab_settings)
             )
         }
+
         item {
-            FinalConnectionCockpit(
-                title = "Google Health Connect",
-                status = if (state.hasGooglePermissions) stringResource(R.string.connected) else stringResource(R.string.not_connected),
+            SettingsConnectionCard(
+                palette = palette,
+                title = stringResource(R.string.google_health_connect),
                 body = stringResource(R.string.google_connection_body),
-                button = stringResource(R.string.connect_google_button),
+                status = stringResource(R.string.refresh_status),
                 accent = HealthAccent.mind,
-                positive = state.hasGooglePermissions,
-                onClick = onRequestGoogle
+                primaryAction = stringResource(R.string.connect_google_button),
+                onPrimaryAction = onRequestGoogle,
+                secondaryAction = stringResource(R.string.refresh_status),
+                onSecondaryAction = onRefresh
             )
         }
+
         item {
-            FinalConnectionCockpit(
-                title = "Huawei Health",
-                status = if (state.isHuaweiAuthorized) stringResource(R.string.connected) else stringResource(R.string.not_connected),
+            SettingsConnectionCard(
+                palette = palette,
+                title = stringResource(R.string.huawei_health_title),
                 body = stringResource(R.string.huawei_connection_body),
-                button = stringResource(R.string.connect_huawei_button),
+                status = stringResource(R.string.refresh_status),
                 accent = HealthAccent.activity,
-                positive = state.isHuaweiAuthorized,
-                onClick = onRequestHuawei
+                primaryAction = stringResource(R.string.connect_huawei_button),
+                onPrimaryAction = onRequestHuawei,
+                secondaryAction = stringResource(R.string.refresh_status),
+                onSecondaryAction = onRefresh
             )
         }
+
         item {
-            FinalSyncCockpit(
-                title = stringResource(R.string.manual_sync),
-                status = syncStatusText(state),
-                lastSync = formatLastSync(0L),
-                enabled = state.hasGooglePermissions && state.isHuaweiAuthorized,
-                onSyncNow = onSyncNow
-            )
-        }
-        item {
-            FinalHealthKitStatusCard(
-                title = stringResource(R.string.health_kit_status),
-                status = if (state.isHuaweiAuthorized) stringResource(R.string.health_kit_ready) else stringResource(R.string.health_kit_waiting),
-                detail = stringResource(R.string.health_kit_detail)
+            SettingsConnectionCard(
+                palette = palette,
+                title = stringResource(R.string.manual_sync_title),
+                body = stringResource(R.string.manual_sync_body),
+                status = stringResource(R.string.manual_sync_title),
+                accent = HealthAccent.sleep,
+                primaryAction = stringResource(R.string.sync_now),
+                onPrimaryAction = onSyncNow,
+                secondaryAction = stringResource(R.string.import_archive_title),
+                onSecondaryAction = onImportArchive
             )
         }
     }
 }
+
+
 
 private object HealthAccent {
     val activity = Color(0xFFFF6B5A)
@@ -825,6 +848,93 @@ private fun List<Double>.safeAverage(): Double =
 
 private fun formatOneDecimal(value: Double): String =
     String.format(Locale.getDefault(), "%.1f", value)
+
+
+
+@Composable
+private fun SettingsConnectionCard(
+    palette: BitPalette,
+    title: String,
+    body: String,
+    status: String,
+    accent: Color,
+    primaryAction: String,
+    onPrimaryAction: () -> Unit,
+    secondaryAction: String? = null,
+    onSecondaryAction: (() -> Unit)? = null
+) {
+    SoftCard(palette = palette, accent = accent, hero = false) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(21.dp))
+                        .background(accent.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("●", color = accent, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        color = palette.text,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = status,
+                        color = accent,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Text(
+                text = body,
+                color = palette.secondaryText,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    PrimaryButton(
+                        text = primaryAction,
+                        accent = accent,
+                        onClick = onPrimaryAction
+                    )
+                }
+                if (secondaryAction != null && onSecondaryAction != null) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        PrimaryButton(
+                            text = secondaryAction,
+                            accent = accent,
+                            onClick = onSecondaryAction
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 
 private data class BitPalette(

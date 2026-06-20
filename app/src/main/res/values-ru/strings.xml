@@ -168,4 +168,10 @@
     <string name="tab_today">Сегодня</string>
     <string name="summary_short_title">Сводка</string>
     <string name="history_short_title">7 дней</string>
+    <string name="tab_7days">7 дней</string>
+    <string name="google_health_connect">Google Health Connect</string>
+    <string name="huawei_health_title">Huawei Health</string>
+    <string name="manual_sync_title">Ручная синхронизация</string>
+    <string name="import_archive_title">Импорт архива</string>
+    <string name="import_archive_selected">Архив Huawei Health выбран</string>
 </resources>
