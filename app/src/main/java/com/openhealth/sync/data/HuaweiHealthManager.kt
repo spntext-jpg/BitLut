@@ -49,6 +49,15 @@ private data class HuaweiMetricSample(
 )
 
 class HuaweiHealthManager(private val context: Context) {
+private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
+        val normalized = descriptor.lowercase()
+        return normalized.contains("activity") ||
+            normalized.contains("exercise") ||
+            normalized.contains("session") ||
+            normalized.contains("sport") ||
+            normalized.contains("workout")
+    }
+
 
     private val prefs: SharedPreferences = context.getSharedPreferences(
         HuaweiConfig.PREFS_NAME,
@@ -390,12 +399,12 @@ class HuaweiHealthManager(private val context: Context) {
             }
     }
 
-    private suspend fun readPoints(
+    private suspend fun readPointsRaw(
         type: DataType,
         startTimeMs: Long,
         endTimeMs: Long,
         label: String
-    ): List<SamplePoint> {
+    ): List<SamplePoint>{
         val options = ReadOptions.Builder()
             .read(type)
             .setTimeRange(startTimeMs, endTimeMs, TimeUnit.MILLISECONDS)
@@ -414,6 +423,50 @@ class HuaweiHealthManager(private val context: Context) {
             emptyList()
         }
     }
+
+private suspend fun readPoints(
+        type: DataType,
+        startTimeMs: Long,
+        endTimeMs: Long,
+        label: String
+    ): List<SamplePoint> {
+    val descriptor = listOf(type.toString(), startTimeMs.toString(), endTimeMs.toString(), label.toString()).joinToString("|")
+    if (shouldBypassChunkingForHuaweiRead(descriptor) || endTimeMs <= startTimeMs) {
+        return readPointsRaw(type, startTimeMs, endTimeMs, label)
+    }
+
+    val windowMs = endTimeMs - startTimeMs
+    if (windowMs <= HUAWEI_READ_CHUNK_MS) {
+        return readPointsRaw(type, startTimeMs, endTimeMs, label)
+    }
+
+    val merged = mutableListOf<Any?>()
+    var chunkStart = startTimeMs
+    var chunkIndex = 0
+
+    while (chunkStart < endTimeMs) {
+        val chunkEnd = minOf(chunkStart + HUAWEI_READ_CHUNK_MS, endTimeMs)
+        AppLogger.d(
+            "HuaweiHealthManager",
+            "readPoints chunk #$chunkIndex: $chunkStart..$chunkEnd"
+        )
+
+        // SecurityException / 50005 must propagate to SyncWorker.
+        merged.addAll(readPointsRaw(type, chunkStart, chunkEnd, label))
+
+        chunkStart = chunkEnd
+        chunkIndex += 1
+    }
+
+    val deduped = merged.distinctBy { it.toString() }
+    AppLogger.i(
+        "HuaweiHealthManager",
+        "readPoints chunked result: chunks=$chunkIndex raw=${merged.size} deduped=${deduped.size}"
+    )
+
+    @Suppress("UNCHECKED_CAST")
+    return deduped as List<SamplePoint>
+}
 
     private fun SamplePoint.firstNumericValue(fields: List<Field>): Double? {
         for (field in fields) {
@@ -475,6 +528,19 @@ class HuaweiHealthManager(private val context: Context) {
         }
 
     private companion object {
+
+        private const val HUAWEI_READ_CHUNK_MS: Long = 24L * 60L * 60L * 1000L
+
+        private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
+            val normalized = descriptor.lowercase()
+            return normalized.contains("activity") ||
+                normalized.contains("exercise") ||
+                normalized.contains("session") ||
+                normalized.contains("sport") ||
+                normalized.contains("workout")
+        }
+
+
         const val KEY_HUAWEI_PENDING_APPROVAL = "huawei_pending_approval"
         const val KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED = "huawei_appgallery_verification_required"
 
