@@ -25,6 +25,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import com.openhealth.sync.config.HealthPermissionPolicy
 import java.util.Locale
+import androidx.health.connect.client.records.metadata.Metadata
 
 private const val TAG = "GoogleHealthManager"
 
@@ -53,6 +54,29 @@ data class ActivitySessionData(
 )
 
 class GoogleHealthManager(private val context: Context) {
+
+    private fun generateRecordId(
+        type: String,
+        startTimeMs: Long,
+        endTimeMs: Long,
+        discriminator: String = ""
+    ): String {
+        val suffix = discriminator
+            .replace(Regex("[^A-Za-z0-9_-]"), "_")
+            .take(64)
+            .let { if (it.isBlank()) "" else "_$it" }
+        return "bitlut_${type}_${startTimeMs}_${endTimeMs}${suffix}"
+    }
+
+    private fun bitlutMetadata(
+        type: String,
+        startTimeMs: Long,
+        endTimeMs: Long,
+        discriminator: String = ""
+    ): Metadata = Metadata(
+        clientRecordId = generateRecordId(type, startTimeMs, endTimeMs, discriminator)
+    )
+
     fun requiredPermissions(): Set<String> = HealthPermissionPolicy.syncPermissions
 
 
@@ -154,20 +178,15 @@ class GoogleHealthManager(private val context: Context) {
     }
 
     suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): Boolean {
-        val stepsOk = writeStepsBatch(snapshot.steps)
-        val distanceOk = writeDistanceBatch(snapshot.distances)
-        val floorsOk = writeFloorsBatch(snapshot.floors)
-        val elevationOk = writeElevationBatch(snapshot.elevations)
-        val caloriesOk = writeActiveCaloriesBatch(snapshot.activeCalories)
-        val sessionsOk = writeActivitySessionsBatch(snapshot.activities)
-
-        AppLogger.i(
-            TAG,
-            "Write summary: steps=$stepsOk distance=$distanceOk floors=$floorsOk elevation=$elevationOk calories=$caloriesOk sessions=$sessionsOk"
-        )
-
-        return stepsOk && distanceOk && floorsOk && elevationOk && caloriesOk && sessionsOk
-    }
+    var ok = true
+    ok = writeStepsBatch(snapshot.steps) && ok
+    ok = writeDistanceBatch(snapshot.distances) && ok
+    ok = writeFloorsBatch(snapshot.floors) && ok
+    ok = writeElevationBatch(snapshot.elevations) && ok
+    ok = writeActiveCaloriesBatch(snapshot.activeCalories) && ok
+    ok = writeActivitySessionsBatch(snapshot.activities) && ok
+    return ok
+}
 
     suspend fun writeStepsBatch(records: List<StepData>): Boolean {
         val valid = records
@@ -180,8 +199,9 @@ class GoogleHealthManager(private val context: Context) {
                     startTime = start,
                     endTime = end,
                     startZoneOffset = offset(start),
-                    endZoneOffset = offset(end)
-                )
+                    endZoneOffset = offset(end),
+            metadata = bitlutMetadata("steps", start.toEpochMilli(), end.toEpochMilli())
+        )
             }
 
         return insertRecords("steps", valid)
@@ -198,8 +218,9 @@ class GoogleHealthManager(private val context: Context) {
                     startTime = start,
                     endTime = end,
                     startZoneOffset = offset(start),
-                    endZoneOffset = offset(end)
-                )
+                    endZoneOffset = offset(end),
+            metadata = bitlutMetadata("distance", start.toEpochMilli(), end.toEpochMilli())
+        )
             }
 
         return insertRecords("distance", valid)
@@ -216,8 +237,9 @@ class GoogleHealthManager(private val context: Context) {
                     startTime = start,
                     endTime = end,
                     startZoneOffset = offset(start),
-                    endZoneOffset = offset(end)
-                )
+                    endZoneOffset = offset(end),
+            metadata = bitlutMetadata("floors", start.toEpochMilli(), end.toEpochMilli())
+        )
             }
 
         return insertRecords("floors", valid)
@@ -234,8 +256,9 @@ class GoogleHealthManager(private val context: Context) {
                     startTime = start,
                     endTime = end,
                     startZoneOffset = offset(start),
-                    endZoneOffset = offset(end)
-                )
+                    endZoneOffset = offset(end),
+            metadata = bitlutMetadata("elevation", start.toEpochMilli(), end.toEpochMilli())
+        )
             }
 
         return insertRecords("elevation", valid)
@@ -252,8 +275,9 @@ class GoogleHealthManager(private val context: Context) {
                     startTime = start,
                     endTime = end,
                     startZoneOffset = offset(start),
-                    endZoneOffset = offset(end)
-                )
+                    endZoneOffset = offset(end),
+            metadata = bitlutMetadata("active_calories", start.toEpochMilli(), end.toEpochMilli())
+        )
             }
 
         return insertRecords("activeCalories", valid)
@@ -271,8 +295,9 @@ class GoogleHealthManager(private val context: Context) {
                     startZoneOffset = offset(start),
                     endZoneOffset = offset(end),
                     exerciseType = it.exerciseType,
-                    title = it.title
-                )
+                    title = it.title,
+            metadata = bitlutMetadata("exercise", start.toEpochMilli(), end.toEpochMilli())
+        )
             }
 
         return insertRecords("activitySessions", valid)
