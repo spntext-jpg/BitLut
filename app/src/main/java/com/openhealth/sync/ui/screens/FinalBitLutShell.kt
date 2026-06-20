@@ -80,9 +80,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.layout.heightIn
 
 private enum class MainTab(val key: String, val icon: String) {
-    Summary("tab_summary", "◌"),
+    Summary("tab_today", "◉"),
     History("tab_history", "⌁"),
     Settings("tab_settings", "⚙")
 }
@@ -148,98 +149,71 @@ private fun SummaryScreen(
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit
 ) {
-    if (!state.hasPermissions) {
-        EmptyPermissionCard(
-            palette = palette,
-            title = stringResource(R.string.connect_google_title),
-            body = stringResource(R.string.connect_google_summary_body),
-            button = stringResource(R.string.connect_google_button),
-            onClick = onRequestGoogle
-        )
-        return
-    }
-
-    val goal = 10_000L
-    val steps = state.stepsToday
-    val sleep = 0.0 ?: 0.0
-    val heart = null ?: 0L
-    val stepProgress = safeProgress(steps.toDouble(), goal.toDouble())
-    val sleepProgress = safeProgress(sleep, 8.0)
-    val heartProgress = if (heart > 0) safeProgress(heart.toDouble(), 120.0) else 0f
-
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            FinalHealthHero(
-                title = stringResource(R.string.summary_title),
-                subtitle = stringResource(R.string.summary_subtitle),
-                value = formatNumber(steps),
-                unit = stringResource(R.string.steps_unit),
-                progress = stepProgress,
-                accent = HealthAccent.activity,
-                secondary = HealthAccent.sleep,
-                tertiary = HealthAccent.heart,
-                onRefresh = onRefresh
+            MinimalTopBar(
+                palette = palette,
+                title = stringResource(R.string.summary_short_title),
+                action = stringResource(R.string.refresh_status),
+                onAction = onRefresh
             )
         }
-        item {
-            FinalRingRow(
-                stepProgress = stepProgress,
-                sleepProgress = sleepProgress,
-                heartProgress = heartProgress,
-                steps = formatNumber(steps),
-                sleep = if (sleep > 0.0) String.format(Locale.getDefault(), "%.1f h", sleep) else stringResource(R.string.no_data_short),
-                heart = if (heart > 0) "$heart bpm" else stringResource(R.string.no_data_short)
-            )
-        }
-        item {
-            SectionTitle(palette, stringResource(R.string.today_metrics))
-        }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
-                FinalMetricTile(
-                    modifier = Modifier.weight(1f),
-                    icon = "👣",
-                    label = stringResource(R.string.steps_today),
-                    value = formatNumber(steps),
-                    detail = stringResource(R.string.goal_template).replace("%s", formatNumber(goal)),
+
+        if (!state.hasPermissions) {
+            item {
+                MinimalMetricCard(
+                    palette = palette,
+                    title = stringResource(R.string.connect_google_title),
+                    value = stringResource(R.string.no_data_short),
+                    unit = stringResource(R.string.connect_google_button),
+                    accent = HealthAccent.mind,
+                    onClick = onRequestGoogle
+                )
+            }
+        } else {
+            item {
+                MinimalMetricCard(
+                    palette = palette,
+                    title = stringResource(R.string.steps_today),
+                    value = formatNumber(state.stepsToday),
+                    unit = stringResource(R.string.steps_unit),
                     accent = HealthAccent.activity
                 )
-                FinalMetricTile(
-                    modifier = Modifier.weight(1f),
-                    icon = "😴",
-                    label = stringResource(R.string.sleep_last_night),
-                    value = if (sleep > 0.0) String.format(Locale.getDefault(), "%.1f", sleep) else "—",
-                    detail = stringResource(R.string.hours_unit),
+            }
+            item {
+                MinimalMetricCard(
+                    palette = palette,
+                    title = stringResource(R.string.heart_today),
+                    value = state.heartRateBpm?.toString() ?: stringResource(R.string.no_data_short),
+                    unit = stringResource(R.string.bpm_unit),
+                    accent = HealthAccent.heart
+                )
+            }
+            item {
+                MinimalMetricCard(
+                    palette = palette,
+                    title = stringResource(R.string.sleep_today),
+                    value = formatOneDecimal(state.sleepHours.toDouble()),
+                    unit = stringResource(R.string.hours_unit),
                     accent = HealthAccent.sleep
                 )
             }
-        }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
-                FinalMetricTile(
-                    modifier = Modifier.weight(1f),
-                    icon = "♥",
-                    label = stringResource(R.string.heart_today),
-                    value = if (heart > 0) heart.toString() else "—",
-                    detail = stringResource(R.string.bpm_unit),
-                    accent = HealthAccent.heart
-                )
-                FinalMetricTile(
-                    modifier = Modifier.weight(1f),
-                    icon = "🏃",
-                    label = stringResource(R.string.workouts),
-                    value = state.recentWorkouts.size.toString(),
-                    detail = stringResource(R.string.recent_sessions),
-                    accent = HealthAccent.mind
+            item {
+                PrimaryButton(
+                    text = stringResource(R.string.refresh_status),
+                    accent = HealthAccent.activity,
+                    onClick = onRefresh
                 )
             }
         }
     }
 }
+
+
 
 @Composable
 private fun SummaryRefreshButton(accent: Color, onRefresh: () -> Unit) {
@@ -252,64 +226,66 @@ private fun HistoryScreen(
     state: DashboardUiState,
     onRequestGoogle: () -> Unit
 ) {
-    if (!state.hasPermissions) {
-        EmptyPermissionCard(
-            palette = palette,
-            title = stringResource(R.string.connect_google_title),
-            body = stringResource(R.string.connect_google_history_body),
-            button = stringResource(R.string.connect_google_button),
-            onClick = onRequestGoogle
-        )
-        return
-    }
-
-    val stepValues = state.weeklySteps.map { it.steps.toDouble() }
-    val sleepValues = state.weeklySleep.map { it.value ?: 0.0 }
-    val heartValues = state.weeklyHeartRate.map { it.value?.toDouble() ?: 0.0 }
-
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            ScreenHero(
+            MinimalHeader(
                 palette = palette,
-                title = stringResource(R.string.history_title),
-                subtitle = stringResource(R.string.history_subtitle),
-                action = null,
-                onAction = {}
+                title = stringResource(R.string.history_short_title)
             )
         }
-        item {
-            FinalTrendCard(
-                title = stringResource(R.string.steps_7d),
-                value = formatNumber(stepValues.sumOf { it.toLong() }),
-                subtitle = stringResource(R.string.total_7d),
-                values = stepValues,
-                accent = HealthAccent.activity
-            )
-        }
-        item {
-            FinalTrendCard(
-                title = stringResource(R.string.sleep_7d),
-                value = if (sleepValues.any { it > 0.0 }) String.format(Locale.getDefault(), "%.1f h", sleepValues.filter { it > 0.0 }.average()) else "—",
-                subtitle = stringResource(R.string.avg_7d),
-                values = sleepValues,
-                accent = HealthAccent.sleep
-            )
-        }
-        item {
-            FinalTrendCard(
-                title = stringResource(R.string.heart_7d),
-                value = if (heartValues.any { it > 0.0 }) heartValues.filter { it > 0.0 }.average().toLong().toString() else "—",
-                subtitle = stringResource(R.string.avg_bpm_7d),
-                values = heartValues,
-                accent = HealthAccent.heart
-            )
+
+        if (!state.hasPermissions) {
+            item {
+                MinimalMetricCard(
+                    palette = palette,
+                    title = stringResource(R.string.connect_google_title),
+                    value = stringResource(R.string.no_data_short),
+                    unit = stringResource(R.string.connect_google_button),
+                    accent = HealthAccent.mind,
+                    onClick = onRequestGoogle
+                )
+            }
+        } else {
+            val stepAvg = (state.weeklySteps).map { it.steps.toDouble() }.safeAverage()
+            val sleepAvg = state.weeklySleep.map { it.value ?: 0.0 }.filter { it > 0.0 }.safeAverage()
+            val heartAvg = state.weeklyHeartRate.map { it.value ?: 0.0 }.filter { it > 0.0 }.safeAverage()
+
+            item {
+                MinimalMetricCard(
+                    palette = palette,
+                    title = stringResource(R.string.steps_7d),
+                    value = formatNumber(stepAvg.toLong()),
+                    unit = stringResource(R.string.avg_7d),
+                    accent = HealthAccent.activity
+                )
+            }
+            item {
+                MinimalMetricCard(
+                    palette = palette,
+                    title = stringResource(R.string.heart_7d),
+                    value = if (heartAvg > 0.0) heartAvg.toLong().toString() else stringResource(R.string.no_data_short),
+                    unit = stringResource(R.string.bpm_unit),
+                    accent = HealthAccent.heart
+                )
+            }
+            item {
+                MinimalMetricCard(
+                    palette = palette,
+                    title = stringResource(R.string.sleep_7d),
+                    value = formatOneDecimal(sleepAvg),
+                    unit = stringResource(R.string.hours_unit),
+                    accent = HealthAccent.sleep
+                )
+            }
         }
     }
 }
+
+
 
 @Composable
 private fun SettingsScreen(
@@ -734,20 +710,122 @@ private fun PrimaryButton(text: String, accent: Color, enabled: Boolean = true, 
 
 @Composable
 private fun GlowBubble(color: Color, text: String) {
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .shadow(20.dp, RoundedCornerShape(18.dp), ambientColor = color.copy(alpha = 0.22f), spotColor = color.copy(alpha = 0.26f))
-            .clip(RoundedCornerShape(18.dp))
-            .background(color.copy(alpha = 0.18f)),
-        contentAlignment = Alignment.Center
-    ) { Text(text, color = color, fontWeight = FontWeight.Black, fontSize = 22.sp) }
+    // Final UI uses clean Apple Health-style surfaces, no decorative background balls.
 }
 
 @Composable
 private fun SectionTitle(palette: BitPalette, text: String) {
     Text(text, color = palette.text, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
 }
+
+
+@Composable
+private fun MinimalTopBar(
+    palette: BitPalette,
+    title: String,
+    action: String,
+    onAction: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            color = palette.text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 34.sp
+        )
+        PrimaryButton(
+            text = action,
+            accent = HealthAccent.activity,
+            onClick = onAction
+        )
+    }
+}
+
+@Composable
+private fun MinimalHeader(
+    palette: BitPalette,
+    title: String
+) {
+    Text(
+        text = title,
+        color = palette.text,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 34.sp,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun MinimalMetricCard(
+    palette: BitPalette,
+    title: String,
+    value: String,
+    unit: String,
+    accent: Color,
+    onClick: (() -> Unit)? = null
+) {
+    SoftCard(palette = palette, accent = accent, hero = false) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 104.dp)
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = value,
+                        color = palette.text,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 42.sp,
+                        lineHeight = 42.sp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = unit,
+                        color = accent,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(bottom = 5.dp)
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(accent.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("●", color = accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
+            }
+        }
+        if (onClick != null) {
+            Spacer(Modifier.height(12.dp))
+            PrimaryButton(text = unit, accent = accent, onClick = onClick)
+        }
+    }
+}
+
+private fun List<Double>.safeAverage(): Double =
+    if (isEmpty()) 0.0 else average()
+
+private fun formatOneDecimal(value: Double): String =
+    String.format(Locale.getDefault(), "%.1f", value)
+
 
 private data class BitPalette(
     val dark: Boolean,

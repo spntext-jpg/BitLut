@@ -165,4 +165,7 @@
     <string name="loading">Loading…</string>
     <string name="status_error">Something went wrong</string>
     <string name="toast_hc_permissions">Allow all requested Health Connect permissions to import and export Huawei Health data.</string>
+    <string name="tab_today">Today</string>
+    <string name="summary_short_title">Summary</string>
+    <string name="history_short_title">7 days</string>
 </resources>
