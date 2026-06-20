@@ -81,6 +81,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Today
@@ -179,8 +181,8 @@ private fun SummaryScreen(
 ) {
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             MinimalTopBar(
@@ -256,8 +258,8 @@ private fun HistoryScreen(
 ) {
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             MinimalHeader(
@@ -327,8 +329,8 @@ private fun SettingsScreen(
 ) {
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             MinimalHeader(
@@ -725,19 +727,26 @@ private fun SoftCard(
             .clip(shape)
             .background(bg)
             .border(1.dp, palette.stroke, shape)
-            .padding(if (hero) 24.dp else 20.dp),
+            .padding(if (hero) 24.dp else 16.dp),
         content = content
     )
 }
 
 @Composable
-private fun PrimaryButton(text: String, accent: Color, enabled: Boolean = true, onClick: () -> Unit) {
+private fun PrimaryButton(
+    text: String,
+    accent: Color,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onClick: () -> Unit
+) {
     Button(
         onClick = onClick,
         enabled = enabled,
+        modifier = modifier,
         shape = RoundedCornerShape(22.dp),
         colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White)
-    ) { Text(text, fontWeight = FontWeight.ExtraBold) }
+    ) { Text(text, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
 }
 
 @Composable
@@ -760,18 +769,22 @@ private fun MinimalTopBar(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = title,
             color = palette.text,
             fontWeight = FontWeight.ExtraBold,
-            fontSize = 34.sp
+            fontSize = 30.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
         )
         PrimaryButton(
             text = action,
             accent = HealthAccent.activity,
+            modifier = Modifier.wrapContentWidth(),
             onClick = onAction
         )
     }
@@ -786,7 +799,7 @@ private fun MinimalHeader(
         text = title,
         color = palette.text,
         fontWeight = FontWeight.ExtraBold,
-        fontSize = 34.sp,
+        fontSize = 30.sp,
         modifier = Modifier.fillMaxWidth()
     )
 }
@@ -804,8 +817,7 @@ private fun MinimalMetricCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 104.dp)
-                .padding(horizontal = 20.dp, vertical = 18.dp),
+                .heightIn(min = 72.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -814,39 +826,39 @@ private fun MinimalMetricCard(
                     text = title,
                     color = palette.secondaryText,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
+                    fontSize = 12.sp
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = value,
                         color = palette.text,
                         fontWeight = FontWeight.Black,
-                        fontSize = 42.sp,
-                        lineHeight = 42.sp
+                        fontSize = 28.sp,
+                        lineHeight = 28.sp
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = unit,
                         color = accent,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 15.sp,
-                        modifier = Modifier.padding(bottom = 5.dp)
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 3.dp)
                     )
                 }
             }
             Box(
                 modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(26.dp))
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(20.dp))
                     .background(accent.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("●", color = accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                Text("●", color = accent, fontSize = 15.sp, fontWeight = FontWeight.Black)
             }
         }
         if (onClick != null) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             PrimaryButton(text = unit, accent = accent, onClick = onClick)
         }
     }
@@ -874,28 +886,26 @@ private fun SettingsConnectionCard(
 ) {
     SoftCard(palette = palette, accent = accent, hero = false) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(21.dp))
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(18.dp))
                         .background(accent.copy(alpha = 0.16f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("●", color = accent, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                    Text("●", color = accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = title,
                         color = palette.text,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp,
+                        fontSize = 16.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -903,7 +913,7 @@ private fun SettingsConnectionCard(
                         text = status,
                         color = accent,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -914,31 +924,30 @@ private fun SettingsConnectionCard(
                 text = body,
                 color = palette.secondaryText,
                 fontWeight = FontWeight.Medium,
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
 
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    PrimaryButton(
-                        text = primaryAction,
-                        accent = accent,
-                        onClick = onPrimaryAction
-                    )
-                }
+                PrimaryButton(
+                    text = primaryAction,
+                    accent = accent,
+                    modifier = Modifier.wrapContentWidth(),
+                    onClick = onPrimaryAction
+                )
                 if (secondaryAction != null && onSecondaryAction != null) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        PrimaryButton(
-                            text = secondaryAction,
-                            accent = accent,
-                            onClick = onSecondaryAction
-                        )
-                    }
+                    PrimaryButton(
+                        text = secondaryAction,
+                        accent = accent,
+                        modifier = Modifier.wrapContentWidth(),
+                        onClick = onSecondaryAction
+                    )
                 }
             }
         }
