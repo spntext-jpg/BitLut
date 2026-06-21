@@ -94,6 +94,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Offset
 
 private enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
@@ -211,7 +215,8 @@ private fun SummaryScreen(
                     title = stringResource(R.string.steps_today),
                     value = formatNumber(state.stepsToday),
                     unit = stringResource(R.string.steps_unit),
-                    accent = HealthAccent.activity
+                    accent = HealthAccent.activity,
+                    progress = state.stepsProgress
                 )
             }
             item {
@@ -236,6 +241,7 @@ private fun SummaryScreen(
                         value = "${formatOneDecimal(state.sleepHours.toDouble())} ${stringResource(R.string.hours_unit)}",
                         accent = HealthAccent.sleep,
                         modifier = Modifier.weight(1f),
+                        progress = coerceProgress(state.sleepHours.toDouble(), SLEEP_GOAL_HOURS),
                         onClick = null
                     )
                 }
@@ -295,6 +301,14 @@ private fun HistoryScreen(
                 )
             }
             item {
+                WeeklySparklineCard(
+                    palette = palette,
+                    title = stringResource(R.string.steps_7d),
+                    values = state.weeklySteps.map { it.steps.toDouble() },
+                    accent = HealthAccent.activity
+                )
+            }
+            item {
                 MinimalMetricCard(
                     palette = palette,
                     title = stringResource(R.string.heart_7d),
@@ -304,11 +318,27 @@ private fun HistoryScreen(
                 )
             }
             item {
+                WeeklySparklineCard(
+                    palette = palette,
+                    title = stringResource(R.string.heart_7d),
+                    values = state.weeklyHeartRate.map { it.value ?: 0.0 },
+                    accent = HealthAccent.heart
+                )
+            }
+            item {
                 MinimalMetricCard(
                     palette = palette,
                     title = stringResource(R.string.sleep_7d),
                     value = formatOneDecimal(sleepAvg),
                     unit = stringResource(R.string.hours_unit),
+                    accent = HealthAccent.sleep
+                )
+            }
+            item {
+                WeeklySparklineCard(
+                    palette = palette,
+                    title = stringResource(R.string.sleep_7d),
+                    values = state.weeklySleep.map { it.value ?: 0.0 },
                     accent = HealthAccent.sleep
                 )
             }
@@ -385,6 +415,15 @@ private fun SettingsScreen(
 }
 
 
+
+/**
+ * Generic reference target for the Sleep progress ring on Summary, in hours.
+ * Unlike [DashboardUiState.stepsGoal], this is NOT a personalized or
+ * user-configurable value — it's the commonly cited adult sleep guideline,
+ * used only to give the ring a sense of "how close to a typical night" the
+ * person is. If/when per-user sleep goals are added, replace this constant.
+ */
+private const val SLEEP_GOAL_HOURS = 8.0
 
 private object HealthAccent {
     val activity = Color(0xFFFF6B5A)
@@ -517,6 +556,7 @@ private fun MinimalMetricCard(
     value: String,
     unit: String,
     accent: Color,
+    progress: Float? = null,
     onClick: (() -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -562,14 +602,18 @@ private fun MinimalMetricCard(
                     )
                 }
             }
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(accent.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("●", color = accent, fontSize = 15.sp, fontWeight = FontWeight.Black)
+            if (progress != null) {
+                ProgressRingChip(progress = progress, accent = accent, size = 40.dp)
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(accent.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("●", color = accent, fontSize = 15.sp, fontWeight = FontWeight.Black)
+                }
             }
         }
         if (onClick != null) {
@@ -593,6 +637,7 @@ private fun MinimalSquareTile(
     value: String,
     accent: Color,
     modifier: Modifier = Modifier.fillMaxWidth(),
+    progress: Float? = null,
     onClick: (() -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -610,14 +655,18 @@ private fun MinimalSquareTile(
                 .heightIn(min = 132.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(accent.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(icon, color = accent, fontSize = 17.sp, fontWeight = FontWeight.Black)
+            if (progress != null) {
+                ProgressRingChip(progress = progress, accent = accent, size = 40.dp, centerText = icon)
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(accent.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(icon, color = accent, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                }
             }
             Column {
                 Text(
@@ -637,6 +686,133 @@ private fun MinimalSquareTile(
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Compact progress ring used as the icon-chip replacement on Summary tiles that
+ * have a real goal to show (Steps vs daily goal, Sleep vs the 8h reference).
+ * [progress] is expected pre-clamped to 0f..1f by the caller (see [coerceProgress]).
+ */
+@Composable
+private fun ProgressRingChip(
+    progress: Float,
+    accent: Color,
+    size: androidx.compose.ui.unit.Dp,
+    centerText: String = "●"
+) {
+    Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val stroke = Stroke(width = 3.5.dp.toPx(), cap = StrokeCap.Round)
+            drawArc(
+                color = accent.copy(alpha = 0.18f),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                style = stroke
+            )
+            drawArc(
+                color = accent,
+                startAngle = -90f,
+                sweepAngle = 360f * progress,
+                useCenter = false,
+                style = stroke
+            )
+        }
+        Text(centerText, color = accent, fontSize = 13.sp, fontWeight = FontWeight.Black)
+    }
+}
+
+/** Clamps any progress ratio into the 0f..1f range a ring can safely draw, and
+ *  guards against division by zero when [goal] is zero or negative. */
+private fun coerceProgress(value: Double, goal: Double): Float =
+    if (goal <= 0.0) 0f else (value / goal).toFloat().coerceIn(0f, 1f)
+
+/**
+ * 7-day trend card for History: a thick rounded sparkline line with a soft
+ * gradient fill underneath, in the Material 3 Expressive style described in
+ * the design brief. Title/value reuse the same strings as the existing
+ * 7-day average cards — this card supplements them, it doesn't replace them.
+ *
+ * Safe by construction for the data shapes that actually reach it:
+ * - empty list -> flat line at mid-height (no crash, no divide-by-zero)
+ * - single-point list -> flat line at mid-height (a "trend" needs >=2 points)
+ * - all-equal values (e.g. all zeros, no data yet) -> flat line, not a
+ *   division-by-zero from a zero range
+ */
+@Composable
+private fun WeeklySparklineCard(
+    palette: BitPalette,
+    title: String,
+    values: List<Double>,
+    accent: Color
+) {
+    SoftCard(palette = palette, accent = accent, hero = false, tintWithAccent = true) {
+        Text(
+            text = title,
+            color = palette.text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 14.sp
+        )
+        Spacer(Modifier.height(12.dp))
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+        ) {
+            val w = size.width
+            val h = size.height
+            if (values.size < 2) {
+                // Not enough points for a real trend — draw a flat reference
+                // line instead of attempting to plot a single dot.
+                drawLine(
+                    color = accent.copy(alpha = 0.35f),
+                    start = Offset(0f, h / 2f),
+                    end = Offset(w, h / 2f),
+                    strokeWidth = 4.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+                return@Canvas
+            }
+
+            val maxV = values.max()
+            val minV = values.min()
+            val range = (maxV - minV).takeIf { it > 0.0 } ?: 1.0
+            // When every value is identical (including all-zero placeholder
+            // data), `range` falls back to 1.0 above purely to avoid a 0/0 —
+            // the line below still renders flat at mid-height either way.
+            val stepX = w / (values.size - 1)
+
+            val points = values.mapIndexed { index, v ->
+                val x = index * stepX
+                val normalized = if (maxV == minV) 0.5f else ((v - minV) / range).toFloat()
+                val y = h - (normalized * h * 0.78f + h * 0.11f)
+                Offset(x, y)
+            }
+
+            val fillPath = androidx.compose.ui.graphics.Path().apply {
+                moveTo(points.first().x, h)
+                points.forEach { lineTo(it.x, it.y) }
+                lineTo(points.last().x, h)
+                close()
+            }
+            drawPath(
+                path = fillPath,
+                brush = Brush.verticalGradient(
+                    listOf(accent.copy(alpha = 0.28f), accent.copy(alpha = 0.0f))
+                )
+            )
+
+            for (i in 0 until points.size - 1) {
+                drawLine(
+                    color = accent,
+                    start = points[i],
+                    end = points[i + 1],
+                    strokeWidth = 6.dp.toPx(),
+                    cap = StrokeCap.Round
                 )
             }
         }
