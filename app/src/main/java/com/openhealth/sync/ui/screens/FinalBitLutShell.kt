@@ -88,6 +88,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.openhealth.sync.ui.ImportScreen
 import com.openhealth.sync.ui.ImportViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.lerp
 
 private enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
@@ -209,22 +215,30 @@ private fun SummaryScreen(
                 )
             }
             item {
-                MinimalMetricCard(
-                    palette = palette,
-                    title = stringResource(R.string.heart_today),
-                    value = state.heartRateBpm?.toString() ?: stringResource(R.string.no_data_short),
-                    unit = stringResource(R.string.bpm_unit),
-                    accent = HealthAccent.heart
-                )
-            }
-            item {
-                MinimalMetricCard(
-                    palette = palette,
-                    title = stringResource(R.string.sleep_today),
-                    value = formatOneDecimal(state.sleepHours.toDouble()),
-                    unit = stringResource(R.string.hours_unit),
-                    accent = HealthAccent.sleep
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MinimalSquareTile(
+                        palette = palette,
+                        icon = "♥",
+                        label = stringResource(R.string.heart_today),
+                        value = state.heartRateBpm?.let { "$it ${stringResource(R.string.bpm_unit)}" }
+                            ?: stringResource(R.string.no_data_short),
+                        accent = HealthAccent.heart,
+                        modifier = Modifier.weight(1f),
+                        onClick = null
+                    )
+                    MinimalSquareTile(
+                        palette = palette,
+                        icon = "☾",
+                        label = stringResource(R.string.sleep_today),
+                        value = "${formatOneDecimal(state.sleepHours.toDouble())} ${stringResource(R.string.hours_unit)}",
+                        accent = HealthAccent.sleep,
+                        modifier = Modifier.weight(1f),
+                        onClick = null
+                    )
+                }
             }
             item {
                 PrimaryButton(
@@ -388,10 +402,18 @@ private fun SoftCard(
     modifier: Modifier = Modifier.fillMaxWidth(),
     accent: Color = palette.activity,
     hero: Boolean = false,
+    tintWithAccent: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(if (hero) 32.dp else 28.dp)
-    val bg by animateColorAsState(palette.card, label = "cardBg")
+    val targetCardColor = if (tintWithAccent && palette.dark) {
+        // Subtle "Expressive" tint: blend a touch of the metric's accent into the
+        // flat dark card color, instead of every card sharing one identical gray.
+        lerp(palette.card, accent, 0.10f)
+    } else {
+        palette.card
+    }
+    val bg by animateColorAsState(targetCardColor, label = "cardBg")
     Column(
         modifier = modifier
             .shadow(28.dp, shape, ambientColor = Color.Black.copy(alpha = if (palette.dark) 0.28f else 0.055f), spotColor = accent.copy(alpha = if (palette.dark) 0.26f else 0.10f))
@@ -401,6 +423,29 @@ private fun SoftCard(
             .padding(if (hero) 24.dp else 16.dp),
         content = content
     )
+}
+
+/**
+ * iOS/Apple-Health-style tactile press feedback: scales a tappable surface down
+ * slightly while pressed, using spring physics rather than a linear tween so the
+ * release has a small natural bounce.
+ *
+ * Pass the SAME [interactionSource] you give to your own `Modifier.clickable(...)`
+ * — this modifier only observes press state, it never intercepts the tap itself,
+ * so the real onClick still fires exactly as before.
+ */
+@Composable
+private fun Modifier.pressScale(interactionSource: MutableInteractionSource): Modifier {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "pressScale"
+    )
+    return this.scale(scale)
 }
 
 @Composable
@@ -474,7 +519,16 @@ private fun MinimalMetricCard(
     accent: Color,
     onClick: (() -> Unit)? = null
 ) {
-    SoftCard(palette = palette, accent = accent, hero = false) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val cardModifier = if (onClick != null) {
+        Modifier
+            .fillMaxWidth()
+            .pressScale(interactionSource)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+    } else {
+        Modifier.fillMaxWidth()
+    }
+    SoftCard(palette = palette, modifier = cardModifier, accent = accent, hero = false, tintWithAccent = true) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -521,6 +575,70 @@ private fun MinimalMetricCard(
         if (onClick != null) {
             Spacer(Modifier.height(10.dp))
             PrimaryButton(text = unit, accent = accent, onClick = onClick)
+        }
+    }
+}
+
+/**
+ * Square tile for the 2x2 Summary grid (Heart/Sleep sit side by side under the
+ * full-width Steps hero card). Follows the "traffic light" rule: exactly three
+ * elements on the tile — a filled icon chip, one large value, one small label.
+ * No secondary text, no extra rows — the number does the talking.
+ */
+@Composable
+private fun MinimalSquareTile(
+    palette: BitPalette,
+    icon: String,
+    label: String,
+    value: String,
+    accent: Color,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onClick: (() -> Unit)? = null
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val tileModifier = if (onClick != null) {
+        modifier
+            .pressScale(interactionSource)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+    } else {
+        modifier
+    }
+    SoftCard(palette = palette, modifier = tileModifier, accent = accent, hero = false, tintWithAccent = true) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 132.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(accent.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(icon, color = accent, fontSize = 17.sp, fontWeight = FontWeight.Black)
+            }
+            Column {
+                Text(
+                    text = value,
+                    color = palette.text,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 30.sp,
+                    lineHeight = 32.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = label.uppercase(Locale.getDefault()),
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
