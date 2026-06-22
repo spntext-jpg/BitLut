@@ -82,6 +82,9 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Watch
+import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -205,6 +208,7 @@ private fun SummaryScreen(
                     value = stringResource(R.string.no_data_short),
                     unit = stringResource(R.string.connect_google_button),
                     accent = HealthAccent.mind,
+                    icon = Icons.Rounded.Cloud,
                     onClick = onRequestGoogle
                 )
             }
@@ -283,6 +287,7 @@ private fun HistoryScreen(
                     value = stringResource(R.string.no_data_short),
                     unit = stringResource(R.string.connect_google_button),
                     accent = HealthAccent.mind,
+                    icon = Icons.Rounded.Cloud,
                     onClick = onRequestGoogle
                 )
             }
@@ -377,6 +382,7 @@ private fun SettingsScreen(
                 body = stringResource(R.string.google_connection_body),
                 status = stringResource(R.string.refresh_status),
                 accent = HealthAccent.mind,
+                icon = Icons.Rounded.Cloud,
                 primaryAction = stringResource(R.string.connect_google_button),
                 onPrimaryAction = onRequestGoogle,
                 secondaryAction = stringResource(R.string.refresh_status),
@@ -391,6 +397,7 @@ private fun SettingsScreen(
                 body = stringResource(R.string.huawei_connection_body),
                 status = stringResource(R.string.refresh_status),
                 accent = HealthAccent.activity,
+                icon = Icons.Rounded.Watch,
                 primaryAction = stringResource(R.string.connect_huawei_button),
                 onPrimaryAction = onRequestHuawei,
                 secondaryAction = stringResource(R.string.refresh_status),
@@ -405,6 +412,7 @@ private fun SettingsScreen(
                 body = stringResource(R.string.manual_sync_body),
                 status = stringResource(R.string.manual_sync_title),
                 accent = HealthAccent.sleep,
+                icon = Icons.Rounded.CloudSync,
                 primaryAction = stringResource(R.string.sync_now),
                 onPrimaryAction = onSyncNow,
                 secondaryAction = stringResource(R.string.import_archive_title),
@@ -557,6 +565,7 @@ private fun MinimalMetricCard(
     unit: String,
     accent: Color,
     progress: Float? = null,
+    icon: ImageVector? = null,
     onClick: (() -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -612,7 +621,11 @@ private fun MinimalMetricCard(
                         .background(accent.copy(alpha = 0.16f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("●", color = accent, fontSize = 15.sp, fontWeight = FontWeight.Black)
+                    if (icon != null) {
+                        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                    } else {
+                        Text("●", color = accent, fontSize = 15.sp, fontWeight = FontWeight.Black)
+                    }
                 }
             }
         }
@@ -702,7 +715,7 @@ private fun ProgressRingChip(
     progress: Float,
     accent: Color,
     size: androidx.compose.ui.unit.Dp,
-    centerText: String = "●"
+    centerText: String = "•"
 ) {
     Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.matchParentSize()) {
@@ -834,6 +847,7 @@ private fun SettingsConnectionCard(
     body: String,
     status: String,
     accent: Color,
+    icon: ImageVector,
     primaryAction: String,
     onPrimaryAction: () -> Unit,
     secondaryAction: String? = null,
@@ -852,7 +866,7 @@ private fun SettingsConnectionCard(
                         .background(accent.copy(alpha = 0.16f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("●", color = accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
