@@ -26,6 +26,7 @@ import java.time.ZoneOffset
 import com.openhealth.sync.config.HealthPermissionPolicy
 import java.util.Locale
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.request.AggregateRequest
 
 private const val TAG = "GoogleHealthManager"
 
@@ -51,6 +52,12 @@ data class ActivitySessionData(
     val endTimeMs: Long,
     val title: String = "Huawei activity",
     val exerciseType: Int = ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
+)
+data class WorkoutTypeSummary(
+    val exerciseType: Int,
+    val displayName: String,
+    val sessionCount: Int,
+    val totalDurationMinutes: Long
 )
 
 class GoogleHealthManager(private val context: Context) {
@@ -342,29 +349,44 @@ class GoogleHealthManager(private val context: Context) {
         }
     }
 
-    suspend fun readWeeklySteps(): List<Pair<LocalDate, Long>> {
+    /**
+     * Daily step totals for the last [daysBack] days (inclusive of today).
+     *
+     * Uses one aggregate() call per day rather than a single aggregateGroupByPeriod
+     * call. aggregateGroupByPeriod would be the more elegant single-call option, but
+     * its per-bucket result object's exact start/end field could not be confirmed
+     * against official documentation with full certainty, and this code ships close
+     * to a store review window — so we use the AggregateRequest + response[metric]
+     * pattern instead, which is documented verbatim in Android's official Health
+     * Connect guide. The cost is daysBack calls instead of one, but these are local
+     * IPC calls to the on-device Health Connect service, not network requests, so
+     * this remains cheap even at the maximum 365-day range.
+     *
+     * For cumulative types like StepsRecord, aggregate() is also the documented-
+     * correct choice over readRecords() + manual summing, since it avoids double
+     * counting from multiple data sources.
+     */
+    suspend fun readDailySteps(daysBack: Int): List<Pair<LocalDate, Long>> {
         val c = healthConnectClient ?: return emptyList()
-        return try {
-            val today = LocalDate.now()
-            val start = today.minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val end = Instant.now()
-            val req = ReadRecordsRequest(
-                recordType = StepsRecord::class,
-                timeRangeFilter = TimeRangeFilter.between(start, end)
-            )
-            val records = c.readRecords(req).records
-            (0..6).map { daysBack ->
-                val date = today.minusDays((6 - daysBack).toLong())
-                val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-                val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-                val steps = records
-                    .filter { it.startTime >= dayStart && it.startTime < dayEnd }
-                    .sumOf { it.count }
-                date to steps
+        val today = LocalDate.now()
+        val startDate = today.minusDays((daysBack - 1).toLong())
+        return (0 until daysBack).map { offset ->
+            val date = startDate.plusDays(offset.toLong())
+            val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val steps = try {
+                val response = c.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(StepsRecord.COUNT_TOTAL),
+                        timeRangeFilter = TimeRangeFilter.between(dayStart, dayEnd)
+                    )
+                )
+                response[StepsRecord.COUNT_TOTAL] ?: 0L
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "readDailySteps failed for $date: ${e.message}")
+                0L
             }
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "readWeeklySteps failed: ${e.message}")
-            emptyList()
+            date to steps
         }
     }
 
@@ -419,6 +441,58 @@ class GoogleHealthManager(private val context: Context) {
                 }
         } catch (e: Exception) {
             AppLogger.e(TAG, "readRecentWorkouts failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Reads every ExerciseSessionRecord in the last [daysBack] days and groups them by
+     * exercise type, computing session count and total duration per type. This backs the
+     * workout-type widgets on the History screen (one widget per exercise type that has
+     * at least one session in the selected range).
+     *
+     * Pagination note: uses a pageToken loop rather than a single readRecords call, since
+     * Health Connect's default page size is 1000 records — comfortably enough for realistic
+     * workout volumes even at the maximum 365-day range, but looping is the documented-correct
+     * way to read raw records regardless of volume, so we don't silently drop data for a very
+     * active user.
+     */
+    suspend fun readWorkoutSummariesByType(daysBack: Int): List<WorkoutTypeSummary> {
+        val c = healthConnectClient ?: return emptyList()
+        return try {
+            val start = LocalDate.now().minusDays(daysBack.toLong() - 1)
+                .atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val end = Instant.now()
+
+            val allRecords = mutableListOf<ExerciseSessionRecord>()
+            var pageToken: String? = null
+            do {
+                val req = ReadRecordsRequest(
+                    recordType = ExerciseSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                    pageToken = pageToken
+                )
+                val response = c.readRecords(req)
+                allRecords.addAll(response.records)
+                pageToken = response.pageToken
+            } while (pageToken != null)
+
+            allRecords
+                .groupBy { it.exerciseType }
+                .map { (type, sessions) ->
+                    val totalMinutes = sessions.sumOf { session ->
+                        java.time.Duration.between(session.startTime, session.endTime).toMinutes()
+                    }
+                    WorkoutTypeSummary(
+                        exerciseType = type,
+                        displayName = exerciseTypeName(type),
+                        sessionCount = sessions.size,
+                        totalDurationMinutes = totalMinutes
+                    )
+                }
+                .sortedByDescending { it.totalDurationMinutes }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readWorkoutSummariesByType failed: ${e.message}")
             emptyList()
         }
     }
@@ -536,19 +610,27 @@ class GoogleHealthManager(private val context: Context) {
         }
     }
 
-    suspend fun readWeeklySleep(): List<Pair<LocalDate, Double>> {
+    /**
+     * Daily sleep duration (hours) for the last [daysBack] days. Kept as readRecords()
+     * with manual per-day clipping (not aggregate()) because SleepSessionRecord volume
+     * is inherently low — realistically one session per night — so even at the maximum
+     * 365-day range this never approaches the per-record volume that made the
+     * equivalent step/heart-rate functions worth converting to aggregate() calls.
+     */
+    suspend fun readDailySleep(daysBack: Int): List<Pair<LocalDate, Double>> {
         val c = healthConnectClient ?: return emptyList()
         return try {
             val today = LocalDate.now()
-            val start = today.minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val startDate = today.minusDays((daysBack - 1).toLong())
+            val start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
             val end = today.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
             val req = ReadRecordsRequest(
                 recordType = SleepSessionRecord::class,
                 timeRangeFilter = TimeRangeFilter.between(start, end)
             )
             val records = c.readRecords(req).records
-            (0..6).map { offsetDays ->
-                val date = today.minusDays((6 - offsetDays).toLong())
+            (0 until daysBack).map { offset ->
+                val date = startDate.plusDays(offset.toLong())
                 val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
                 val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
                 val hours = records
@@ -561,34 +643,40 @@ class GoogleHealthManager(private val context: Context) {
                 date to hours
             }
         } catch (e: Exception) {
-            AppLogger.e(TAG, "readWeeklySleep failed: ${e.message}")
+            AppLogger.e(TAG, "readDailySleep failed: ${e.message}")
             emptyList()
         }
     }
 
-    suspend fun readWeeklyAverageHeartRate(): List<Pair<LocalDate, Long?>> {
+    /**
+     * Daily average heart rate for the last [daysBack] days. Uses one aggregate()
+     * call per day (HeartRateRecord.BPM_AVG) rather than reading all raw samples and
+     * filtering per day — heart rate samples can be high-frequency (continuous
+     * wearable sampling), so the old manual-filter approach risked the same
+     * O(days x records) cost that was fixed for steps, and aggregate() is also the
+     * officially recommended approach for this kind of statistical aggregation.
+     */
+    suspend fun readDailyAverageHeartRate(daysBack: Int): List<Pair<LocalDate, Long?>> {
         val c = healthConnectClient ?: return emptyList()
-        return try {
-            val today = LocalDate.now()
-            val start = today.minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val end = Instant.now()
-            val req = ReadRecordsRequest(
-                recordType = HeartRateRecord::class,
-                timeRangeFilter = TimeRangeFilter.between(start, end)
-            )
-            val records = c.readRecords(req).records
-            (0..6).map { offsetDays ->
-                val date = today.minusDays((6 - offsetDays).toLong())
-                val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-                val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-                val samples = records.flatMap { it.samples }
-                    .filter { it.time >= dayStart && it.time < dayEnd }
-                val avg = if (samples.isEmpty()) null else samples.map { it.beatsPerMinute }.average().toLong()
-                date to avg
+        val today = LocalDate.now()
+        val startDate = today.minusDays((daysBack - 1).toLong())
+        return (0 until daysBack).map { offset ->
+            val date = startDate.plusDays(offset.toLong())
+            val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val avg = try {
+                val response = c.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(HeartRateRecord.BPM_AVG),
+                        timeRangeFilter = TimeRangeFilter.between(dayStart, dayEnd)
+                    )
+                )
+                response[HeartRateRecord.BPM_AVG]
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "readDailyAverageHeartRate failed for $date: ${e.message}")
+                null
             }
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "readWeeklyAverageHeartRate failed: ${e.message}")
-            emptyList()
+            date to avg
         }
     }
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.GoogleHealthManager
+import com.openhealth.sync.data.WorkoutTypeSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +15,9 @@ import java.time.LocalDate
 
 data class WeeklyBar(val date: LocalDate, val steps: Long)
 data class WeeklyMetric(val date: LocalDate, val value: Double?)
+
+/** Selectable History range options, in days. Order matters for the chip row UI. */
+val HISTORY_RANGE_OPTIONS = listOf(7, 14, 30, 60, 90, 180, 365)
 
 data class DashboardUiState(
     val isLoading: Boolean = true,
@@ -27,7 +31,9 @@ data class DashboardUiState(
     val heartRateBpm: Long? = null,
     val weeklySleep: List<WeeklyMetric> = emptyList(),
     val weeklyHeartRate: List<WeeklyMetric> = emptyList(),
-    val recentWorkouts: List<ActivitySessionData> = emptyList()
+    val recentWorkouts: List<ActivitySessionData> = emptyList(),
+    val selectedHistoryRangeDays: Int = 7,
+    val workoutSummaries: List<WorkoutTypeSummary> = emptyList()
 ) {
     val stepsProgress: Float get() = (stepsToday.toFloat() / stepsGoal.toFloat()).coerceIn(0f, 1f)
     val weeklyAvg: Long get() = if (weeklySteps.isEmpty()) 0L else weeklySteps.sumOf { it.steps } / weeklySteps.size
@@ -44,6 +50,13 @@ class DashboardViewModel(
 
     fun refresh() { load() }
 
+    /** Called when the person taps a different range chip (7/14/30/60/90/180/365) on History. */
+    fun onHistoryRangeSelected(days: Int) {
+        if (days == _state.value.selectedHistoryRangeDays) return
+        _state.update { it.copy(selectedHistoryRangeDays = days) }
+        load()
+    }
+
     fun load() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
@@ -52,15 +65,17 @@ class DashboardViewModel(
                 _state.update { it.copy(isLoading = false, hasPermissions = false) }
                 return@launch
             }
+            val rangeDays = _state.value.selectedHistoryRangeDays
             val steps    = googleManager.readStepsToday()
             val distance = googleManager.readDistanceToday()
             val calories = googleManager.readCaloriesToday()
-            val weekly   = googleManager.readWeeklySteps().map { (date, s) -> WeeklyBar(date, s) }
+            val weekly   = googleManager.readDailySteps(rangeDays).map { (date, s) -> WeeklyBar(date, s) }
             val sleep    = googleManager.readSleepLastNight()
             val heart     = googleManager.readAverageHeartRateToday()
-            val weeklySleep = googleManager.readWeeklySleep().map { (date, value) -> WeeklyMetric(date, value) }
-            val weeklyHeart = googleManager.readWeeklyAverageHeartRate().map { (date, value) -> WeeklyMetric(date, value?.toDouble()) }
+            val weeklySleep = googleManager.readDailySleep(rangeDays).map { (date, value) -> WeeklyMetric(date, value) }
+            val weeklyHeart = googleManager.readDailyAverageHeartRate(rangeDays).map { (date, value) -> WeeklyMetric(date, value?.toDouble()) }
             val workouts = googleManager.readRecentWorkouts(5)
+            val workoutSummaries = googleManager.readWorkoutSummariesByType(rangeDays)
             _state.update {
                 it.copy(
                     isLoading       = false,
@@ -73,7 +88,8 @@ class DashboardViewModel(
                     weeklySleep     = weeklySleep,
                     weeklyHeartRate = weeklyHeart,
                     weeklySteps     = weekly,
-                    recentWorkouts  = workouts
+                    recentWorkouts  = workouts,
+                    workoutSummaries = workoutSummaries
                 )
             }
         }

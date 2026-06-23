@@ -41,6 +41,14 @@
     <string name="steps_7d">Steps, 7 days</string>
     <string name="sleep_7d">Sleep, 7 days</string>
     <string name="heart_7d">Heart rate, 7 days</string>
+    <string name="steps_label_days">Steps, %1$d days</string>
+    <string name="sleep_label_days">Sleep, %1$d days</string>
+    <string name="heart_label_days">Heart rate, %1$d days</string>
+    <string name="avg_label_days">%1$d-day average</string>
+    <string name="history_range_days_short">%1$d d</string>
+    <string name="workouts_section_title">Workouts</string>
+    <string name="workout_sessions_count">%1$d sessions</string>
+    <string name="workout_total_minutes">%1$d min total</string>
     <string name="activity">Activity</string>
     <string name="sleep">Sleep</string>
     <string name="heart">Heart</string>

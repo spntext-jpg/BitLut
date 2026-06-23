@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -62,9 +63,11 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.openhealth.sync.data.worker.SyncWorker
+import com.openhealth.sync.data.WorkoutTypeSummary
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardUiState
 import com.openhealth.sync.ui.DashboardViewModel
+import com.openhealth.sync.ui.HISTORY_RANGE_OPTIONS
 import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
@@ -117,6 +120,7 @@ fun FinalBitLutShell(
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
     onImportArchive: () -> Unit = {},
+    onHistoryRangeSelected: (Int) -> Unit = {},
     importViewModel: ImportViewModel) {
     var selected by rememberSaveable { mutableStateOf(MainTab.Today) }
     var showArchiveImport by rememberSaveable { mutableStateOf(false) }
@@ -171,7 +175,7 @@ fun FinalBitLutShell(
                 )
             } else when (selected) {
                 MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, onRequestGoogle)
-                MainTab.SevenDays -> HistoryScreen(palette, dashboardState, onRequestGoogle)
+                MainTab.SevenDays -> HistoryScreen(palette, dashboardState, onRequestGoogle, onHistoryRangeSelected)
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, onRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true })
             }
@@ -265,7 +269,8 @@ private fun SummaryScreen(
 private fun HistoryScreen(
     palette: BitPalette,
     state: DashboardUiState,
-    onRequestGoogle: () -> Unit
+    onRequestGoogle: () -> Unit,
+    onRangeSelected: (Int) -> Unit
 ) {
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -277,6 +282,16 @@ private fun HistoryScreen(
                 palette = palette,
                 title = stringResource(R.string.history_short_title)
             )
+        }
+
+        if (state.hasPermissions) {
+            item {
+                HistoryRangeChips(
+                    palette = palette,
+                    selectedDays = state.selectedHistoryRangeDays,
+                    onRangeSelected = onRangeSelected
+                )
+            }
         }
 
         if (!state.hasPermissions) {
@@ -292,6 +307,7 @@ private fun HistoryScreen(
                 )
             }
         } else {
+            val rangeDays = state.selectedHistoryRangeDays
             val stepAvg = (state.weeklySteps).map { it.steps.toDouble() }.safeAverage()
             val sleepAvg = state.weeklySleep.map { it.value ?: 0.0 }.filter { it > 0.0 }.safeAverage()
             val heartAvg = state.weeklyHeartRate.map { it.value ?: 0.0 }.filter { it > 0.0 }.safeAverage()
@@ -299,16 +315,16 @@ private fun HistoryScreen(
             item {
                 MinimalMetricCard(
                     palette = palette,
-                    title = stringResource(R.string.steps_7d),
+                    title = stringResource(R.string.steps_label_days, rangeDays),
                     value = formatNumber(stepAvg.toLong()),
-                    unit = stringResource(R.string.avg_7d),
+                    unit = stringResource(R.string.avg_label_days, rangeDays),
                     accent = HealthAccent.activity
                 )
             }
             item {
                 WeeklySparklineCard(
                     palette = palette,
-                    title = stringResource(R.string.steps_7d),
+                    title = stringResource(R.string.steps_label_days, rangeDays),
                     values = state.weeklySteps.map { it.steps.toDouble() },
                     accent = HealthAccent.activity
                 )
@@ -316,7 +332,7 @@ private fun HistoryScreen(
             item {
                 MinimalMetricCard(
                     palette = palette,
-                    title = stringResource(R.string.heart_7d),
+                    title = stringResource(R.string.heart_label_days, rangeDays),
                     value = if (heartAvg > 0.0) heartAvg.toLong().toString() else stringResource(R.string.no_data_short),
                     unit = stringResource(R.string.bpm_unit),
                     accent = HealthAccent.heart
@@ -325,7 +341,7 @@ private fun HistoryScreen(
             item {
                 WeeklySparklineCard(
                     palette = palette,
-                    title = stringResource(R.string.heart_7d),
+                    title = stringResource(R.string.heart_label_days, rangeDays),
                     values = state.weeklyHeartRate.map { it.value ?: 0.0 },
                     accent = HealthAccent.heart
                 )
@@ -333,7 +349,7 @@ private fun HistoryScreen(
             item {
                 MinimalMetricCard(
                     palette = palette,
-                    title = stringResource(R.string.sleep_7d),
+                    title = stringResource(R.string.sleep_label_days, rangeDays),
                     value = formatOneDecimal(sleepAvg),
                     unit = stringResource(R.string.hours_unit),
                     accent = HealthAccent.sleep
@@ -342,16 +358,121 @@ private fun HistoryScreen(
             item {
                 WeeklySparklineCard(
                     palette = palette,
-                    title = stringResource(R.string.sleep_7d),
+                    title = stringResource(R.string.sleep_label_days, rangeDays),
                     values = state.weeklySleep.map { it.value ?: 0.0 },
                     accent = HealthAccent.sleep
+                )
+            }
+
+            if (state.workoutSummaries.isNotEmpty()) {
+                item {
+                    Text(
+                        text = stringResource(R.string.workouts_section_title),
+                        color = palette.text,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                items(state.workoutSummaries) { summary ->
+                    WorkoutTypeCard(palette = palette, summary = summary)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Scrollable row of range chips (7/14/30/60/90/180/365 days) for the History screen,
+ * placed on its own row below the screen title rather than sharing the title's row —
+ * this avoids the kind of overflow/wrap risk that the Settings buttons had before
+ * they were switched to FlowRow (a 7-chip row needs its own horizontal space, and
+ * fighting the title for space on one line would risk the title getting clipped on
+ * narrower screens or longer locale strings).
+ */
+@Composable
+private fun HistoryRangeChips(
+    palette: BitPalette,
+    selectedDays: Int,
+    onRangeSelected: (Int) -> Unit
+) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.End)
+    ) {
+        items(HISTORY_RANGE_OPTIONS) { days ->
+            val selected = days == selectedDays
+            val interactionSource = remember { MutableInteractionSource() }
+            Box(
+                modifier = Modifier
+                    .pressScale(interactionSource)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(if (selected) HealthAccent.activity else palette.card)
+                    .border(1.dp, if (selected) Color.Transparent else palette.stroke, RoundedCornerShape(99.dp))
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = null
+                    ) { onRangeSelected(days) }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.history_range_days_short, days),
+                    color = if (selected) Color.White else palette.secondaryText,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 13.sp,
+                    maxLines = 1
                 )
             }
         }
     }
 }
 
-
+/**
+ * Workout-type card for History: shown once per exercise type that has at least one
+ * session in the currently selected range (no card for types with zero sessions).
+ * Shows the localized exercise name (already handled by exerciseTypeName in
+ * GoogleHealthManager — e.g. "Бег" for running), session count, and total duration.
+ */
+@Composable
+private fun WorkoutTypeCard(
+    palette: BitPalette,
+    summary: WorkoutTypeSummary
+) {
+    SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = summary.displayName,
+                    color = palette.text,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.workout_sessions_count, summary.sessionCount),
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+            }
+            Text(
+                text = stringResource(R.string.workout_total_minutes, summary.totalDurationMinutes),
+                color = HealthAccent.activity,
+                fontWeight = FontWeight.Black,
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
 
 @Composable
 private fun SettingsScreen(

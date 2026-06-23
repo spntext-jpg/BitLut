@@ -168,6 +168,9 @@ FinalBitLutShell(
                     openHuaweiArchiveImport()
                 }
             ,
+                    onHistoryRangeSelected = { days ->
+                        dashboardViewModel.onHistoryRangeSelected(days)
+                    },
                     importViewModel = importViewModel
                 )
             }

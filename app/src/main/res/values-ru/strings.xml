@@ -41,6 +41,14 @@
     <string name="steps_7d">Шаги за 7 дней</string>
     <string name="sleep_7d">Сон за 7 дней</string>
     <string name="heart_7d">Пульс за 7 дней</string>
+    <string name="steps_label_days">Шаги за %1$d дн.</string>
+    <string name="sleep_label_days">Сон за %1$d дн.</string>
+    <string name="heart_label_days">Пульс за %1$d дн.</string>
+    <string name="avg_label_days">Среднее за %1$d дн.</string>
+    <string name="history_range_days_short">%1$d дн.</string>
+    <string name="workouts_section_title">Тренировки</string>
+    <string name="workout_sessions_count">%1$d сессий</string>
+    <string name="workout_total_minutes">%1$d мин всего</string>
     <string name="activity">Активность</string>
     <string name="sleep">Сон</string>
     <string name="heart">Сердце</string>
