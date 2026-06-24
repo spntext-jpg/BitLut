@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -108,6 +109,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Offset
 
 private enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
@@ -680,11 +682,42 @@ private fun SoftCard(
         palette.card
     }
     val bg by animateColorAsState(targetCardColor, label = "cardBg")
+    val showMeshGradient = tintWithAccent && palette.dark
     Column(
         modifier = modifier
             .shadow(28.dp, shape, ambientColor = Color.Black.copy(alpha = if (palette.dark) 0.28f else 0.055f), spotColor = accent.copy(alpha = if (palette.dark) 0.26f else 0.10f))
             .clip(shape)
             .background(bg)
+            .then(
+                if (showMeshGradient) {
+                    // Two soft radial "mesh" blobs per the Material 3 Expressive
+                    // brief's "breathing", non-flat card backgrounds. Built with
+                    // plain Brush.radialGradient (alpha fading smoothly to 0)
+                    // rather than Modifier.blur(), since blur silently no-ops
+                    // below Android 12 — a meaningful share of real devices would
+                    // see no effect at all. The soft alpha falloff here still
+                    // reads as "breathing" rather than a hard-edged circle on
+                    // every Android version, not just the newest ones.
+                    Modifier.drawBehind {
+                        drawRect(
+                            brush = Brush.radialGradient(
+                                colors = listOf(accent.copy(alpha = 0.16f), accent.copy(alpha = 0.0f)),
+                                center = Offset(size.width * 0.88f, size.height * 0.05f),
+                                radius = size.maxDimension * 0.55f
+                            )
+                        )
+                        drawRect(
+                            brush = Brush.radialGradient(
+                                colors = listOf(accent.copy(alpha = 0.10f), accent.copy(alpha = 0.0f)),
+                                center = Offset(size.width * 0.05f, size.height * 0.95f),
+                                radius = size.maxDimension * 0.5f
+                            )
+                        )
+                    }
+                } else {
+                    Modifier
+                }
+            )
             .border(1.dp, palette.stroke, shape)
             .padding(if (hero) 24.dp else 16.dp),
         content = content
@@ -800,13 +833,13 @@ private fun MinimalMetricCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 72.dp),
+                .heightIn(min = 96.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = title,
+                    text = title.uppercase(Locale.getDefault()),
                     color = palette.secondaryText,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp
@@ -817,8 +850,12 @@ private fun MinimalMetricCard(
                         text = value,
                         color = palette.text,
                         fontWeight = FontWeight.Black,
-                        fontSize = 28.sp,
-                        lineHeight = 28.sp
+                        fontSize = 56.sp,
+                        lineHeight = 56.sp,
+                        letterSpacing = (-1.5).sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
@@ -826,24 +863,24 @@ private fun MinimalMetricCard(
                         color = accent,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 13.sp,
-                        modifier = Modifier.padding(bottom = 3.dp)
+                        modifier = Modifier.padding(bottom = 6.dp)
                     )
                 }
             }
             if (progress != null) {
-                ProgressRingChip(progress = progress, accent = accent, size = 40.dp)
+                ProgressRingChip(progress = progress, accent = accent, size = 52.dp)
             } else {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(26.dp))
                         .background(accent.copy(alpha = 0.16f)),
                     contentAlignment = Alignment.Center
                 ) {
                     if (icon != null) {
-                        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
                     } else {
-                        Text("●", color = accent, fontSize = 15.sp, fontWeight = FontWeight.Black)
+                        Text("●", color = accent, fontSize = 17.sp, fontWeight = FontWeight.Black)
                     }
                 }
             }
@@ -905,8 +942,9 @@ private fun MinimalSquareTile(
                     text = value,
                     color = palette.text,
                     fontWeight = FontWeight.Black,
-                    fontSize = 30.sp,
-                    lineHeight = 32.sp,
+                    fontSize = 38.sp,
+                    lineHeight = 40.sp,
+                    letterSpacing = (-1.5).sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
