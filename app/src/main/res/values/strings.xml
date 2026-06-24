@@ -46,9 +46,18 @@
     <string name="heart_label_days">Heart rate, %1$d days</string>
     <string name="avg_label_days">%1$d-day average</string>
     <string name="history_range_days_short">%1$d d</string>
+    <string name="period_total_steps">Total: %1$s steps</string>
+    <string name="period_avg_heart">Average heart rate: %1$s bpm</string>
+    <string name="period_total_sleep">Total sleep: %1$s h</string>
     <string name="workouts_section_title">Workouts</string>
     <string name="workout_sessions_count">%1$d sessions</string>
     <string name="workout_total_minutes">%1$d min total</string>
+    <string name="widget_visibility_section_title">Widgets</string>
+    <string name="widget_visibility_section_body">Choose which widgets to show on the dashboard and in history.</string>
+    <string name="widget_toggle_steps">Steps</string>
+    <string name="widget_toggle_heart">Heart rate</string>
+    <string name="widget_toggle_sleep">Sleep</string>
+    <string name="widget_toggle_workouts">Workouts</string>
     <string name="activity">Activity</string>
     <string name="sleep">Sleep</string>
     <string name="heart">Heart</string>
@@ -175,7 +184,7 @@
     <string name="toast_hc_permissions">Allow all requested Health Connect permissions to import and export Huawei Health data.</string>
     <string name="tab_today">Today</string>
     <string name="summary_short_title">Summary</string>
-    <string name="history_short_title">7 days</string>
+    <string name="history_short_title">History</string>
     <string name="tab_7days">7 days</string>
     <string name="google_health_connect">Google Health Connect</string>
     <string name="huawei_health_title">Huawei Health</string>

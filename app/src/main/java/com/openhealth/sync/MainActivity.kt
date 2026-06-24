@@ -65,6 +65,8 @@ import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardUiState
 import com.openhealth.sync.ui.DashboardViewModel
+import com.openhealth.sync.config.DashboardWidget
+import com.openhealth.sync.config.WidgetVisibilityPrefs
 import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
@@ -121,7 +123,10 @@ class MainActivity : ComponentActivity() {
 
     private val dashboardViewModel: DashboardViewModel by viewModels {
         val app = application as SyncApplication
-        DashboardViewModel.provideFactory(app.container.googleHealthManager)
+        DashboardViewModel.provideFactory(
+            app.container.googleHealthManager,
+            WidgetVisibilityPrefs(applicationContext)
+        )
     }
 
     private val googlePermissionLauncher = registerForActivityResult(
@@ -170,6 +175,9 @@ FinalBitLutShell(
             ,
                     onHistoryRangeSelected = { days ->
                         dashboardViewModel.onHistoryRangeSelected(days)
+                    },
+                    onWidgetVisibilityChanged = { widget, visible ->
+                        dashboardViewModel.setWidgetVisible(widget, visible)
                     },
                     importViewModel = importViewModel
                 )

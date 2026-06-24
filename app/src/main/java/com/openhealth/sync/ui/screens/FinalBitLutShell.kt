@@ -35,6 +35,8 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -64,6 +66,8 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.data.WorkoutTypeSummary
+import com.openhealth.sync.data.MetricBar
+import com.openhealth.sync.config.DashboardWidget
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardUiState
 import com.openhealth.sync.ui.DashboardViewModel
@@ -103,7 +107,6 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.geometry.Offset
 
 private enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
@@ -121,6 +124,7 @@ fun FinalBitLutShell(
     onSyncNow: () -> Unit,
     onImportArchive: () -> Unit = {},
     onHistoryRangeSelected: (Int) -> Unit = {},
+    onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit = { _, _ -> },
     importViewModel: ImportViewModel) {
     var selected by rememberSaveable { mutableStateOf(MainTab.Today) }
     var showArchiveImport by rememberSaveable { mutableStateOf(false) }
@@ -176,8 +180,9 @@ fun FinalBitLutShell(
             } else when (selected) {
                 MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, onRequestGoogle)
                 MainTab.SevenDays -> HistoryScreen(palette, dashboardState, onRequestGoogle, onHistoryRangeSelected)
-                MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, onRequestGoogle, onRequestHuawei, onSyncNow,
-                    onImportArchive = { showArchiveImport = true })
+                MainTab.Settings -> SettingsScreen(palette, syncState, dashboardState, onRefresh, onRequestGoogle, onRequestHuawei, onSyncNow,
+                    onImportArchive = { showArchiveImport = true },
+                    onWidgetVisibilityChanged = onWidgetVisibilityChanged)
             }
         }
     }
@@ -217,41 +222,51 @@ private fun SummaryScreen(
                 )
             }
         } else {
-            item {
-                MinimalMetricCard(
-                    palette = palette,
-                    title = stringResource(R.string.steps_today),
-                    value = formatNumber(state.stepsToday),
-                    unit = stringResource(R.string.steps_unit),
-                    accent = HealthAccent.activity,
-                    progress = state.stepsProgress
-                )
+            if (state.isWidgetVisible(DashboardWidget.STEPS)) {
+                item {
+                    MinimalMetricCard(
+                        palette = palette,
+                        title = stringResource(R.string.steps_today),
+                        value = formatNumber(state.stepsToday),
+                        unit = stringResource(R.string.steps_unit),
+                        accent = HealthAccent.activity,
+                        progress = state.stepsProgress
+                    )
+                }
             }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    MinimalSquareTile(
-                        palette = palette,
-                        icon = "♥",
-                        label = stringResource(R.string.heart_today),
-                        value = state.heartRateBpm?.let { "$it ${stringResource(R.string.bpm_unit)}" }
-                            ?: stringResource(R.string.no_data_short),
-                        accent = HealthAccent.heart,
-                        modifier = Modifier.weight(1f),
-                        onClick = null
-                    )
-                    MinimalSquareTile(
-                        palette = palette,
-                        icon = "☾",
-                        label = stringResource(R.string.sleep_today),
-                        value = "${formatOneDecimal(state.sleepHours.toDouble())} ${stringResource(R.string.hours_unit)}",
-                        accent = HealthAccent.sleep,
-                        modifier = Modifier.weight(1f),
-                        progress = coerceProgress(state.sleepHours.toDouble(), SLEEP_GOAL_HOURS),
-                        onClick = null
-                    )
+            val showHeart = state.isWidgetVisible(DashboardWidget.HEART_RATE)
+            val showSleep = state.isWidgetVisible(DashboardWidget.SLEEP)
+            if (showHeart || showSleep) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (showHeart) {
+                            MinimalSquareTile(
+                                palette = palette,
+                                icon = "♥",
+                                label = stringResource(R.string.heart_today),
+                                value = state.heartRateBpm?.let { "$it ${stringResource(R.string.bpm_unit)}" }
+                                    ?: stringResource(R.string.no_data_short),
+                                accent = HealthAccent.heart,
+                                modifier = Modifier.weight(1f),
+                                onClick = null
+                            )
+                        }
+                        if (showSleep) {
+                            MinimalSquareTile(
+                                palette = palette,
+                                icon = "☾",
+                                label = stringResource(R.string.sleep_today),
+                                value = "${formatOneDecimal(state.sleepHours.toDouble())} ${stringResource(R.string.hours_unit)}",
+                                accent = HealthAccent.sleep,
+                                modifier = Modifier.weight(1f),
+                                progress = coerceProgress(state.sleepHours.toDouble(), SLEEP_GOAL_HOURS),
+                                onClick = null
+                            )
+                        }
+                    }
                 }
             }
             item {
@@ -308,63 +323,53 @@ private fun HistoryScreen(
             }
         } else {
             val rangeDays = state.selectedHistoryRangeDays
-            val stepAvg = (state.weeklySteps).map { it.steps.toDouble() }.safeAverage()
-            val sleepAvg = state.weeklySleep.map { it.value ?: 0.0 }.filter { it > 0.0 }.safeAverage()
-            val heartAvg = state.weeklyHeartRate.map { it.value ?: 0.0 }.filter { it > 0.0 }.safeAverage()
+            val stepsTotal = state.stepsBars.sumOf { it.value }
+            val heartAvg = state.heartRateBars.map { it.value }.filter { it > 0.0 }.safeAverage()
+            val sleepTotal = state.sleepBars.sumOf { it.value }
 
-            item {
-                MinimalMetricCard(
-                    palette = palette,
-                    title = stringResource(R.string.steps_label_days, rangeDays),
-                    value = formatNumber(stepAvg.toLong()),
-                    unit = stringResource(R.string.avg_label_days, rangeDays),
-                    accent = HealthAccent.activity
-                )
-            }
-            item {
-                WeeklySparklineCard(
-                    palette = palette,
-                    title = stringResource(R.string.steps_label_days, rangeDays),
-                    values = state.weeklySteps.map { it.steps.toDouble() },
-                    accent = HealthAccent.activity
-                )
-            }
-            item {
-                MinimalMetricCard(
-                    palette = palette,
-                    title = stringResource(R.string.heart_label_days, rangeDays),
-                    value = if (heartAvg > 0.0) heartAvg.toLong().toString() else stringResource(R.string.no_data_short),
-                    unit = stringResource(R.string.bpm_unit),
-                    accent = HealthAccent.heart
-                )
-            }
-            item {
-                WeeklySparklineCard(
-                    palette = palette,
-                    title = stringResource(R.string.heart_label_days, rangeDays),
-                    values = state.weeklyHeartRate.map { it.value ?: 0.0 },
-                    accent = HealthAccent.heart
-                )
-            }
-            item {
-                MinimalMetricCard(
-                    palette = palette,
-                    title = stringResource(R.string.sleep_label_days, rangeDays),
-                    value = formatOneDecimal(sleepAvg),
-                    unit = stringResource(R.string.hours_unit),
-                    accent = HealthAccent.sleep
-                )
-            }
-            item {
-                WeeklySparklineCard(
-                    palette = palette,
-                    title = stringResource(R.string.sleep_label_days, rangeDays),
-                    values = state.weeklySleep.map { it.value ?: 0.0 },
-                    accent = HealthAccent.sleep
-                )
+            if (state.isWidgetVisible(DashboardWidget.STEPS)) {
+                item {
+                    MetricBarChartCard(
+                        palette = palette,
+                        title = stringResource(R.string.steps_label_days, rangeDays),
+                        periodValueLabel = stringResource(R.string.period_total_steps, formatNumber(stepsTotal.toLong())),
+                        bars = state.stepsBars,
+                        accent = HealthAccent.activity,
+                        valueFormatter = { formatNumber(it.toLong()) }
+                    )
+                }
             }
 
-            if (state.workoutSummaries.isNotEmpty()) {
+            if (state.isWidgetVisible(DashboardWidget.HEART_RATE)) {
+                item {
+                    MetricBarChartCard(
+                        palette = palette,
+                        title = stringResource(R.string.heart_label_days, rangeDays),
+                        periodValueLabel = if (heartAvg > 0.0)
+                            stringResource(R.string.period_avg_heart, heartAvg.toLong().toString())
+                        else
+                            stringResource(R.string.no_data_short),
+                        bars = state.heartRateBars,
+                        accent = HealthAccent.heart,
+                        valueFormatter = { it.toLong().toString() }
+                    )
+                }
+            }
+
+            if (state.isWidgetVisible(DashboardWidget.SLEEP)) {
+                item {
+                    MetricBarChartCard(
+                        palette = palette,
+                        title = stringResource(R.string.sleep_label_days, rangeDays),
+                        periodValueLabel = stringResource(R.string.period_total_sleep, formatOneDecimal(sleepTotal)),
+                        bars = state.sleepBars,
+                        accent = HealthAccent.sleep,
+                        valueFormatter = { formatOneDecimal(it) }
+                    )
+                }
+            }
+
+            if (state.isWidgetVisible(DashboardWidget.WORKOUTS) && state.workoutSummaries.isNotEmpty()) {
                 item {
                     Text(
                         text = stringResource(R.string.workouts_section_title),
@@ -478,11 +483,13 @@ private fun WorkoutTypeCard(
 private fun SettingsScreen(
     palette: BitPalette,
     syncState: SyncUiState,
+    dashboardState: DashboardUiState,
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit,
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
-    onImportArchive: () -> Unit
+    onImportArchive: () -> Unit,
+    onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit
 ) {
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -540,6 +547,96 @@ private fun SettingsScreen(
                 onSecondaryAction = onImportArchive
             )
         }
+
+        item {
+            Text(
+                text = stringResource(R.string.widget_visibility_section_title),
+                color = palette.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 18.sp,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        item {
+            SoftCard(palette = palette, accent = HealthAccent.activity, hero = false) {
+                Text(
+                    text = stringResource(R.string.widget_visibility_section_body),
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    lineHeight = 17.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                WidgetVisibilityRow(
+                    palette = palette,
+                    label = stringResource(R.string.widget_toggle_steps),
+                    accent = HealthAccent.activity,
+                    checked = dashboardState.isWidgetVisible(DashboardWidget.STEPS),
+                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.STEPS, it) }
+                )
+                WidgetVisibilityRow(
+                    palette = palette,
+                    label = stringResource(R.string.widget_toggle_heart),
+                    accent = HealthAccent.heart,
+                    checked = dashboardState.isWidgetVisible(DashboardWidget.HEART_RATE),
+                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.HEART_RATE, it) }
+                )
+                WidgetVisibilityRow(
+                    palette = palette,
+                    label = stringResource(R.string.widget_toggle_sleep),
+                    accent = HealthAccent.sleep,
+                    checked = dashboardState.isWidgetVisible(DashboardWidget.SLEEP),
+                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.SLEEP, it) }
+                )
+                WidgetVisibilityRow(
+                    palette = palette,
+                    label = stringResource(R.string.widget_toggle_workouts),
+                    accent = HealthAccent.activity,
+                    checked = dashboardState.isWidgetVisible(DashboardWidget.WORKOUTS),
+                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.WORKOUTS, it) },
+                    isLast = true
+                )
+            }
+        }
+    }
+}
+
+/** Single toggle row inside the Widgets settings card: label + Switch. [isLast]
+ *  suppresses the bottom spacer so the card doesn't end with extra trailing gap. */
+@Composable
+private fun WidgetVisibilityRow(
+    palette: BitPalette,
+    label: String,
+    accent: Color,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    isLast: Boolean = false
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = palette.text,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = accent,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = palette.stroke
+            )
+        )
+    }
+    if (!isLast) {
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -866,23 +963,30 @@ private fun coerceProgress(value: Double, goal: Double): Float =
     if (goal <= 0.0) 0f else (value / goal).toFloat().coerceIn(0f, 1f)
 
 /**
- * 7-day trend card for History: a thick rounded sparkline line with a soft
- * gradient fill underneath, in the Material 3 Expressive style described in
- * the design brief. Title/value reuse the same strings as the existing
- * 7-day average cards — this card supplements them, it doesn't replace them.
+ * Combined count + trend widget for History: shows the period-aggregate value at
+ * the top (e.g. total steps across the selected range) and a proportional-height
+ * bar chart below it, one bar per MetricBar from computeMetricBarRanges, each
+ * labeled with its value and a short date label. This replaces the earlier design
+ * of two separate cards (an average-value card plus a standalone sparkline card)
+ * with a single merged widget, per the latest design direction.
  *
- * Safe by construction for the data shapes that actually reach it:
- * - empty list -> flat line at mid-height (no crash, no divide-by-zero)
- * - single-point list -> flat line at mid-height (a "trend" needs >=2 points)
- * - all-equal values (e.g. all zeros, no data yet) -> flat line, not a
- *   division-by-zero from a zero range
+ * Bar label granularity follows the bar's own date span: a single-day bar shows
+ * the day-of-month, a multi-day bar shows a week-style short range, and the
+ * 180/365-day cases (whose bars are real calendar months) show the month
+ * abbreviation in the current locale.
+ *
+ * Safe by construction: an empty bar list (e.g. permission edge case) renders
+ * nothing rather than dividing by zero; an all-zero bar list renders all bars at
+ * minimum height rather than NaN-height bars.
  */
 @Composable
-private fun WeeklySparklineCard(
+private fun MetricBarChartCard(
     palette: BitPalette,
     title: String,
-    values: List<Double>,
-    accent: Color
+    periodValueLabel: String,
+    bars: List<MetricBar>,
+    accent: Color,
+    valueFormatter: (Double) -> String
 ) {
     SoftCard(palette = palette, accent = accent, hero = false, tintWithAccent = true) {
         Text(
@@ -891,65 +995,79 @@ private fun WeeklySparklineCard(
             fontWeight = FontWeight.ExtraBold,
             fontSize = 14.sp
         )
-        Spacer(Modifier.height(12.dp))
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-        ) {
-            val w = size.width
-            val h = size.height
-            if (values.size < 2) {
-                // Not enough points for a real trend — draw a flat reference
-                // line instead of attempting to plot a single dot.
-                drawLine(
-                    color = accent.copy(alpha = 0.35f),
-                    start = Offset(0f, h / 2f),
-                    end = Offset(w, h / 2f),
-                    strokeWidth = 4.dp.toPx(),
-                    cap = StrokeCap.Round
-                )
-                return@Canvas
-            }
-
-            val maxV = values.max()
-            val minV = values.min()
-            val range = (maxV - minV).takeIf { it > 0.0 } ?: 1.0
-            // When every value is identical (including all-zero placeholder
-            // data), `range` falls back to 1.0 above purely to avoid a 0/0 —
-            // the line below still renders flat at mid-height either way.
-            val stepX = w / (values.size - 1)
-
-            val points = values.mapIndexed { index, v ->
-                val x = index * stepX
-                val normalized = if (maxV == minV) 0.5f else ((v - minV) / range).toFloat()
-                val y = h - (normalized * h * 0.78f + h * 0.11f)
-                Offset(x, y)
-            }
-
-            val fillPath = androidx.compose.ui.graphics.Path().apply {
-                moveTo(points.first().x, h)
-                points.forEach { lineTo(it.x, it.y) }
-                lineTo(points.last().x, h)
-                close()
-            }
-            drawPath(
-                path = fillPath,
-                brush = Brush.verticalGradient(
-                    listOf(accent.copy(alpha = 0.28f), accent.copy(alpha = 0.0f))
-                )
-            )
-
-            for (i in 0 until points.size - 1) {
-                drawLine(
-                    color = accent,
-                    start = points[i],
-                    end = points[i + 1],
-                    strokeWidth = 6.dp.toPx(),
-                    cap = StrokeCap.Round
-                )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = periodValueLabel,
+            color = palette.secondaryText,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.sp
+        )
+        Spacer(Modifier.height(14.dp))
+        if (bars.isNotEmpty()) {
+            val maxValue = bars.maxOf { it.value }.takeIf { it > 0.0 } ?: 1.0
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                bars.forEach { bar ->
+                    val fraction = (bar.value / maxValue).toFloat().coerceIn(0.04f, 1f)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Bottom
+                    ) {
+                        Text(
+                            text = formatBarValueShort(bar.value),
+                            color = palette.secondaryText,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 9.sp,
+                            maxLines = 1
+                        )
+                        Spacer(Modifier.height(3.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(fraction)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(accent.copy(alpha = 0.85f))
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = barDateLabel(bar),
+                            color = palette.secondaryText,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 9.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+/** Short numeric label above a bar (e.g. "1.2k" for 1200 steps, "72" for bpm). */
+private fun formatBarValueShort(value: Double): String = when {
+    value <= 0.0 -> "0"
+    value >= 1000.0 -> String.format(Locale.getDefault(), "%.1fk", value / 1000.0)
+    value == value.toLong().toDouble() -> value.toLong().toString()
+    else -> String.format(Locale.getDefault(), "%.1f", value)
+}
+
+/** Short date label under a bar: day-of-month for single-day bars, month
+ *  abbreviation for real calendar-month bars (180/365-day ranges), otherwise a
+ *  compact day-range for the multi-day week-style buckets. */
+private fun barDateLabel(bar: MetricBar): String {
+    val isWholeMonth = bar.startDate.dayOfMonth == 1 &&
+        bar.endDate == bar.startDate.plusMonths(1).minusDays(1)
+    return when {
+        isWholeMonth -> bar.startDate.month.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault())
+        bar.startDate == bar.endDate -> bar.startDate.dayOfMonth.toString()
+        else -> "${bar.startDate.dayOfMonth}–${bar.endDate.dayOfMonth}"
     }
 }
 

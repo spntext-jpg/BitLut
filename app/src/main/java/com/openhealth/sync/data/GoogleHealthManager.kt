@@ -60,6 +60,72 @@ data class WorkoutTypeSummary(
     val totalDurationMinutes: Long
 )
 
+/** One bar in a History bar-chart widget: an aggregated value over [startDate]..[endDate]. */
+data class MetricBar(
+    val startDate: LocalDate,
+    val endDate: LocalDate,
+    val value: Double
+)
+
+/**
+ * Computes the exact (start, end) date range for each bar a History widget should show,
+ * for a given [daysBack] range selection. This is the single source of truth for the
+ * "7 days -> 7 daily bars, 30 days -> 5 ~6-day bars, 180 days -> 6 calendar months" etc.
+ * bucketing table, used by every per-metric bar-aggregation function below so the bucket
+ * boundaries can never drift between steps/heart-rate/sleep.
+ *
+ * Critically, this also bounds the number of aggregate() calls a refresh ever makes per
+ * metric to at most 13 (the 90-day case) regardless of how large daysBack is — this is
+ * what keeps History range changes from ever approaching Health Connect's documented
+ * rate limits, no matter which range the person picks.
+ */
+fun computeMetricBarRanges(daysBack: Int, today: LocalDate = LocalDate.now()): List<Pair<LocalDate, LocalDate>> {
+    return when (daysBack) {
+        7 -> (0 until 7).map { i ->
+            val d = today.minusDays((6 - i).toLong())
+            d to d
+        }
+        14 -> (0 until 7).map { i ->
+            val start = today.minusDays((13 - i * 2).toLong())
+            val end = start.plusDays(1)
+            start to end
+        }
+        30 -> bucketsOfEqualSize(daysBack, bucketCount = 5, today = today)
+        60 -> bucketsOfEqualSize(daysBack, bucketCount = 8, today = today)
+        90 -> bucketsOfEqualSize(daysBack, bucketCount = 13, today = today)
+        180 -> calendarMonthBuckets(monthCount = 6, today = today)
+        365 -> calendarMonthBuckets(monthCount = 12, today = today)
+        else -> bucketsOfEqualSize(daysBack, bucketCount = (daysBack / 7).coerceIn(1, 13), today = today)
+    }
+}
+
+/** Splits the last [totalDays] days into [bucketCount] buckets of (nearly) equal size,
+ *  oldest-first, with any remainder days absorbed into the earliest buckets so the most
+ *  recent bucket (today's) is never the odd-sized one. */
+private fun bucketsOfEqualSize(totalDays: Int, bucketCount: Int, today: LocalDate): List<Pair<LocalDate, LocalDate>> {
+    val startDate = today.minusDays((totalDays - 1).toLong())
+    val baseSize = totalDays / bucketCount
+    val remainder = totalDays % bucketCount
+    val ranges = mutableListOf<Pair<LocalDate, LocalDate>>()
+    var cursor = startDate
+    for (i in 0 until bucketCount) {
+        val size = baseSize + if (i < remainder) 1 else 0
+        val end = cursor.plusDays((size - 1).toLong())
+        ranges.add(cursor to end)
+        cursor = end.plusDays(1)
+    }
+    return ranges
+}
+
+/** Builds [monthCount] real calendar-month buckets ending in the current month. */
+private fun calendarMonthBuckets(monthCount: Int, today: LocalDate): List<Pair<LocalDate, LocalDate>> {
+    return (0 until monthCount).map { i ->
+        val monthStart = today.withDayOfMonth(1).minusMonths((monthCount - 1 - i).toLong())
+        val monthEnd = monthStart.plusMonths(1).minusDays(1)
+        monthStart to minOf(monthEnd, today)
+    }
+}
+
 class GoogleHealthManager(private val context: Context) {
 
     private fun generateRecordId(
@@ -352,41 +418,38 @@ class GoogleHealthManager(private val context: Context) {
     /**
      * Daily step totals for the last [daysBack] days (inclusive of today).
      *
-     * Uses one aggregate() call per day rather than a single aggregateGroupByPeriod
-     * call. aggregateGroupByPeriod would be the more elegant single-call option, but
-     * its per-bucket result object's exact start/end field could not be confirmed
-     * against official documentation with full certainty, and this code ships close
-     * to a store review window — so we use the AggregateRequest + response[metric]
-     * pattern instead, which is documented verbatim in Android's official Health
-     * Connect guide. The cost is daysBack calls instead of one, but these are local
-     * IPC calls to the on-device Health Connect service, not network requests, so
-     * this remains cheap even at the maximum 365-day range.
+     * Uses one aggregate() call per BAR (see computeMetricBarRanges), not per day —
+     * this bounds the number of calls to at most 13 regardless of how large daysBack
+     * is, which is what keeps History range changes from approaching Health Connect's
+     * documented rate limits. (An earlier version of this function called aggregate()
+     * once per day, which meant up to 365 sequential calls on a single refresh at the
+     * widest range — that was traced to the intermittent "Connect Google Health"
+     * regression: enough IPC pressure on the Health Connect service to disrupt the
+     * permission check that runs at the start of every refresh.)
      *
      * For cumulative types like StepsRecord, aggregate() is also the documented-
      * correct choice over readRecords() + manual summing, since it avoids double
      * counting from multiple data sources.
      */
-    suspend fun readDailySteps(daysBack: Int): List<Pair<LocalDate, Long>> {
+    suspend fun readStepsBars(daysBack: Int): List<MetricBar> {
         val c = healthConnectClient ?: return emptyList()
-        val today = LocalDate.now()
-        val startDate = today.minusDays((daysBack - 1).toLong())
-        return (0 until daysBack).map { offset ->
-            val date = startDate.plusDays(offset.toLong())
-            val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+        val ranges = computeMetricBarRanges(daysBack)
+        return ranges.map { (start, end) ->
+            val rangeStart = start.atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val rangeEnd = end.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
             val steps = try {
                 val response = c.aggregate(
                     AggregateRequest(
                         metrics = setOf(StepsRecord.COUNT_TOTAL),
-                        timeRangeFilter = TimeRangeFilter.between(dayStart, dayEnd)
+                        timeRangeFilter = TimeRangeFilter.between(rangeStart, rangeEnd)
                     )
                 )
                 response[StepsRecord.COUNT_TOTAL] ?: 0L
             } catch (e: Exception) {
-                AppLogger.e(TAG, "readDailySteps failed for $date: ${e.message}")
+                AppLogger.e(TAG, "readStepsBars failed for $start..$end: ${e.message}")
                 0L
             }
-            date to steps
+            MetricBar(start, end, steps.toDouble())
         }
     }
 
@@ -611,72 +674,69 @@ class GoogleHealthManager(private val context: Context) {
     }
 
     /**
-     * Daily sleep duration (hours) for the last [daysBack] days. Kept as readRecords()
-     * with manual per-day clipping (not aggregate()) because SleepSessionRecord volume
-     * is inherently low — realistically one session per night — so even at the maximum
-     * 365-day range this never approaches the per-record volume that made the
-     * equivalent step/heart-rate functions worth converting to aggregate() calls.
+     * Sleep duration (hours) per bar for the last [daysBack] days (see
+     * computeMetricBarRanges for how daysBack maps to bar boundaries). Kept as a
+     * single readRecords() call with manual per-bar clipping (not aggregate()) because
+     * SleepSessionRecord volume is inherently low — realistically one session per
+     * night — so even at the maximum 365-day range this never approaches the
+     * per-record volume that made the step/heart-rate functions worth converting to
+     * aggregate(). This was never part of the rate-limit issue (it was always exactly
+     * one IPC call regardless of daysBack); converted to bars here purely so the
+     * History bar-chart widget has matching bar boundaries across all three metrics.
      */
-    suspend fun readDailySleep(daysBack: Int): List<Pair<LocalDate, Double>> {
+    suspend fun readSleepBars(daysBack: Int): List<MetricBar> {
         val c = healthConnectClient ?: return emptyList()
+        val ranges = computeMetricBarRanges(daysBack)
         return try {
-            val today = LocalDate.now()
-            val startDate = today.minusDays((daysBack - 1).toLong())
-            val start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val end = today.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val overallStart = ranges.first().first.atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val overallEnd = ranges.last().second.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
             val req = ReadRecordsRequest(
                 recordType = SleepSessionRecord::class,
-                timeRangeFilter = TimeRangeFilter.between(start, end)
+                timeRangeFilter = TimeRangeFilter.between(overallStart, overallEnd)
             )
             val records = c.readRecords(req).records
-            (0 until daysBack).map { offset ->
-                val date = startDate.plusDays(offset.toLong())
-                val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-                val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            ranges.map { (start, end) ->
+                val rangeStart = start.atStartOfDay(ZoneId.systemDefault()).toInstant()
+                val rangeEnd = end.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
                 val hours = records
-                    .filter { it.endTime > dayStart && it.startTime < dayEnd }
+                    .filter { it.endTime > rangeStart && it.startTime < rangeEnd }
                     .sumOf { session ->
-                        val clippedStart = maxOf(session.startTime, dayStart)
-                        val clippedEnd = minOf(session.endTime, dayEnd)
+                        val clippedStart = maxOf(session.startTime, rangeStart)
+                        val clippedEnd = minOf(session.endTime, rangeEnd)
                         (clippedEnd.toEpochMilli() - clippedStart.toEpochMilli()).coerceAtLeast(0L)
                     } / 3_600_000.0
-                date to hours
+                MetricBar(start, end, hours)
             }
         } catch (e: Exception) {
-            AppLogger.e(TAG, "readDailySleep failed: ${e.message}")
+            AppLogger.e(TAG, "readSleepBars failed: ${e.message}")
             emptyList()
         }
     }
 
     /**
-     * Daily average heart rate for the last [daysBack] days. Uses one aggregate()
-     * call per day (HeartRateRecord.BPM_AVG) rather than reading all raw samples and
-     * filtering per day — heart rate samples can be high-frequency (continuous
-     * wearable sampling), so the old manual-filter approach risked the same
-     * O(days x records) cost that was fixed for steps, and aggregate() is also the
-     * officially recommended approach for this kind of statistical aggregation.
+     * Average heart rate per bar for the last [daysBack] days. Uses one aggregate()
+     * call per BAR (see computeMetricBarRanges), not per day — same fix as
+     * readStepsBars, bounding the call count to at most 13 regardless of range.
      */
-    suspend fun readDailyAverageHeartRate(daysBack: Int): List<Pair<LocalDate, Long?>> {
+    suspend fun readHeartRateBars(daysBack: Int): List<MetricBar> {
         val c = healthConnectClient ?: return emptyList()
-        val today = LocalDate.now()
-        val startDate = today.minusDays((daysBack - 1).toLong())
-        return (0 until daysBack).map { offset ->
-            val date = startDate.plusDays(offset.toLong())
-            val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+        val ranges = computeMetricBarRanges(daysBack)
+        return ranges.map { (start, end) ->
+            val rangeStart = start.atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val rangeEnd = end.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
             val avg = try {
                 val response = c.aggregate(
                     AggregateRequest(
                         metrics = setOf(HeartRateRecord.BPM_AVG),
-                        timeRangeFilter = TimeRangeFilter.between(dayStart, dayEnd)
+                        timeRangeFilter = TimeRangeFilter.between(rangeStart, rangeEnd)
                     )
                 )
-                response[HeartRateRecord.BPM_AVG]
+                response[HeartRateRecord.BPM_AVG]?.toDouble() ?: 0.0
             } catch (e: Exception) {
-                AppLogger.e(TAG, "readDailyAverageHeartRate failed for $date: ${e.message}")
-                null
+                AppLogger.e(TAG, "readHeartRateBars failed for $start..$end: ${e.message}")
+                0.0
             }
-            date to avg
+            MetricBar(start, end, avg)
         }
     }
 
