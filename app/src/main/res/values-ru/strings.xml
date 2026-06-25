@@ -182,6 +182,10 @@
     <string name="loading">Загрузка…</string>
     <string name="status_error">Что-то пошло не так</string>
     <string name="toast_hc_permissions">Разрешите все запрошенные доступы Health Connect для импорта и экспорта данных Huawei Health.</string>
+    <string name="toast_hc_not_installed">Health Connect не установлен на этом устройстве. Установите его из магазина приложений, чтобы подключить Google Health.</string>
+    <string name="toast_hc_needs_update">Health Connect нужно обновить. Обновите его, чтобы подключить Google Health.</string>
+    <string name="toast_hc_not_supported">Этот телефон не поддерживает Health Connect.</string>
+    <string name="toast_hc_launch_failed">Не удалось открыть экран разрешений Health Connect. Попробуйте ещё раз.</string>
     <string name="tab_today">Сегодня</string>
     <string name="summary_short_title">Сводка</string>
     <string name="history_short_title">История</string>

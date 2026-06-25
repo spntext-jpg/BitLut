@@ -153,12 +153,15 @@ class GoogleHealthManager(private val context: Context) {
     fun requiredPermissions(): Set<String> = HealthPermissionPolicy.syncPermissions
 
 
-    // Visible sprint mode: Google Health dashboard only.
-    // Huawei import and Health Connect write pipeline stay in the codebase for post-approval enablement.
-    // KISS: runtime UI asks only for the permissions needed by the current visible product.
+    // Visible sprint mode: Google Health dashboard. Must include every record type the
+    // dashboard actually reads (Summary/History show Steps, Sleep, and Heart Rate) --
+    // previously this only listed Steps+Exercise, which left Sleep/HeartRate reads
+    // silently failing with no permission even though hasAllPermissions() reported true.
     val dashboardPermissions: Set<String> = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(SleepSessionRecord::class),
+        HealthPermission.getReadPermission(HeartRateRecord::class)
     )
 
     // Future Huawei import mode. Do not use at runtime until Huawei Health Kit approval is granted.
@@ -176,7 +179,8 @@ class GoogleHealthManager(private val context: Context) {
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
-        HealthPermission.getWritePermission(SleepSessionRecord::class)
+        HealthPermission.getWritePermission(SleepSessionRecord::class),
+        HealthPermission.getReadPermission(HeartRateRecord::class)
     )
 
     val permissions: Set<String> = dashboardPermissions
