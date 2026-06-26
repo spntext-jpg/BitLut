@@ -16,16 +16,23 @@ import androidx.health.connect.client.records.StepsRecord
  * Coverage target mirrors Huawei Basic Sport Health Data:
  * - Step -> StepsRecord
  * - Distance, ascent & altitude -> Distance/Floors/Elevation records
- * - Active Hours / Daily Activity Summary -> Activity Intensity permission strings where supported
  * - Activity record / Activity -> ExerciseSessionRecord
  *
- * ActivityIntensityRecord is not referenced as a Kotlin class to keep the build compatible with
- * the current Health Connect dependency. The permission strings are still requested when the
- * installed Health Connect build supports them.
+ * Activity Intensity (READ_ACTIVITY_INTENSITY / WRITE_ACTIVITY_INTENSITY) is
+ * intentionally NOT requested. AndroidX release notes confirm Activity
+ * Intensity support was only added in connect-client 1.2.0-alpha03 ("Enable
+ * support for activity intensity for Health Connect APK") -- this project
+ * depends on 1.1.0-alpha11, which predates that support. The system
+ * permission screen can still show a toggle for it (the on-device Health
+ * Connect APK can be newer than this app's bundled client library), but
+ * getGrantedPermissions() through the older client does not reliably
+ * reflect it as granted even when the toggle is on. Including these two
+ * permission strings made containsAll(permissions) permanently false --
+ * every other permission could be genuinely granted and the app would
+ * still report "not connected" and read nothing. Re-add these once the
+ * project upgrades to connect-client 1.2.0 or newer.
  */
 object HealthPermissionPolicy {
-    private const val READ_ACTIVITY_INTENSITY = "android.permission.health.READ_ACTIVITY_INTENSITY"
-    private const val WRITE_ACTIVITY_INTENSITY = "android.permission.health.WRITE_ACTIVITY_INTENSITY"
 
     val dashboardReadPermissions: Set<String> = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
@@ -36,7 +43,6 @@ object HealthPermissionPolicy {
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(HeartRateRecord::class),
-        READ_ACTIVITY_INTENSITY,
     )
 
     val importWritePermissions: Set<String> = setOf(
@@ -48,7 +54,6 @@ object HealthPermissionPolicy {
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
         HealthPermission.getWritePermission(SleepSessionRecord::class),
         HealthPermission.getWritePermission(HeartRateRecord::class),
-        WRITE_ACTIVITY_INTENSITY,
     )
 
     /**
