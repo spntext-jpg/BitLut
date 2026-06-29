@@ -151,8 +151,10 @@ if policy_file.exists():
         errors.append("HealthPermissionPolicy must keep SpO2/HRV as optional dashboard permissions")
     if "val syncPermissions: Set<String> = dashboardReadPermissions + importWritePermissions" not in p:
         errors.append("syncPermissions must exclude optional dashboard-only permissions")
-    if "val requestPermissions: Set<String> = syncPermissions + optionalDashboardReadPermissions" not in p:
-        errors.append("UI permission request should include optional dashboard permissions without blocking sync")
+    if "val optionalDashboardReadPermissions: Set<String> = emptySet()" not in p:
+        errors.append("Optional dashboard permissions must stay disabled until Huawei/Health Connect scope expansion is approved")
+    if "val requestPermissions: Set<String> = syncPermissions" not in p:
+        errors.append("UI permission request must not expand beyond approved sync permissions")
 
 if google_file.exists():
     g = google_file.read_text(encoding="utf-8")
