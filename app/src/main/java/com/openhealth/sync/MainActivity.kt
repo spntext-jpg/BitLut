@@ -68,8 +68,10 @@ import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 import com.openhealth.sync.util.AppLogger
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.launch
 import com.openhealth.sync.ui.ImportViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 
 private const val UNIQUE_SYNC_NOW = "bitlut_sync_now"
 private const val UNIQUE_PERIODIC_SYNC = "bitlut_periodic_sync"
@@ -198,6 +200,23 @@ FinalBitLutShell(
     }
 
     private fun triggerImmediateSync() {
+        syncViewModel.markSyncStarted()
+
+        lifecycleScope.launch {
+            val missing = syncViewModel.googleManager.missingRequiredPermissions()
+            if (missing.isNotEmpty()) {
+                syncViewModel.markSyncCompleted(false)
+                AppLogger.w("MainActivity", "Sync blocked by missing Health Connect permissions: $missing")
+                Toast.makeText(this@MainActivity, getString(R.string.toast_hc_permissions), Toast.LENGTH_LONG).show()
+                requestGoogleHealthPermissions()
+                return@launch
+            }
+
+            syncNowAfterPermissionCheck()
+        }
+    }
+
+    private fun syncNowAfterPermissionCheck() {
         syncViewModel.markSyncStarted()
         val requestId = BackgroundSyncScheduler.enqueueImmediateSync(this)
         WorkManager.getInstance(this).getWorkInfoByIdLiveData(requestId).observe(this) { info ->

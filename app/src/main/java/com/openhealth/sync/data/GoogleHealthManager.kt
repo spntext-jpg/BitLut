@@ -184,7 +184,7 @@ class GoogleHealthManager(private val context: Context) {
     // importantly meant the Huawei->Health Connect write path could never succeed:
     // SyncWorker checks hasAllPermissions() before writeSnapshot(), but the UI never
     // requested write permissions at all.
-    val permissions: Set<String> = requiredPermissions()
+    val permissions: Set<String> = HealthPermissionPolicy.requestPermissions
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
 
@@ -243,12 +243,23 @@ class GoogleHealthManager(private val context: Context) {
         return null
     }
 
+    suspend fun missingRequiredPermissions(): Set<String> {
+        val c = healthConnectClient ?: return requiredPermissions()
+        return try {
+            val granted = c.permissionController.getGrantedPermissions()
+            requiredPermissions() - granted
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Missing permission check failed: ${e.message}", e)
+            requiredPermissions()
+        }
+    }
+
     suspend fun hasAllPermissions(): Boolean {
         val c = healthConnectClient ?: return false
         return try {
             val granted = c.permissionController.getGrantedPermissions()
             AppLogger.d(TAG, "Granted permissions: $granted")
-            granted.containsAll(permissions)
+            granted.containsAll(requiredPermissions())
         } catch (e: Exception) {
             AppLogger.e(TAG, "Permission check failed: ${e.message}", e)
             false

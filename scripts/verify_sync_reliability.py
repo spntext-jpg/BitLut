@@ -139,6 +139,35 @@ if main_activity.exists():
     if "BackgroundSyncScheduler.enqueueImmediateSync(this)" not in ma:
         errors.append("MainActivity must delegate immediate sync to BackgroundSyncScheduler")
 
+
+# Permission regression guardrails for v1.9.6.
+policy_file = root / "app/src/main/java/com/openhealth/sync/config/HealthPermissionPolicy.kt"
+google_file = root / "app/src/main/java/com/openhealth/sync/data/GoogleHealthManager.kt"
+main_file = root / "app/src/main/java/com/openhealth/sync/MainActivity.kt"
+
+if policy_file.exists():
+    p = policy_file.read_text(encoding="utf-8")
+    if "optionalDashboardReadPermissions" not in p:
+        errors.append("HealthPermissionPolicy must keep SpO2/HRV as optional dashboard permissions")
+    if "val syncPermissions: Set<String> = dashboardReadPermissions + importWritePermissions" not in p:
+        errors.append("syncPermissions must exclude optional dashboard-only permissions")
+    if "val requestPermissions: Set<String> = syncPermissions + optionalDashboardReadPermissions" not in p:
+        errors.append("UI permission request should include optional dashboard permissions without blocking sync")
+
+if google_file.exists():
+    g = google_file.read_text(encoding="utf-8")
+    if "val permissions: Set<String> = HealthPermissionPolicy.requestPermissions" not in g:
+        errors.append("GoogleHealthManager.permissions must request sync + optional dashboard permissions")
+    if "granted.containsAll(requiredPermissions())" not in g:
+        errors.append("hasAllPermissions must check only required sync permissions")
+    if "missingRequiredPermissions" not in g:
+        errors.append("GoogleHealthManager must expose missingRequiredPermissions() for sync preflight")
+
+if main_file.exists():
+    m = main_file.read_text(encoding="utf-8")
+    if "missingRequiredPermissions()" not in m or "requestGoogleHealthPermissions()" not in m:
+        errors.append("Sync Now must launch Health Connect permission request when required permissions are missing")
+
 if errors:
     print("Sync reliability verification failed:")
     for e in errors:

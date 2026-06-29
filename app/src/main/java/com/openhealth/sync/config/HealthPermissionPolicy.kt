@@ -45,8 +45,17 @@ object HealthPermissionPolicy {
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(HeartRateRecord::class),
-        HealthPermission.getReadPermission(OxygenSaturationRecord::class),
-        HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
+    )
+
+
+    /**
+     * Optional dashboard-only reads.
+     *
+     * These records are useful for SpO2 and stress widgets, but they must never
+     * block Huawei -> Health Connect sync. Some devices/providers do not expose
+     * these categories, and older grants may not include them.
+     */
+    val optionalDashboardReadPermissions: Set<String> = setOf(
     )
 
     val importWritePermissions: Set<String> = setOf(
@@ -66,8 +75,11 @@ object HealthPermissionPolicy {
      */
     val syncPermissions: Set<String> = dashboardReadPermissions + importWritePermissions
 
+    /** Permissions shown in the UI request sheet. Optional dashboard permissions are requested when available. */
+    val requestPermissions: Set<String> = syncPermissions + optionalDashboardReadPermissions
+
     // Backward-compatible aliases used by older screens/managers.
-    val dashboardPermissions: Set<String> = syncPermissions
+    val dashboardPermissions: Set<String> = requestPermissions
     val importPermissions: Set<String> = syncPermissions
-    val allPermissions: Set<String> = syncPermissions
+    val allPermissions: Set<String> = requestPermissions
 }
