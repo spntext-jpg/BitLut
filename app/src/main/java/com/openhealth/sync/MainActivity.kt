@@ -57,6 +57,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.openhealth.sync.data.worker.SyncWorker
+import com.openhealth.sync.data.worker.BackgroundSyncScheduler
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardUiState
 import com.openhealth.sync.ui.DashboardViewModel
@@ -198,12 +199,8 @@ FinalBitLutShell(
 
     private fun triggerImmediateSync() {
         syncViewModel.markSyncStarted()
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .build()
-        val wm = WorkManager.getInstance(this)
-        wm.enqueueUniqueWork(UNIQUE_SYNC_NOW, ExistingWorkPolicy.REPLACE, request)
-        wm.getWorkInfoByIdLiveData(request.id).observe(this) { info ->
+        val requestId = BackgroundSyncScheduler.enqueueImmediateSync(this)
+        WorkManager.getInstance(this).getWorkInfoByIdLiveData(requestId).observe(this) { info ->
             when (info?.state) {
                 WorkInfo.State.SUCCEEDED -> {
                     syncViewModel.markSyncCompleted(true)
@@ -216,14 +213,7 @@ FinalBitLutShell(
     }
 
     private fun setupPeriodicSync() {
-        val request = PeriodicWorkRequestBuilder<SyncWorker>(6, TimeUnit.HOURS)
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .build()
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            UNIQUE_PERIODIC_SYNC,
-            ExistingPeriodicWorkPolicy.UPDATE,
-            request
-        )
+        BackgroundSyncScheduler.schedulePeriodic(this)
     }
 
     private fun openHuaweiArchiveImport() {

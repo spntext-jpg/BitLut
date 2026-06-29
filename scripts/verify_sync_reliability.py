@@ -7,6 +7,10 @@ root = Path(".")
 google = root / "app/src/main/java/com/openhealth/sync/data/GoogleHealthManager.kt"
 huawei = root / "app/src/main/java/com/openhealth/sync/data/HuaweiHealthManager.kt"
 dashboard_vm = root / "app/src/main/java/com/openhealth/sync/ui/DashboardViewModel.kt"
+sync_worker = root / "app/src/main/java/com/openhealth/sync/data/worker/SyncWorker.kt"
+background_scheduler = root / "app/src/main/java/com/openhealth/sync/data/worker/BackgroundSyncScheduler.kt"
+sync_reliability = root / "app/src/main/java/com/openhealth/sync/data/worker/SyncReliability.kt"
+main_activity = root / "app/src/main/java/com/openhealth/sync/MainActivity.kt"
 
 errors = []
 
@@ -92,6 +96,48 @@ if huawei.exists():
     h = huawei.read_text(encoding="utf-8")
     if "MAX_LOOKBACK_MS" in h and "readChunk" not in h and "chunk" not in h.lower():
         print("Warning: Huawei read chunking guardrail not yet detected. Add daily chunking in P1.")
+
+
+# Background sync reliability guardrails.
+if background_scheduler.exists():
+    bs = background_scheduler.read_text(encoding="utf-8")
+    if "SYNC_INTERVAL_MINUTES = 30L" not in bs:
+        errors.append("BackgroundSyncScheduler must request a 30-minute periodic cadence")
+    if "PeriodicWorkRequestBuilder<SyncWorker>" not in bs:
+        errors.append("BackgroundSyncScheduler must use native WorkManager periodic work")
+    if "BackoffPolicy.EXPONENTIAL" not in bs:
+        errors.append("BackgroundSyncScheduler must configure exponential WorkManager backoff")
+    if "ExistingPeriodicWorkPolicy.UPDATE" not in bs:
+        errors.append("Periodic sync must be unique and updateable")
+else:
+    errors.append("Missing BackgroundSyncScheduler.kt")
+
+if sync_reliability.exists():
+    sr = sync_reliability.read_text(encoding="utf-8")
+    for token in ["SyncCircuitBreaker", "SyncRunLease", "SyncRetryPolicy", "SyncWindowPlanner", "OVERLAP_MS"]:
+        if token not in sr:
+            errors.append(f"SyncReliability.kt missing {token}")
+else:
+    errors.append("Missing SyncReliability.kt")
+
+if sync_worker.exists():
+    sw = sync_worker.read_text(encoding="utf-8")
+    for token in ["withTimeout", "executeWithRetries", "tryAcquire", "circuitBreaker", "GracefulNoop", "RetryableFailure"]:
+        if token not in sw:
+            errors.append(f"SyncWorker missing reliability primitive: {token}")
+    if "putLong(HuaweiConfig.KEY_LAST_SYNC_MS, window.endTimeMs)" not in sw:
+        errors.append("SyncWorker must advance last_sync_ms only after successful Health Connect write")
+    if "preserving last_sync_ms" not in sw:
+        errors.append("SyncWorker must not advance last_sync_ms on empty Huawei snapshots")
+else:
+    errors.append("Missing SyncWorker.kt")
+
+if main_activity.exists():
+    ma = main_activity.read_text(encoding="utf-8")
+    if "BackgroundSyncScheduler.schedulePeriodic(this)" not in ma:
+        errors.append("MainActivity must delegate periodic scheduling to BackgroundSyncScheduler")
+    if "BackgroundSyncScheduler.enqueueImmediateSync(this)" not in ma:
+        errors.append("MainActivity must delegate immediate sync to BackgroundSyncScheduler")
 
 if errors:
     print("Sync reliability verification failed:")
