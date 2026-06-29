@@ -231,45 +231,35 @@ private fun SummaryScreen(
                         palette = palette,
                         title = stringResource(R.string.steps_today),
                         value = formatNumber(state.stepsToday),
-                        unit = stringResource(R.string.steps_unit),
+                        unit = "${stringResource(R.string.steps_unit)} · ${stringResource(R.string.distance_today_value, formatOneDecimal(state.distanceMeters / 1000.0))} · ${stringResource(R.string.dashboard_pct_goal, (state.stepsProgress * 100).toInt())}",
                         accent = HealthAccent.activity,
                         progress = state.stepsProgress
                     )
                 }
             }
-            val showHeart = state.isWidgetVisible(DashboardWidget.HEART_RATE)
-            val showSleep = state.isWidgetVisible(DashboardWidget.SLEEP)
-            if (showHeart || showSleep) {
+
+            item {
+                DashboardWidgetGrid(
+                    palette = palette,
+                    state = state
+                )
+            }
+
+            if (state.isWidgetVisible(DashboardWidget.HEART_RATE)) {
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        if (showHeart) {
-                            MinimalSquareTile(
-                                palette = palette,
-                                icon = "♥",
-                                label = stringResource(R.string.heart_today),
-                                value = state.heartRateBpm?.let { "$it ${stringResource(R.string.bpm_unit)}" }
-                                    ?: stringResource(R.string.no_data_short),
-                                accent = HealthAccent.heart,
-                                modifier = Modifier.weight(1f),
-                                onClick = null
-                            )
-                        }
-                        if (showSleep) {
-                            MinimalSquareTile(
-                                palette = palette,
-                                icon = "☾",
-                                label = stringResource(R.string.sleep_today),
-                                value = "${formatOneDecimal(state.sleepHours.toDouble())} ${stringResource(R.string.hours_unit)}",
-                                accent = HealthAccent.sleep,
-                                modifier = Modifier.weight(1f),
-                                progress = coerceProgress(state.sleepHours.toDouble(), SLEEP_GOAL_HOURS),
-                                onClick = null
-                            )
-                        }
-                    }
+                    HeartRateWidgetCard(
+                        palette = palette,
+                        state = state
+                    )
+                }
+            }
+
+            if (state.isWidgetVisible(DashboardWidget.SLEEP)) {
+                item {
+                    SleepWidgetCard(
+                        palette = palette,
+                        state = state
+                    )
                 }
             }
             item {
@@ -482,6 +472,155 @@ private fun WorkoutTypeCard(
     }
 }
 
+
+@Composable
+private fun DashboardWidgetGrid(
+    palette: BitPalette,
+    state: DashboardUiState
+) {
+    val tiles = listOfNotNull(
+        if (state.isWidgetVisible(DashboardWidget.CALORIES))
+            Triple(stringResource(R.string.calories_active_title), "${state.caloriesKcal.toLong()}", stringResource(R.string.kcal_unit)) to HealthAccent.activity else null,
+        if (state.isWidgetVisible(DashboardWidget.WORKOUT_MINUTES))
+            Triple(stringResource(R.string.workout_minutes_title), "${state.workoutMinutesToday}", stringResource(R.string.minutes_short)) to HealthAccent.activity else null,
+        if (state.isWidgetVisible(DashboardWidget.ACTIVE_HOURS))
+            Triple(stringResource(R.string.active_hours_title), "${state.activeHoursToday}", stringResource(R.string.hours_short)) to HealthAccent.mind else null,
+        if (state.isWidgetVisible(DashboardWidget.STRESS))
+            Triple(stringResource(R.string.stress_title), state.stressScore?.toString() ?: stringResource(R.string.no_data_short), stringResource(R.string.score_100_unit)) to HealthAccent.mind else null,
+        if (state.isWidgetVisible(DashboardWidget.SPO2))
+            Triple(stringResource(R.string.spo2_title), state.spo2Percent?.let { formatOneDecimal(it) } ?: stringResource(R.string.no_data_short), "%") to HealthAccent.mind else null
+    )
+
+    if (tiles.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        tiles.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                row.forEach { item ->
+                    val data = item.first
+                    MiniMetricWidget(
+                        palette = palette,
+                        title = data.first,
+                        value = data.second,
+                        unit = data.third,
+                        accent = item.second,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniMetricWidget(
+    palette: BitPalette,
+    title: String,
+    value: String,
+    unit: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    SoftCard(palette = palette, modifier = modifier, accent = accent, hero = false, tintWithAccent = true) {
+        Text(title, color = palette.secondaryText, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(value, color = palette.text, fontWeight = FontWeight.Black, fontSize = 24.sp, maxLines = 1)
+            Spacer(Modifier.width(4.dp))
+            Text(unit, color = accent, fontWeight = FontWeight.Black, fontSize = 12.sp, modifier = Modifier.padding(bottom = 3.dp))
+        }
+    }
+}
+
+@Composable
+private fun HeartRateWidgetCard(
+    palette: BitPalette,
+    state: DashboardUiState
+) {
+    SoftCard(palette = palette, accent = HealthAccent.heart, hero = false, tintWithAccent = true) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text(stringResource(R.string.heart_today), color = palette.secondaryText, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(
+                    state.heartRateBpm?.let { "$it ${stringResource(R.string.bpm_unit)}" } ?: stringResource(R.string.no_data_short),
+                    color = palette.text,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 26.sp
+                )
+            }
+            Text("♥", color = HealthAccent.heart, fontWeight = FontWeight.Black, fontSize = 28.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+        MiniSparkline(
+            bars = state.heartRateTodayBars,
+            accent = HealthAccent.heart,
+            modifier = Modifier.fillMaxWidth().height(52.dp)
+        )
+    }
+}
+
+@Composable
+private fun SleepWidgetCard(
+    palette: BitPalette,
+    state: DashboardUiState
+) {
+    SoftCard(palette = palette, accent = HealthAccent.sleep, hero = false, tintWithAccent = true) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text(stringResource(R.string.sleep_today), color = palette.secondaryText, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(formatSleepDuration(state.sleepHours), color = palette.text, fontWeight = FontWeight.Black, fontSize = 26.sp)
+                Text(
+                    state.sleepQualityScore?.let { stringResource(R.string.sleep_quality_score, it) } ?: stringResource(R.string.no_data_short),
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp
+                )
+            }
+            ProgressRingChip(
+                progress = coerceProgress(state.sleepHours, SLEEP_GOAL_HOURS),
+                accent = HealthAccent.sleep,
+                size = 48.dp,
+                centerText = "☾"
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniSparkline(
+    bars: List<MetricBar>,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val values = bars.map { it.value }.filter { it > 0.0 }
+        if (values.size < 2) return@Canvas
+        val min = values.minOrNull() ?: 0.0
+        val max = values.maxOrNull() ?: 1.0
+        val range = (max - min).takeIf { it > 0.0 } ?: 1.0
+        val step = size.width / (values.size - 1).coerceAtLeast(1)
+        var last: Offset? = null
+        values.forEachIndexed { index, value ->
+            val x = step * index
+            val y = size.height - (((value - min) / range).toFloat() * size.height)
+            val point = Offset(x, y.coerceIn(0f, size.height))
+            last?.let { drawLine(accent, it, point, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round) }
+            last = point
+        }
+    }
+}
+
+private fun formatSleepDuration(hours: Double): String {
+    if (hours <= 0.0) return "—"
+    val totalMinutes = (hours * 60.0).toInt()
+    return "${totalMinutes / 60}h ${totalMinutes % 60}m"
+}
+
+
 @Composable
 private fun SettingsScreen(
     palette: BitPalette,
@@ -580,6 +719,27 @@ private fun SettingsScreen(
                 )
                 WidgetVisibilityRow(
                     palette = palette,
+                    label = stringResource(R.string.widget_toggle_calories),
+                    accent = HealthAccent.activity,
+                    checked = dashboardState.isWidgetVisible(DashboardWidget.CALORIES),
+                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.CALORIES, it) }
+                )
+                WidgetVisibilityRow(
+                    palette = palette,
+                    label = stringResource(R.string.widget_toggle_workout_minutes),
+                    accent = HealthAccent.activity,
+                    checked = dashboardState.isWidgetVisible(DashboardWidget.WORKOUT_MINUTES),
+                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.WORKOUT_MINUTES, it) }
+                )
+                WidgetVisibilityRow(
+                    palette = palette,
+                    label = stringResource(R.string.widget_toggle_active_hours),
+                    accent = HealthAccent.mind,
+                    checked = dashboardState.isWidgetVisible(DashboardWidget.ACTIVE_HOURS),
+                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.ACTIVE_HOURS, it) }
+                )
+                WidgetVisibilityRow(
+                    palette = palette,
                     label = stringResource(R.string.widget_toggle_heart),
                     accent = HealthAccent.heart,
                     checked = dashboardState.isWidgetVisible(DashboardWidget.HEART_RATE),
@@ -591,6 +751,20 @@ private fun SettingsScreen(
                     accent = HealthAccent.sleep,
                     checked = dashboardState.isWidgetVisible(DashboardWidget.SLEEP),
                     onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.SLEEP, it) }
+                )
+                WidgetVisibilityRow(
+                    palette = palette,
+                    label = stringResource(R.string.widget_toggle_stress),
+                    accent = HealthAccent.mind,
+                    checked = dashboardState.isWidgetVisible(DashboardWidget.STRESS),
+                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.STRESS, it) }
+                )
+                WidgetVisibilityRow(
+                    palette = palette,
+                    label = stringResource(R.string.widget_toggle_spo2),
+                    accent = HealthAccent.mind,
+                    checked = dashboardState.isWidgetVisible(DashboardWidget.SPO2),
+                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.SPO2, it) }
                 )
                 WidgetVisibilityRow(
                     palette = palette,

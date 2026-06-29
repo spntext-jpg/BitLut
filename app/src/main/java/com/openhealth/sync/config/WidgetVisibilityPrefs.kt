@@ -10,8 +10,13 @@ import com.openhealth.sync.data.remote.HuaweiConfig
  */
 enum class DashboardWidget(val prefKey: String) {
     STEPS("widget_visible_steps"),
+    CALORIES("widget_visible_calories"),
+    WORKOUT_MINUTES("widget_visible_workout_minutes"),
+    ACTIVE_HOURS("widget_visible_active_hours"),
     HEART_RATE("widget_visible_heart"),
     SLEEP("widget_visible_sleep"),
+    STRESS("widget_visible_stress"),
+    SPO2("widget_visible_spo2"),
     WORKOUTS("widget_visible_workouts")
 }
 

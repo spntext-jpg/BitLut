@@ -11,6 +11,8 @@ import androidx.health.connect.client.records.ElevationGainedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -65,8 +67,14 @@ data class GoogleDashboardSnapshot(
     val stepsToday: Long,
     val distanceMeters: Double,
     val caloriesKcal: Double,
+    val workoutMinutesToday: Long,
+    val activeHoursToday: Int,
     val sleepHours: Double,
+    val sleepQualityScore: Int?,
     val heartRateBpm: Long?,
+    val heartRateTodayBars: List<MetricBar>,
+    val stressScore: Int?,
+    val spo2Percent: Double?,
     val stepsBars: List<MetricBar>,
     val sleepBars: List<MetricBar>,
     val heartRateBars: List<MetricBar>,
@@ -449,8 +457,14 @@ class GoogleHealthManager(private val context: Context) {
                 stepsToday = stepsToday,
                 distanceMeters = distanceMeters,
                 caloriesKcal = caloriesKcal,
+                workoutMinutesToday = readWorkoutMinutesToday(),
+                activeHoursToday = readActiveHoursToday(),
                 sleepHours = readSleepLastNight(),
+                sleepQualityScore = readSleepQualityScoreLastNight(),
                 heartRateBpm = heartRateBpm,
+                heartRateTodayBars = readHeartRateTodayBars(),
+                stressScore = readStressScoreToday(),
+                spo2Percent = readLatestSpo2Percent(),
                 stepsBars = readStepsBars(daysBack),
                 sleepBars = readSleepBars(daysBack),
                 heartRateBars = readHeartRateBars(daysBack),
@@ -702,6 +716,114 @@ class GoogleHealthManager(private val context: Context) {
 
 
 
+
+
+    suspend fun readWorkoutMinutesToday(): Long {
+        val c = healthConnectClient ?: return 0L
+        return try {
+            val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+            c.readRecords(
+                ReadRecordsRequest(
+                    recordType = ExerciseSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+                )
+            ).records.sumOf { java.time.Duration.between(it.startTime, it.endTime).toMinutes().coerceAtLeast(0L) }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readWorkoutMinutesToday failed: ${e.message}", e)
+            0L
+        }
+    }
+
+    suspend fun readActiveHoursToday(): Int {
+        val c = healthConnectClient ?: return 0
+        return try {
+            val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val records = c.readRecords(
+                ReadRecordsRequest(
+                    recordType = StepsRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+                )
+            ).records
+            records
+                .filter { it.count > 0 }
+                .map { it.startTime.atZone(ZoneId.systemDefault()).hour }
+                .toSet()
+                .size
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readActiveHoursToday failed: ${e.message}", e)
+            0
+        }
+    }
+
+    suspend fun readHeartRateTodayBars(): List<MetricBar> {
+        val c = healthConnectClient ?: return emptyList()
+        val today = LocalDate.now()
+        val start = today.atStartOfDay(ZoneId.systemDefault()).toInstant()
+        return try {
+            val records = c.readRecords(
+                ReadRecordsRequest(
+                    recordType = HeartRateRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+                )
+            ).records
+
+            val hourly = records
+                .flatMap { record -> record.samples.map { sample -> sample.time to sample.beatsPerMinute } }
+                .groupBy { it.first.atZone(ZoneId.systemDefault()).hour }
+                .mapValues { (_, values) -> values.map { it.second }.average() }
+
+            (0..23).map { hour ->
+                MetricBar(today, today, hourly[hour] ?: 0.0)
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readHeartRateTodayBars failed: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    suspend fun readLatestSpo2Percent(): Double? {
+        val c = healthConnectClient ?: return null
+        return try {
+            val start = LocalDate.now().minusDays(7).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            c.readRecords(
+                ReadRecordsRequest(
+                    recordType = OxygenSaturationRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+                )
+            ).records.maxByOrNull { it.time }?.percentage?.value
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readLatestSpo2Percent failed: ${e.message}", e)
+            null
+        }
+    }
+
+    suspend fun readStressScoreToday(): Int? {
+        val c = healthConnectClient ?: return null
+        return try {
+            val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val avgRmssd = c.readRecords(
+                ReadRecordsRequest(
+                    recordType = HeartRateVariabilityRmssdRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+                )
+            ).records.map { it.heartRateVariabilityMillis }.takeIf { it.isNotEmpty() }?.average()
+
+            avgRmssd?.let {
+                // Simple HRV-derived stress estimate: lower RMSSD -> higher stress.
+                (100 - (it * 2.0).toInt()).coerceIn(0, 100)
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readStressScoreToday failed: ${e.message}", e)
+            null
+        }
+    }
+
+    suspend fun readSleepQualityScoreLastNight(): Int? {
+        val hours = readSleepLastNight()
+        if (hours <= 0.0) return null
+        val durationScore = ((hours / 8.0) * 100.0).toInt().coerceIn(0, 100)
+        return durationScore
+    }
 
     suspend fun readSleepLastNight(): Double {
         val c = healthConnectClient ?: return 0.0

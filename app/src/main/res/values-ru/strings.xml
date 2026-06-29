@@ -195,4 +195,18 @@
     <string name="manual_sync_title">Ручная синхронизация</string>
     <string name="import_archive_title">Импорт архива</string>
     <string name="import_archive_selected">Архив Huawei Health выбран</string>
+    <string name="widget_toggle_calories">Активные калории</string>
+    <string name="widget_toggle_workout_minutes">Минуты тренировок</string>
+    <string name="widget_toggle_active_hours">Часы активности</string>
+    <string name="widget_toggle_stress">Стресс</string>
+    <string name="widget_toggle_spo2">Кислород в крови</string>
+    <string name="calories_active_title">Активные калории</string>
+    <string name="workout_minutes_title">Время тренировок</string>
+    <string name="active_hours_title">Часы активности</string>
+    <string name="stress_title">Стресс</string>
+    <string name="spo2_title">SpO2</string>
+    <string name="kcal_unit">ккал</string>
+    <string name="score_100_unit">/100</string>
+    <string name="distance_today_value">%1$s км</string>
+    <string name="sleep_quality_score">Качество сна: %1$d/100</string>
 </resources>

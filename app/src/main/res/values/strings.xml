@@ -195,4 +195,18 @@
     <string name="manual_sync_title">Manual sync</string>
     <string name="import_archive_title">Import archive</string>
     <string name="import_archive_selected">Huawei Health archive selected</string>
+    <string name="widget_toggle_calories">Active calories</string>
+    <string name="widget_toggle_workout_minutes">Workout minutes</string>
+    <string name="widget_toggle_active_hours">Active hours</string>
+    <string name="widget_toggle_stress">Stress</string>
+    <string name="widget_toggle_spo2">Blood oxygen</string>
+    <string name="calories_active_title">Active calories</string>
+    <string name="workout_minutes_title">Workout time</string>
+    <string name="active_hours_title">Active hours</string>
+    <string name="stress_title">Stress</string>
+    <string name="spo2_title">SpO2</string>
+    <string name="kcal_unit">kcal</string>
+    <string name="score_100_unit">/100</string>
+    <string name="distance_today_value">%1$s km</string>
+    <string name="sleep_quality_score">Sleep quality: %1$d/100</string>
 </resources>
