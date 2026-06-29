@@ -55,8 +55,7 @@ object HealthPermissionPolicy {
      * block Huawei -> Health Connect sync. Some devices/providers do not expose
      * these categories, and older grants may not include them.
      */
-    val optionalDashboardReadPermissions: Set<String> = setOf(
-    )
+    val optionalDashboardReadPermissions: Set<String> = emptySet()
 
     val importWritePermissions: Set<String> = setOf(
         HealthPermission.getWritePermission(StepsRecord::class),
@@ -76,7 +75,7 @@ object HealthPermissionPolicy {
     val syncPermissions: Set<String> = dashboardReadPermissions + importWritePermissions
 
     /** Permissions shown in the UI request sheet. Optional dashboard permissions are requested when available. */
-    val requestPermissions: Set<String> = syncPermissions + optionalDashboardReadPermissions
+    val requestPermissions: Set<String> = syncPermissions
 
     // Backward-compatible aliases used by older screens/managers.
     val dashboardPermissions: Set<String> = requestPermissions
