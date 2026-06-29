@@ -16,22 +16,12 @@ import androidx.core.view.WindowCompat
 val BgPrimary      = Color(0xFF0F172A)   // #0F172A — main background
 val BgSecondary    = Color(0xFF111827)   // #111827 — dark slate
 val BgElevated     = Color(0xFF162033)   // #162033 — elevated surface
-val BgCard         = Color(0x0AFFFFFF)   // rgba(255,255,255,0.04)
-val BgGlass        = Color(0x0FFFFFFF)   // rgba(255,255,255,0.06)
-val BgGlassHover   = Color(0x12FFFFFF)   // rgba(255,255,255,0.07)
-
-// Brand gradient stops
-val GradStart      = Color(0xFF0A1428)
-val GradMid        = Color(0xFF1D2B53)
-val GradEnd        = Color(0xFF4B1D8C)
 
 // Accent Colors
 val Blue           = Color(0xFF19AEF9)   // primary interactive
 val BlueDim        = Color(0xFF0D8AC5)
 val Orange         = Color(0xFFFF9839)   // CTA / AI button
-val OrangeDark     = Color(0xFFFF6B00)
 val Purple         = Color(0xFF8B5CF6)   // secondary
-val PurpleDim      = Color(0xFF6D3FCE)
 
 // Semantic
 val Success        = Color(0xFF22C55E)
@@ -41,29 +31,9 @@ val Danger         = Color(0xFFEF4444)
 // Text
 val TextPrimary    = Color(0xFFF8F9FA)
 val TextSecondary  = Color(0xFF94A3B8)
-val TextTertiary   = Color(0xFF475569)
 
 // Glass borders
 val GlassBorder    = Color(0x14FFFFFF)   // rgba(255,255,255,0.08)
-val GlassBorderLt  = Color(0x20FFFFFF)
-
-// Glow colors
-val GlowBlue       = Color(0x6619AEF9)   // rgba(25,174,249,0.4)
-val GlowOrange     = Color(0x66FF9839)   // rgba(255,152,57,0.4)
-val GlowPurple     = Color(0x668B5CF6)   // rgba(139,92,246,0.4)
-
-// Legacy aliases for compatibility
-val ElectricIndigo   = Purple
-val ElectricIndigoLt = Blue
-val NeonMint         = Success
-val NeonAmber        = Orange
-val NeonRose         = Danger
-val Void             = BgPrimary
-val VoidSurface      = BgSecondary
-val VoidElevated     = BgElevated
-val VoidBorder       = Color(0xFF1E293B)
-val GlowIndigo       = GlowPurple
-val GlowMint         = Color(0x4422C55E)
 
 private val DarkScheme = darkColorScheme(
     primary              = Blue,

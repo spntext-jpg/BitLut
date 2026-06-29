@@ -153,50 +153,15 @@ class GoogleHealthManager(private val context: Context) {
     fun requiredPermissions(): Set<String> = HealthPermissionPolicy.syncPermissions
 
 
-    // Visible sprint mode: Google Health dashboard. Must include every record type the
-    // dashboard actually reads. Summary/History show Steps, Sleep, and Heart Rate;
-    // DashboardViewModel.load() also reads Distance and Active Calories every cycle
-    // even though neither is currently rendered in the UI -- without permission for
-    // them, those reads fail silently on every single refresh (same failure pattern
-    // as the Sleep/HeartRate bug fixed earlier, just with no visible symptom since
-    // nothing displays the values yet).
-    val dashboardPermissions: Set<String> = setOf(
-        HealthPermission.getReadPermission(StepsRecord::class),
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
-        HealthPermission.getReadPermission(SleepSessionRecord::class),
-        HealthPermission.getReadPermission(HeartRateRecord::class),
-        HealthPermission.getReadPermission(DistanceRecord::class),
-        HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class)
-    )
-
-    // Future Huawei import mode. Do not use at runtime until Huawei Health Kit approval is granted.
-    val importPermissions: Set<String> = setOf(
-        HealthPermission.getReadPermission(StepsRecord::class),
-        HealthPermission.getWritePermission(StepsRecord::class),
-        HealthPermission.getReadPermission(DistanceRecord::class),
-        HealthPermission.getWritePermission(DistanceRecord::class),
-        HealthPermission.getReadPermission(FloorsClimbedRecord::class),
-        HealthPermission.getWritePermission(FloorsClimbedRecord::class),
-        HealthPermission.getReadPermission(ElevationGainedRecord::class),
-        HealthPermission.getWritePermission(ElevationGainedRecord::class),
-        HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
-        HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
-        HealthPermission.getWritePermission(ExerciseSessionRecord::class),
-        HealthPermission.getReadPermission(SleepSessionRecord::class),
-        HealthPermission.getWritePermission(SleepSessionRecord::class),
-        HealthPermission.getReadPermission(HeartRateRecord::class)
-    )
-
     // permissions is the single set actually requested via the UI permission launcher
     // AND checked by hasAllPermissions() before SyncWorker attempts to write Huawei
-    // data into Health Connect. It must be the read+write superset
-    // (HealthPermissionPolicy.syncPermissions), not the read-only dashboardPermissions
-    // below -- using the read-only set here was the root cause behind a whole series
-    // of permission gaps (Sleep, HeartRate, Distance, Calories were each missing read
-    // access at different points), and more importantly meant the Huawei->Health
-    // Connect write path could never succeed: SyncWorker checks hasAllPermissions()
-    // before writeSnapshot(), but the UI never requested write permissions at all.
+    // data into Health Connect. It is the read+write superset
+    // (HealthPermissionPolicy.syncPermissions) -- using a narrower read-only set here
+    // was the root cause behind a whole series of permission gaps (Sleep, HeartRate,
+    // Distance, Calories were each missing read access at different points), and more
+    // importantly meant the Huawei->Health Connect write path could never succeed:
+    // SyncWorker checks hasAllPermissions() before writeSnapshot(), but the UI never
+    // requested write permissions at all.
     val permissions: Set<String> = requiredPermissions()
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
