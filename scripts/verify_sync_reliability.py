@@ -6,6 +6,7 @@ import sys
 root = Path(".")
 google = root / "app/src/main/java/com/openhealth/sync/data/GoogleHealthManager.kt"
 huawei = root / "app/src/main/java/com/openhealth/sync/data/HuaweiHealthManager.kt"
+dashboard_vm = root / "app/src/main/java/com/openhealth/sync/ui/DashboardViewModel.kt"
 
 errors = []
 
@@ -67,10 +68,25 @@ for record in record_types:
             errors.append(f"{record} constructor missing bitlutMetadata(...)")
         pos = end + 1
 
+if "readDashboardSnapshot" not in g or "GoogleDashboardSnapshot" not in g:
+    errors.append("GoogleHealthManager must expose readDashboardSnapshot() with nullable stale-on-failure semantics")
+
+if "readDashboardSnapshot failed; preserving previous UI snapshot" not in g:
+    errors.append("Dashboard Health Connect read failures must be logged and surfaced as null, not zeros")
+
 if "writeSnapshot" in g:
     m = re.search(r"suspend\s+fun\s+writeSnapshot\s*\([^)]*\)\s*:\s*Boolean\s*\{(.*?)\n\s*\}", g, re.S)
     if m and "&&" in m.group(1):
         errors.append("writeSnapshot should not be a chained && expression; isolate category writes")
+
+if dashboard_vm.exists():
+    d = dashboard_vm.read_text(encoding="utf-8")
+    if "loadJob?.cancel()" not in d or "loadGeneration" not in d:
+        errors.append("DashboardViewModel must cancel/sequence overlapping refresh jobs")
+    if "snapshot == null" not in d or "current.copy(isLoading = false, hasPermissions = true)" not in d:
+        errors.append("DashboardViewModel must preserve previous data when Health Connect snapshot read fails")
+    if "withSnapshot" not in d or ".ifEmpty {" not in d:
+        errors.append("DashboardViewModel must not replace existing history lists with transient empty results")
 
 if huawei.exists():
     h = huawei.read_text(encoding="utf-8")

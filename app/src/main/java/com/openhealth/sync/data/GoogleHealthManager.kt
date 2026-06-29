@@ -27,6 +27,7 @@ import com.openhealth.sync.config.HealthPermissionPolicy
 import java.util.Locale
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.AggregateRequest
+import kotlinx.coroutines.CancellationException
 
 private const val TAG = "GoogleHealthManager"
 
@@ -58,6 +59,19 @@ data class WorkoutTypeSummary(
     val displayName: String,
     val sessionCount: Int,
     val totalDurationMinutes: Long
+)
+
+data class GoogleDashboardSnapshot(
+    val stepsToday: Long,
+    val distanceMeters: Double,
+    val caloriesKcal: Double,
+    val sleepHours: Double,
+    val heartRateBpm: Long?,
+    val stepsBars: List<MetricBar>,
+    val sleepBars: List<MetricBar>,
+    val heartRateBars: List<MetricBar>,
+    val recentWorkouts: List<ActivitySessionData>,
+    val workoutSummaries: List<WorkoutTypeSummary>
 )
 
 /** One bar in a History bar-chart widget: an aggregated value over [startDate]..[endDate]. */
@@ -234,15 +248,20 @@ class GoogleHealthManager(private val context: Context) {
     }
 
     suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): Boolean {
-    var ok = true
-    ok = writeStepsBatch(snapshot.steps) && ok
-    ok = writeDistanceBatch(snapshot.distances) && ok
-    ok = writeFloorsBatch(snapshot.floors) && ok
-    ok = writeElevationBatch(snapshot.elevations) && ok
-    ok = writeActiveCaloriesBatch(snapshot.activeCalories) && ok
-    ok = writeActivitySessionsBatch(snapshot.activities) && ok
-    return ok
-}
+        val results = listOf(
+            "steps" to writeStepsBatch(snapshot.steps),
+            "distance" to writeDistanceBatch(snapshot.distances),
+            "floors" to writeFloorsBatch(snapshot.floors),
+            "elevation" to writeElevationBatch(snapshot.elevations),
+            "activeCalories" to writeActiveCaloriesBatch(snapshot.activeCalories),
+            "activitySessions" to writeActivitySessionsBatch(snapshot.activities)
+        )
+        val failed = results.filterNot { it.second }.map { it.first }
+        if (failed.isNotEmpty()) {
+            AppLogger.e(TAG, "writeSnapshot partial failure: ${failed.joinToString()}")
+        }
+        return failed.isEmpty()
+    }
 
     suspend fun writeStepsBatch(records: List<StepData>): Boolean {
         val valid = records
@@ -381,6 +400,70 @@ class GoogleHealthManager(private val context: Context) {
     }
 
     // ── Read methods for Dashboard ────────────────────────────────────────────
+
+    /**
+     * Atomic dashboard refresh used by DashboardViewModel.
+     *
+     * Older code read each widget independently and every read method swallowed Health
+     * Connect errors by returning 0/empty values. A transient Health Connect IPC/rate
+     * failure could therefore look exactly like "real empty data" and wipe the UI until
+     * the next refresh. This method performs a mandatory current-day aggregate preflight
+     * first; if Health Connect is temporarily unavailable, it returns null and the UI keeps
+     * the last good snapshot instead of showing disappearing data.
+     */
+    suspend fun readDashboardSnapshot(daysBack: Int): GoogleDashboardSnapshot? {
+        val c = healthConnectClient ?: return null
+        return try {
+            val startOfToday = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val now = Instant.now()
+
+            val stepsToday = c.aggregate(
+                AggregateRequest(
+                    metrics = setOf(StepsRecord.COUNT_TOTAL),
+                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now)
+                )
+            )[StepsRecord.COUNT_TOTAL] ?: 0L
+
+            val distanceMeters = c.aggregate(
+                AggregateRequest(
+                    metrics = setOf(DistanceRecord.DISTANCE_TOTAL),
+                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now)
+                )
+            )[DistanceRecord.DISTANCE_TOTAL]?.inMeters ?: 0.0
+
+            val caloriesKcal = c.aggregate(
+                AggregateRequest(
+                    metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL),
+                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now)
+                )
+            )[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories ?: 0.0
+
+            val heartRateBpm = c.aggregate(
+                AggregateRequest(
+                    metrics = setOf(HeartRateRecord.BPM_AVG),
+                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now)
+                )
+            )[HeartRateRecord.BPM_AVG]
+
+            GoogleDashboardSnapshot(
+                stepsToday = stepsToday,
+                distanceMeters = distanceMeters,
+                caloriesKcal = caloriesKcal,
+                sleepHours = readSleepLastNight(),
+                heartRateBpm = heartRateBpm,
+                stepsBars = readStepsBars(daysBack),
+                sleepBars = readSleepBars(daysBack),
+                heartRateBars = readHeartRateBars(daysBack),
+                recentWorkouts = readRecentWorkouts(5),
+                workoutSummaries = readWorkoutSummariesByType(daysBack)
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readDashboardSnapshot failed; preserving previous UI snapshot: ${e.message}", e)
+            null
+        }
+    }
 
     suspend fun readStepsToday(): Long {
         val c = healthConnectClient ?: return 0L

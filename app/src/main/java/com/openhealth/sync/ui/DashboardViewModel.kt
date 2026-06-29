@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.openhealth.sync.config.DashboardWidget
 import com.openhealth.sync.config.WidgetVisibilityPrefs
 import com.openhealth.sync.data.ActivitySessionData
+import com.openhealth.sync.data.GoogleDashboardSnapshot
 import com.openhealth.sync.data.GoogleHealthManager
 import com.openhealth.sync.data.MetricBar
 import com.openhealth.sync.data.WorkoutTypeSummary
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** Selectable History range options, in days. Order matters for the chip row UI. */
@@ -50,6 +52,9 @@ class DashboardViewModel(
     )
     val state: StateFlow<DashboardUiState> = _state.asStateFlow()
 
+    private var loadJob: Job? = null
+    private var loadGeneration: Long = 0L
+
     init { load() }
 
     fun refresh() { load() }
@@ -71,42 +76,49 @@ class DashboardViewModel(
     }
 
     fun load() {
-        viewModelScope.launch {
+        val generation = ++loadGeneration
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
+
             val hasPerms = googleManager.hasAllPermissions()
+            if (generation != loadGeneration) return@launch
+
             if (!hasPerms) {
                 _state.update { it.copy(isLoading = false, hasPermissions = false) }
                 return@launch
             }
-            val rangeDays = _state.value.selectedHistoryRangeDays
-            val steps    = googleManager.readStepsToday()
-            val distance = googleManager.readDistanceToday()
-            val calories = googleManager.readCaloriesToday()
-            val stepsBars = googleManager.readStepsBars(rangeDays)
-            val sleep    = googleManager.readSleepLastNight()
-            val heart     = googleManager.readAverageHeartRateToday()
-            val sleepBars = googleManager.readSleepBars(rangeDays)
-            val heartRateBars = googleManager.readHeartRateBars(rangeDays)
-            val workouts = googleManager.readRecentWorkouts(5)
-            val workoutSummaries = googleManager.readWorkoutSummariesByType(rangeDays)
-            _state.update {
-                it.copy(
-                    isLoading       = false,
-                    hasPermissions  = true,
-                    stepsToday      = steps,
-                    distanceMeters  = distance,
-                    caloriesKcal    = calories,
-                    sleepHours      = sleep,
-                    heartRateBpm    = heart,
-                    sleepBars       = sleepBars,
-                    heartRateBars   = heartRateBars,
-                    stepsBars       = stepsBars,
-                    recentWorkouts  = workouts,
-                    workoutSummaries = workoutSummaries
-                )
+
+            val previous = _state.value
+            val rangeDays = previous.selectedHistoryRangeDays
+            val snapshot = googleManager.readDashboardSnapshot(rangeDays)
+            if (generation != loadGeneration) return@launch
+
+            _state.update { current ->
+                if (snapshot == null) {
+                    current.copy(isLoading = false, hasPermissions = true)
+                } else {
+                    current.withSnapshot(snapshot)
+                }
             }
         }
     }
+
+    private fun DashboardUiState.withSnapshot(snapshot: GoogleDashboardSnapshot): DashboardUiState =
+        copy(
+            isLoading       = false,
+            hasPermissions  = true,
+            stepsToday      = snapshot.stepsToday,
+            distanceMeters  = snapshot.distanceMeters,
+            caloriesKcal    = snapshot.caloriesKcal,
+            sleepHours      = snapshot.sleepHours,
+            heartRateBpm    = snapshot.heartRateBpm,
+            sleepBars       = snapshot.sleepBars.ifEmpty { sleepBars },
+            heartRateBars   = snapshot.heartRateBars.ifEmpty { heartRateBars },
+            stepsBars       = snapshot.stepsBars.ifEmpty { stepsBars },
+            recentWorkouts  = snapshot.recentWorkouts.ifEmpty { recentWorkouts },
+            workoutSummaries = snapshot.workoutSummaries.ifEmpty { workoutSummaries }
+        )
 
     companion object {
         fun provideFactory(
