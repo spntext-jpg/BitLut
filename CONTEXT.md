@@ -181,3 +181,33 @@ Still deferred to a later sprint:
 - Moving WorkManager orchestration out of `MainActivity`.
 - Splitting `FinalBitLutShell.kt` into feature-level UI files.
 - Gradle Version Catalog migration.
+
+## v1.9.6 Sync Orchestrator Sprint
+
+Implemented:
+
+- Added `SyncOrchestrator` as the UI-safe boundary for manual and periodic sync orchestration.
+- `MainActivity` no longer directly imports or observes WorkManager sync classes.
+- Manual sync permission preflight moved out of `MainActivity`.
+- `MainActivity` now delegates scheduling to `syncOrchestrator.schedulePeriodic()`.
+- Manual sync callbacks remain lifecycle-owned by the Activity and update ViewModels through explicit callbacks.
+
+Still deferred:
+
+- Moving Huawei authorization UI flow out of `MainActivity`.
+- Converting archive-import intent handling into a dedicated import orchestrator.
+- Splitting `FinalBitLutShell.kt` into feature-level screen files.
+
+## v1.9.6 MainActivity recovery
+
+`MainActivity.kt` was clean-room rewritten after the Sync Orchestrator migration to remove a broken partial WorkManager block and restore:
+
+- lifecycle-aware Compose state collection;
+- Google Health permission flow;
+- Huawei authorization flow;
+- archive import picker;
+- launch-time status refresh;
+- periodic sync delegation;
+- manual sync delegation through `SyncOrchestrator`.
+
+`MainActivity` must not directly import WorkManager or `BackgroundSyncScheduler`.
