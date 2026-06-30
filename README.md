@@ -486,3 +486,35 @@ This keeps the extracted chart component compile-safe without changing sync, Hea
 ## v1.9.6 MetricCharts self-check fix
 
 Fixed the UI split verifier/self-check so it allows `MetricBarChartCard` as a function name while preventing dependency on the missing `List<MetricBar>` type.
+
+v1.9.9 release-readiness sprint
+
+Prepared BitLut for the 1.9.9 release without touching app version fields because versioning is owned by GitHub Actions.
+
+Included:
+
+release checklist in docs/release-1.9.9.md;
+release-readiness verifier;
+strict activity-only scope guard;
+UI split guard;
+SyncOrchestrator guard;
+cleanup of failed local recovery scripts.
+
+v1.9.9 release-readiness sprint
+
+Prepared BitLut for the 1.9.9 release without touching app version fields because versioning is owned by GitHub Actions.
+
+Included:
+
+release checklist in docs/release-1.9.9.md;
+release-readiness verifier;
+strict activity-only scope guard;
+UI split guard;
+SyncOrchestrator guard;
+cleanup of failed local recovery scripts.
+
+## v1.9.9 release-readiness sprint
+
+Prepared BitLut for the `1.9.9` release without touching app version fields because versioning is owned by GitHub Actions.
+
+Included: release checklist, release-readiness verifier, strict activity-only scope guard, UI split guard, SyncOrchestrator guard, and cleanup of failed local recovery scripts.
