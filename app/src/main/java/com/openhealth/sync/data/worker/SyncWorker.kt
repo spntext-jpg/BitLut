@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.openhealth.sync.SyncApplication
+import com.openhealth.sync.data.DashboardSnapshotCache
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.util.AppLogger
@@ -24,6 +25,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
     }
     private val lease by lazy { SyncRunLease(applicationContext) }
     private val circuitBreaker by lazy { SyncCircuitBreaker(applicationContext) }
+    private val snapshotCache by lazy { DashboardSnapshotCache(applicationContext) }
 
     override suspend fun doWork(): Result {
         val owner = id.toString()
@@ -204,6 +206,8 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 "Sync complete: steps=${snapshot.steps.size}, distances=${snapshot.distances.size}, floors=${snapshot.floors.size}, elevations=${snapshot.elevations.size}, activeCalories=${snapshot.activeCalories.size}, activities=${snapshot.activities.size}"
             )
 
+            refreshDashboardCacheAfterWrite(googleManager)
+
             SyncAttemptOutcome.Success
         } catch (e: SecurityException) {
             if (e.message?.contains(HUAWEI_SCOPE_UNAUTHORIZED.toString()) == true) {
@@ -233,6 +237,30 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
         } catch (e: Exception) {
             AppLogger.e(TAG, "Transient Huawei/Health Connect sync failure", e)
             SyncAttemptOutcome.RetryableFailure
+        }
+    }
+
+    /**
+     * After a successful Huawei -> Health Connect write, also refresh the local
+     * dashboard snapshot cache. Without this, periodic background sync (every
+     * ~30 minutes) would keep Health Connect itself up to date, but the app's
+     * cold-start cache would only ever be refreshed when the user had the app
+     * open -- defeating the point of background sync from the user's
+     * perspective ("data never seems to update unless I open the app").
+     *
+     * Best-effort only: any failure here is logged and swallowed so it can
+     * never turn a successful Health Connect write into a retried/failed
+     * WorkManager run.
+     */
+    private suspend fun refreshDashboardCacheAfterWrite(googleManager: com.openhealth.sync.data.HealthConnectManager) {
+        try {
+            val freshSnapshot = googleManager.readDashboardSnapshot(daysBack = 7)
+            if (freshSnapshot != null) {
+                snapshotCache.save(freshSnapshot)
+                AppLogger.d(TAG, "Dashboard snapshot cache refreshed after background sync")
+            }
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Failed to refresh dashboard cache after background sync: ${e.message}", e)
         }
     }
 }

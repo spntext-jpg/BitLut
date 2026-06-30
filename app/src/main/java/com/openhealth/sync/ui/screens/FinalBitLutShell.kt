@@ -189,7 +189,7 @@ private fun SummaryScreen(
             )
         }
 
-        if (!state.hasPermissions) {
+        if (state.showConnectLockScreen) {
             item {
                 MinimalMetricCard(
                     palette = palette,
@@ -201,6 +201,12 @@ private fun SummaryScreen(
                     onClick = onRequestGoogle
                 )
             }
+        } else if (state.isLoading && state.stepsToday == 0L && state.recentWorkouts.isEmpty()) {
+            // First-ever launch on this device, with no cached snapshot yet and no
+            // confirmed permission result either way. Show a neutral loading state
+            // instead of either real (zero) numbers or the "Connect Google Health"
+            // lock screen, which would be misleading this early.
+            item { DashboardLoadingCard(palette = palette) }
         } else {
             if (state.isWidgetVisible(DashboardWidget.STEPS)) {
                 item {
@@ -244,7 +250,7 @@ private fun HistoryScreen(
             )
         }
 
-        if (state.hasPermissions) {
+        if (!state.showConnectLockScreen && state.hasPermissions) {
             item {
                 HistoryRangeChips(
                     palette = palette,
@@ -254,7 +260,7 @@ private fun HistoryScreen(
             }
         }
 
-        if (!state.hasPermissions) {
+        if (state.showConnectLockScreen) {
             item {
                 MinimalMetricCard(
                     palette = palette,
@@ -266,6 +272,8 @@ private fun HistoryScreen(
                     onClick = onRequestGoogle
                 )
             }
+        } else if (state.isLoading && state.stepsBars.isEmpty()) {
+            item { DashboardLoadingCard(palette = palette) }
         } else {
             val rangeDays = state.selectedHistoryRangeDays
             val stepsTotal = state.stepsBars.sumOf { it.value }
@@ -510,8 +518,13 @@ private fun SettingsScreen(
                 icon = Icons.Rounded.Cloud,
                 primaryAction = stringResource(R.string.connect_google_button),
                 onPrimaryAction = onRequestGoogle,
+                // "Обновить статус" here must pull fresh data, not just re-read
+                // whatever Health Connect already has cached locally. Wiring this
+                // to onSyncNow runs the same Huawei -> Health Connect -> dashboard
+                // pipeline as the manual "Sync now" card below, then reloads the
+                // dashboard from the freshly written data.
                 secondaryAction = stringResource(R.string.refresh_status),
-                onSecondaryAction = onRefresh
+                onSecondaryAction = onSyncNow
             )
         }
 
@@ -824,6 +837,39 @@ private fun MinimalMetricCard(
         if (onClick != null) {
             Spacer(Modifier.height(10.dp))
             PrimaryButton(text = unit, accent = accent, onClick = onClick)
+        }
+    }
+}
+
+/**
+ * Neutral loading placeholder shown only on a brand-new install (no cached
+ * snapshot yet) while the very first Health Connect read is still in flight.
+ * Distinct from the "Connect Google Health" lock screen on purpose: we don't
+ * yet know whether permissions are granted or not, so showing the lock
+ * screen here would be actively misleading on every cold start.
+ */
+@Composable
+private fun DashboardLoadingCard(palette: BitPalette) {
+    SoftCard(palette = palette, accent = HealthAccent.mind, hero = false, tintWithAccent = true) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 96.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CircularProgressIndicator(
+                color = HealthAccent.mind,
+                strokeWidth = 3.dp,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(Modifier.width(14.dp))
+            Text(
+                text = stringResource(R.string.status_syncing),
+                color = palette.secondaryText,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp
+            )
         }
     }
 }

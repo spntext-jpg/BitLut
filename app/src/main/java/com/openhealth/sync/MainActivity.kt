@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.openhealth.sync.config.WidgetVisibilityPrefs
+import com.openhealth.sync.data.DashboardSnapshotCache
 import com.openhealth.sync.domain.SyncOrchestrator
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardViewModel
@@ -36,7 +37,8 @@ class MainActivity : ComponentActivity() {
         val app = application as SyncApplication
         DashboardViewModel.provideFactory(
             app.container.googleHealthManager,
-            WidgetVisibilityPrefs(applicationContext)
+            WidgetVisibilityPrefs(applicationContext),
+            DashboardSnapshotCache(applicationContext)
         )
     }
 

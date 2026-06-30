@@ -7,9 +7,11 @@ import androidx.lifecycle.viewModelScope
 import com.openhealth.sync.config.DashboardWidget
 import com.openhealth.sync.config.WidgetVisibilityPrefs
 import com.openhealth.sync.data.ActivitySessionData
+import com.openhealth.sync.data.DashboardSnapshotCache
 import com.openhealth.sync.data.GoogleDashboardSnapshot
 import com.openhealth.sync.data.MetricBar
 import com.openhealth.sync.data.WorkoutTypeSummary
+import com.openhealth.sync.util.AppLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,12 +19,25 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+private const val TAG = "DashboardViewModel"
+
 /** Selectable History range options, in days. Order matters for the chip row UI. */
 val HISTORY_RANGE_OPTIONS = listOf(7, 14, 30, 60, 90, 180, 365)
 
 data class DashboardUiState(
+    /** True only while the very first load of this process is still in flight and
+     *  there is no cached snapshot to show meanwhile. Once any data (cached or
+     *  live) has been shown once, subsequent reloads no longer flip this back to
+     *  true -- they refresh in place so the UI never flashes back to a loading
+     *  or locked state on every pull-to-refresh / periodic sync. */
     val isLoading: Boolean = true,
     val hasPermissions: Boolean = false,
+    /** True once we've completed at least one permission check in this process.
+     *  Used by the UI to tell "we don't know yet" (still loading) apart from
+     *  "we checked and Google Health really isn't connected" (show lock screen). */
+    val permissionsChecked: Boolean = false,
+    val isFromCache: Boolean = false,
+    val lastUpdatedAtMs: Long = 0L,
     val stepsToday: Long = 0L,
     val stepsGoal: Long = 10_000L,
     val distanceMeters: Double = 0.0,
@@ -45,17 +60,22 @@ data class DashboardUiState(
 ) {
     val stepsProgress: Float get() = (stepsToday.toFloat() / stepsGoal.toFloat()).coerceIn(0f, 1f)
 
+    /** True only when we've actually checked permissions and confirmed they're
+     *  missing -- never true purely because we're still loading. The UI should
+     *  use this (not the raw absence of data) to decide whether to show the
+     *  "Connect Google Health" lock screen. */
+    val showConnectLockScreen: Boolean get() = permissionsChecked && !hasPermissions
+
     fun isWidgetVisible(widget: DashboardWidget): Boolean = visibleWidgets[widget] ?: true
 }
 
 class DashboardViewModel(
     private val googleManager: HealthConnectManager,
-    private val widgetVisibilityPrefs: WidgetVisibilityPrefs
+    private val widgetVisibilityPrefs: WidgetVisibilityPrefs,
+    private val snapshotCache: DashboardSnapshotCache
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(
-        DashboardUiState(visibleWidgets = widgetVisibilityPrefs.snapshot())
-    )
+    private val _state = MutableStateFlow(buildInitialState())
     val state: StateFlow<DashboardUiState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
@@ -81,17 +101,59 @@ class DashboardViewModel(
         _state.update { it.copy(visibleWidgets = it.visibleWidgets + (widget to visible)) }
     }
 
+    /** Builds the very first state synchronously from whatever is on disk, so the
+     *  first composition already shows the last known real data instead of a
+     *  loading spinner or a "Connect Google Health" lock screen. This never
+     *  blocks: SharedPreferences reads here are fast and local. */
+    private fun buildInitialState(): DashboardUiState {
+        val cached = try {
+            snapshotCache.load()
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Failed to read cached dashboard snapshot: ${e.message}", e)
+            null
+        }
+
+        val base = DashboardUiState(visibleWidgets = widgetVisibilityPrefs.snapshot())
+        if (cached == null) return base
+
+        return base.withSnapshot(cached.snapshot).copy(
+            isLoading = true,
+            // We have cached data, but we haven't actually confirmed permissions
+            // are still granted in this process yet -- that happens in load().
+            // hasPermissions stays true here (optimistic, last-known-good) so the
+            // UI renders real numbers immediately; permissionsChecked stays false
+            // so showConnectLockScreen still correctly reports "unknown" rather
+            // than a hard "true" or "false".
+            hasPermissions = true,
+            permissionsChecked = false,
+            isFromCache = true,
+            lastUpdatedAtMs = cached.savedAtMs
+        )
+    }
+
     fun load() {
         val generation = ++loadGeneration
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
-
-            val hasPerms = googleManager.hasAllPermissions()
+            val hasPerms = try {
+                googleManager.hasAllPermissions()
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "Permission check threw; keeping last known dashboard state: ${e.message}", e)
+                // A transient failure here must not yank a working dashboard back
+                // to the lock screen. Bail out and keep whatever is currently shown.
+                _state.update { it.copy(isLoading = false) }
+                return@launch
+            }
             if (generation != loadGeneration) return@launch
 
             if (!hasPerms) {
-                _state.update { it.copy(isLoading = false, hasPermissions = false) }
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        hasPermissions = false,
+                        permissionsChecked = true
+                    )
+                }
                 return@launch
             }
 
@@ -102,9 +164,18 @@ class DashboardViewModel(
 
             _state.update { current ->
                 if (snapshot == null) {
-                    current.copy(isLoading = false, hasPermissions = true)
+                    // Health Connect is reachable and permissions are granted, but this
+                    // particular read failed transiently. Keep showing the last good
+                    // data (cached or previously loaded) rather than blanking the UI.
+                    current.copy(isLoading = false, hasPermissions = true, permissionsChecked = true)
                 } else {
-                    current.withSnapshot(snapshot)
+                    snapshotCache.save(snapshot)
+                    current.withSnapshot(snapshot).copy(
+                        hasPermissions = true,
+                        permissionsChecked = true,
+                        isFromCache = false,
+                        lastUpdatedAtMs = System.currentTimeMillis()
+                    )
                 }
             }
         }
@@ -135,12 +206,13 @@ class DashboardViewModel(
     companion object {
         fun provideFactory(
             googleManager: HealthConnectManager,
-            widgetVisibilityPrefs: WidgetVisibilityPrefs
+            widgetVisibilityPrefs: WidgetVisibilityPrefs,
+            snapshotCache: DashboardSnapshotCache
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    DashboardViewModel(googleManager, widgetVisibilityPrefs) as T
+                    DashboardViewModel(googleManager, widgetVisibilityPrefs, snapshotCache) as T
             }
     }
 }
