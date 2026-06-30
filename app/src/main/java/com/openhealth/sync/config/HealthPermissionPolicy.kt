@@ -6,56 +6,31 @@ import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ElevationGainedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
-import androidx.health.connect.client.records.HeartRateRecord
-import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
-import androidx.health.connect.client.records.OxygenSaturationRecord
-import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 
 /**
- * Single source of truth for Health Connect permissions.
+ * BitLut v1.9.6 strict Health Connect permission policy.
  *
- * Coverage target mirrors Huawei Basic Sport Health Data:
- * - Step -> StepsRecord
- * - Distance, ascent & altitude -> Distance/Floors/Elevation records
- * - Activity record / Activity -> ExerciseSessionRecord
+ * Huawei AppGallery approval currently covers activity/basic sport read-only data:
+ * - Step
+ * - Distance, ascent and altitude
+ * - Active Hours
+ * - Daily Activity Summary
+ * - Activity record
+ * - Activity
  *
- * Activity Intensity (READ_ACTIVITY_INTENSITY / WRITE_ACTIVITY_INTENSITY) is
- * intentionally NOT requested. AndroidX release notes confirm Activity
- * Intensity support was only added in connect-client 1.2.0-alpha03 ("Enable
- * support for activity intensity for Health Connect APK") -- this project
- * depends on 1.1.0-alpha11, which predates that support. The system
- * permission screen can still show a toggle for it (the on-device Health
- * Connect APK can be newer than this app's bundled client library), but
- * getGrantedPermissions() through the older client does not reliably
- * reflect it as granted even when the toggle is on. Including these two
- * permission strings made containsAll(permissions) permanently false --
- * every other permission could be genuinely granted and the app would
- * still report "not connected" and read nothing. Re-add these once the
- * project upgrades to connect-client 1.2.0 or newer.
+ * Sleep, pulse, SpO2, HRV, stress and Activity Intensity are intentionally not
+ * requested, not read and not written in this release.
  */
 object HealthPermissionPolicy {
-
-    val dashboardReadPermissions: Set<String> = setOf(
+    val huaweiImportReadPermissions: Set<String> = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getReadPermission(FloorsClimbedRecord::class),
         HealthPermission.getReadPermission(ElevationGainedRecord::class),
         HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
-        HealthPermission.getReadPermission(SleepSessionRecord::class),
-        HealthPermission.getReadPermission(HeartRateRecord::class),
     )
-
-
-    /**
-     * Optional dashboard-only reads.
-     *
-     * These records are useful for SpO2 and stress widgets, but they must never
-     * block Huawei -> Health Connect sync. Some devices/providers do not expose
-     * these categories, and older grants may not include them.
-     */
-    val optionalDashboardReadPermissions: Set<String> = emptySet()
 
     val importWritePermissions: Set<String> = setOf(
         HealthPermission.getWritePermission(StepsRecord::class),
@@ -64,21 +39,18 @@ object HealthPermissionPolicy {
         HealthPermission.getWritePermission(ElevationGainedRecord::class),
         HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
-        HealthPermission.getWritePermission(SleepSessionRecord::class),
-        HealthPermission.getWritePermission(HeartRateRecord::class),
     )
 
-    /**
-     * Request one broad, honest permission set so Google Health Connect is not narrower
-     * than the Huawei Health Kit scope set.
-     */
-    val syncPermissions: Set<String> = dashboardReadPermissions + importWritePermissions
+    val optionalDashboardReadPermissions: Set<String> = emptySet()
 
-    /** Permissions shown in the UI request sheet. Optional dashboard permissions are requested when available. */
+    val syncPermissions: Set<String> = huaweiImportReadPermissions + importWritePermissions
     val requestPermissions: Set<String> = syncPermissions
+    val dashboardReadPermissions: Set<String> = huaweiImportReadPermissions
 
-    // Backward-compatible aliases used by older screens/managers.
-    val dashboardPermissions: Set<String> = requestPermissions
+    val dashboardPermissions: Set<String> = dashboardReadPermissions
     val importPermissions: Set<String> = syncPermissions
     val allPermissions: Set<String> = requestPermissions
+
+    fun isRequiredSyncPermission(permission: String): Boolean = permission in syncPermissions
+    fun isOptionalDashboardPermission(permission: String): Boolean = false
 }

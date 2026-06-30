@@ -340,3 +340,18 @@ AGCONNECT_SERVICES_JSON_BASE64
 BitLut — бесплатный open-source проект для пользователей Huawei, которым нужен прозрачный контроль над своими health-данными и надежный мост в Android Health Connect.
 
 Если вы используете Huawei Band или Huawei Watch и хотите видеть свои данные в Android Health Connect, BitLut создан именно для этого.
+
+## BitLut v1.9.6 strict health-data scope
+
+BitLut v1.9.6 is locked to the Huawei Health approval scope requested in AppGallery:
+
+- Step
+- Distance, ascent and altitude
+- Active Hours
+- Daily Activity Summary
+- Activity record
+- Activity
+
+The app does not request, read, write or infer sleep, heart rate, SpO2, HRV, stress or Activity Intensity data in this release.
+
+Health Connect export is limited to Huawei-derived activity/basic sport records: `StepsRecord`, `DistanceRecord`, `FloorsClimbedRecord`, `ElevationGainedRecord`, `ActiveCaloriesBurnedRecord` and `ExerciseSessionRecord`.

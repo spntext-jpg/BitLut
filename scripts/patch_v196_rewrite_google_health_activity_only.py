@@ -1,4 +1,133 @@
-package com.openhealth.sync.data
+#!/usr/bin/env python3
+from pathlib import Path
+import re
+
+ROOT = Path(".")
+
+MANIFEST = ROOT / "app/src/main/AndroidManifest.xml"
+POLICY = ROOT / "app/src/main/java/com/openhealth/sync/config/HealthPermissionPolicy.kt"
+GOOGLE = ROOT / "app/src/main/java/com/openhealth/sync/data/GoogleHealthManager.kt"
+README = ROOT / "README.md"
+CONTEXT = ROOT / "CONTEXT.md"
+
+VERIFY_FILES = [
+    ROOT / "scripts/verify_health_coverage.py",
+    ROOT / "scripts/verify_huawei_activity_sync_sprint.py",
+    ROOT / "scripts/verify_sync_reliability.py",
+]
+
+ALLOWED_HEALTH_CONNECT_PERMISSIONS = [
+    "READ_STEPS",
+    "WRITE_STEPS",
+    "READ_DISTANCE",
+    "WRITE_DISTANCE",
+    "READ_FLOORS_CLIMBED",
+    "WRITE_FLOORS_CLIMBED",
+    "READ_ELEVATION_GAINED",
+    "WRITE_ELEVATION_GAINED",
+    "READ_ACTIVE_CALORIES_BURNED",
+    "WRITE_ACTIVE_CALORIES_BURNED",
+    "READ_EXERCISE",
+    "WRITE_EXERCISE",
+]
+
+def read(path: Path) -> str:
+    if not path.exists():
+        raise FileNotFoundError(path)
+    return path.read_text(encoding="utf-8")
+
+def write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+# 1. Manifest: remove all Health Connect permissions, then add only approved activity scope.
+manifest = read(MANIFEST)
+manifest = re.sub(
+    r'\s*<uses-permission\s+android:name="android\.permission\.health\.[A-Z_]+"\s*/>',
+    "",
+    manifest,
+)
+
+permission_block = (
+    "\n"
+    "    <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->\n"
+    + "".join(
+        f'    <uses-permission android:name="android.permission.health.{permission}" />\n'
+        for permission in ALLOWED_HEALTH_CONNECT_PERMISSIONS
+    )
+)
+
+if "<queries>" in manifest:
+    manifest = manifest.replace("<queries>", permission_block + "\n    <queries>", 1)
+elif "<application" in manifest:
+    manifest = manifest.replace("<application", permission_block + "\n    <application", 1)
+else:
+    raise RuntimeError("AndroidManifest.xml has no <queries> or <application> anchor")
+
+manifest = re.sub(r"\n{3,}", "\n\n", manifest)
+write(MANIFEST, manifest)
+
+# 2. Policy: strict activity-only.
+write(POLICY, '''package com.openhealth.sync.config
+
+import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ElevationGainedRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.FloorsClimbedRecord
+import androidx.health.connect.client.records.StepsRecord
+
+/**
+ * BitLut v1.9.6 strict Health Connect permission policy.
+ *
+ * Huawei AppGallery approval currently covers activity/basic sport read-only data:
+ * - Step
+ * - Distance, ascent and altitude
+ * - Active Hours
+ * - Daily Activity Summary
+ * - Activity record
+ * - Activity
+ *
+ * Sleep, pulse, SpO2, HRV, stress and Activity Intensity are intentionally not
+ * requested, not read and not written in this release.
+ */
+object HealthPermissionPolicy {
+    val huaweiImportReadPermissions: Set<String> = setOf(
+        HealthPermission.getReadPermission(StepsRecord::class),
+        HealthPermission.getReadPermission(DistanceRecord::class),
+        HealthPermission.getReadPermission(FloorsClimbedRecord::class),
+        HealthPermission.getReadPermission(ElevationGainedRecord::class),
+        HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+    )
+
+    val importWritePermissions: Set<String> = setOf(
+        HealthPermission.getWritePermission(StepsRecord::class),
+        HealthPermission.getWritePermission(DistanceRecord::class),
+        HealthPermission.getWritePermission(FloorsClimbedRecord::class),
+        HealthPermission.getWritePermission(ElevationGainedRecord::class),
+        HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
+        HealthPermission.getWritePermission(ExerciseSessionRecord::class),
+    )
+
+    val optionalDashboardReadPermissions: Set<String> = emptySet()
+
+    val syncPermissions: Set<String> = huaweiImportReadPermissions + importWritePermissions
+    val requestPermissions: Set<String> = syncPermissions
+    val dashboardReadPermissions: Set<String> = huaweiImportReadPermissions
+
+    val dashboardPermissions: Set<String> = dashboardReadPermissions
+    val importPermissions: Set<String> = syncPermissions
+    val allPermissions: Set<String> = requestPermissions
+
+    fun isRequiredSyncPermission(permission: String): Boolean = permission in syncPermissions
+    fun isOptionalDashboardPermission(permission: String): Boolean = false
+}
+''')
+
+# 3. GoogleHealthManager: rewrite clean strict activity-only implementation.
+write(GOOGLE, '''package com.openhealth.sync.data
 
 import android.content.Context
 import android.content.pm.PackageManager
@@ -718,3 +847,222 @@ class GoogleHealthManager(private val context: Context) {
 
     private fun offset(instant: Instant): ZoneOffset = zoneRules.getOffset(instant)
 }
+''')
+
+# 4. Verifiers: strict activity-only.
+strict_verifier = r'''#!/usr/bin/env python3
+from pathlib import Path
+import re
+import sys
+
+errors = []
+
+def read(path):
+    p = Path(path)
+    if not p.exists():
+        errors.append(f"Missing {path}")
+        return ""
+    return p.read_text(encoding="utf-8")
+
+manifest = read("app/src/main/AndroidManifest.xml")
+policy = read("app/src/main/java/com/openhealth/sync/config/HealthPermissionPolicy.kt")
+google = read("app/src/main/java/com/openhealth/sync/data/GoogleHealthManager.kt")
+huawei = read("app/src/main/java/com/openhealth/sync/data/HuaweiHealthManager.kt")
+main = read("app/src/main/java/com/openhealth/sync/MainActivity.kt")
+
+allowed = [
+    "READ_STEPS",
+    "WRITE_STEPS",
+    "READ_DISTANCE",
+    "WRITE_DISTANCE",
+    "READ_FLOORS_CLIMBED",
+    "WRITE_FLOORS_CLIMBED",
+    "READ_ELEVATION_GAINED",
+    "WRITE_ELEVATION_GAINED",
+    "READ_ACTIVE_CALORIES_BURNED",
+    "WRITE_ACTIVE_CALORIES_BURNED",
+    "READ_EXERCISE",
+    "WRITE_EXERCISE",
+]
+
+for permission in allowed:
+    if f"android.permission.health.{permission}" not in manifest:
+        errors.append(f"Manifest missing {permission}")
+
+for forbidden in [
+    "READ_SLEEP",
+    "WRITE_SLEEP",
+    "READ_HEART_RATE",
+    "WRITE_HEART_RATE",
+    "READ_OXYGEN_SATURATION",
+    "WRITE_OXYGEN_SATURATION",
+    "READ_HEART_RATE_VARIABILITY",
+    "WRITE_HEART_RATE_VARIABILITY",
+    "READ_ACTIVITY_INTENSITY",
+    "WRITE_ACTIVITY_INTENSITY",
+]:
+    if f"android.permission.health.{forbidden}" in manifest:
+        errors.append(f"Manifest must not declare {forbidden}")
+
+permissions = re.findall(r"android\.permission\.health\.([A-Z_]+)", manifest)
+duplicates = sorted({p for p in permissions if permissions.count(p) > 1})
+if duplicates:
+    errors.append(f"Manifest has duplicate Health Connect permissions: {duplicates}")
+
+for token in [
+    "huaweiImportReadPermissions",
+    "importWritePermissions",
+    "optionalDashboardReadPermissions: Set<String> = emptySet()",
+    "syncPermissions",
+    "requestPermissions: Set<String> = syncPermissions",
+    "dashboardReadPermissions",
+]:
+    if token not in policy:
+        errors.append(f"HealthPermissionPolicy missing strict token: {token}")
+
+for forbidden in [
+    "SleepSessionRecord",
+    "HeartRateRecord",
+    "HeartRateVariabilityRmssdRecord",
+    "OxygenSaturationRecord",
+    "READ_SLEEP",
+    "WRITE_SLEEP",
+    "READ_HEART_RATE",
+    "WRITE_HEART_RATE",
+    "OXYGEN_SATURATION",
+    "HEART_RATE_VARIABILITY",
+    "ACTIVITY_INTENSITY",
+]:
+    if forbidden in policy:
+        errors.append(f"HealthPermissionPolicy must not contain {forbidden}")
+
+for forbidden in [
+    "SleepSessionRecord",
+    "HeartRateRecord",
+    "HeartRateVariabilityRmssdRecord",
+    "OxygenSaturationRecord",
+        "readSleepLastNight",
+    "readSleepQualityScoreLastNight",
+    "readSleepBars",
+    "readHeartRateTodayBars",
+    "readHeartRateBars",
+    "readAverageHeartRateToday",
+    "readLatestSpo2Percent",
+    "readStressScoreToday",
+    "isPermissionGranted",
+]:
+    if forbidden in google:
+        errors.append(f"GoogleHealthManager must not contain {forbidden}")
+
+if google.count("private suspend fun insertRecords(") != 0:
+    errors.append("GoogleHealthManager must not contain legacy insertRecords helper")
+
+if google.count("private suspend fun replaceRecords(") != 1:
+    errors.append("GoogleHealthManager must contain exactly one replaceRecords helper")
+
+if "deleteRecords(recordType, emptyList(), clientRecordIds)" not in google:
+    errors.append("GoogleHealthManager must delete by clientRecordId before insert")
+
+if "insertRecords(chunk)" not in google:
+    errors.append("GoogleHealthManager must insert chunked records")
+
+for token in [
+    "HEALTHKIT_STEP_READ",
+    "HEALTHKIT_DISTANCE_READ",
+    "HEALTHKIT_ACTIVITY_READ",
+    "HEALTHKIT_ACTIVITY_RECORD_READ",
+]:
+    if token not in huawei:
+        errors.append(f"HuaweiHealthManager missing approved Huawei scope {token}")
+
+for forbidden in [
+    "HEALTHKIT_SLEEP",
+    "HEALTHKIT_HEARTRATE",
+    "HEALTHKIT_BLOODOXYGEN",
+    "HEALTHKIT_STRESS",
+]:
+    if forbidden in huawei.upper():
+        errors.append(f"HuaweiHealthManager must not request {forbidden}")
+
+if "requestGoogleHealthPermissions()" not in main:
+    errors.append("MainActivity must wire Google connect button to permission request")
+
+if errors:
+    print("Strict Huawei activity sync verification failed:")
+    for error in errors:
+        print(" -", error)
+    sys.exit(1)
+
+print("Strict Huawei activity sync verification passed.")
+'''
+
+for verifier in VERIFY_FILES:
+    write(verifier, strict_verifier)
+    verifier.chmod(0o755)
+
+# 5. README / CONTEXT notes.
+scope_note = """
+## BitLut v1.9.6 strict health-data scope
+
+BitLut v1.9.6 is locked to the Huawei Health approval scope requested in AppGallery:
+
+- Step
+- Distance, ascent and altitude
+- Active Hours
+- Daily Activity Summary
+- Activity record
+- Activity
+
+The app does not request, read, write or infer sleep, pulse, SpO2, HRV, stress or Activity Intensity data in this release.
+
+Health Connect export is limited to Huawei-derived activity/basic sport records: `StepsRecord`, `DistanceRecord`, `FloorsClimbedRecord`, `ElevationGainedRecord`, `ActiveCaloriesBurnedRecord` and `ExerciseSessionRecord`.
+"""
+
+for doc in [README, CONTEXT]:
+    if doc.exists():
+        content = read(doc)
+        if "## BitLut v1.9.6 strict health-data scope" not in content:
+            content = content.rstrip() + "\n\n" + scope_note.strip() + "\n"
+        write(doc, content)
+
+# 6. Self-check.
+app_combined = "\n".join([
+    read(MANIFEST),
+    read(POLICY),
+    read(GOOGLE),
+])
+
+forbidden_app_terms = [
+    "SleepSessionRecord",
+    "HeartRateRecord",
+    "HeartRateVariabilityRmssdRecord",
+    "OxygenSaturationRecord",
+        "readSleepLastNight",
+    "readSleepQualityScoreLastNight",
+    "readSleepBars",
+    "readHeartRateTodayBars",
+    "readHeartRateBars",
+    "readAverageHeartRateToday",
+    "readLatestSpo2Percent",
+    "readStressScoreToday",
+    "isPermissionGranted",
+    "android.permission.health.READ_SLEEP",
+    "android.permission.health.WRITE_SLEEP",
+    "android.permission.health.READ_HEART_RATE",
+    "android.permission.health.WRITE_HEART_RATE",
+    "android.permission.health.READ_OXYGEN_SATURATION",
+    "android.permission.health.WRITE_OXYGEN_SATURATION",
+    "android.permission.health.READ_HEART_RATE_VARIABILITY",
+    "android.permission.health.WRITE_HEART_RATE_VARIABILITY",
+    "android.permission.health.READ_ACTIVITY_INTENSITY",
+    "android.permission.health.WRITE_ACTIVITY_INTENSITY",
+]
+
+bad = [term for term in forbidden_app_terms if term in app_combined]
+if bad:
+    print("Patch failed. Forbidden app terms remain:")
+    for term in bad:
+        print(" -", term)
+    raise SystemExit(1)
+
+print("Rewrote Health Connect integration to strict activity-only scope.")

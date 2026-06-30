@@ -102,3 +102,18 @@ After approval, duplicate protection must be implemented around real Huawei-deri
 - avoid overlapping historical windows
 - avoid parallel WorkManager runs
 - never insert generated placeholder records
+
+## BitLut v1.9.6 strict health-data scope
+
+BitLut v1.9.6 is locked to the Huawei Health approval scope requested in AppGallery:
+
+- Step
+- Distance, ascent and altitude
+- Active Hours
+- Daily Activity Summary
+- Activity record
+- Activity
+
+The app does not request, read, write or infer sleep, heart rate, SpO2, HRV, stress or Activity Intensity data in this release.
+
+Health Connect export is limited to Huawei-derived activity/basic sport records: `StepsRecord`, `DistanceRecord`, `FloorsClimbedRecord`, `ElevationGainedRecord`, `ActiveCaloriesBurnedRecord` and `ExerciseSessionRecord`.

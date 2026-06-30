@@ -1,24 +1,45 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    
+    <!-- Health Connect required sync scope: Huawei activity/basic sport -> Google Health. -->\n\n\n\n\n\n\n\n\n\n\n\n
+    <!-- Health Connect optional dashboard-only reads. Never required for sync. -->\n\n\n\n    
+    <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
 
-    <uses-permission android:name="android.permission.health.WRITE_STEPS" />
+    
+    <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
+
+    
+    <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
+
+    
+    <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
+
+    
+    <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
+
+    
+    <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
+
+    
+    <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
+
+    
+    <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.WRITE_STEPS" />
     <uses-permission android:name="android.permission.health.READ_DISTANCE" />
-    <uses-permission android:name="android.permission.health.READ_FLOORS_CLIMBED" />
-    <uses-permission android:name="android.permission.health.READ_ELEVATION_GAINED" />
-    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
-    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
     <uses-permission android:name="android.permission.health.WRITE_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_FLOORS_CLIMBED" />
     <uses-permission android:name="android.permission.health.WRITE_FLOORS_CLIMBED" />
+    <uses-permission android:name="android.permission.health.READ_ELEVATION_GAINED" />
     <uses-permission android:name="android.permission.health.WRITE_ELEVATION_GAINED" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
     <uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
     <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
-    <uses-permission android:name="android.permission.health.READ_SLEEP" />
-    <uses-permission android:name="android.permission.health.WRITE_SLEEP" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
@@ -48,10 +69,6 @@
             <data android:scheme="https" />
         </intent>
     </queries>
-
-        <uses-permission android:name="android.permission.health.READ_ACTIVITY_INTENSITY" />
-    <uses-permission android:name="android.permission.health.WRITE_ACTIVITY_INTENSITY" />
-    <uses-permission android:name="android.permission.health.WRITE_HEART_RATE" />
 <application
         android:name=".SyncApplication"
         android:allowBackup="false"
