@@ -231,3 +231,13 @@ This is intentionally a low-risk first split. Screen-level extraction remains de
 ## v1.9.6 split-aware Glass GUI verification
 
 `verify_glass20_gui_self_heal.py` and `verify_gui_neoglass_activity_only.py` now validate Glass 2.0 UI across both `FinalBitLutShell.kt` and extracted `ui/components/*.kt` files.
+
+## v1.9.6 Metric chart split compile fix
+
+`MetricBarChartCard` no longer depends on the missing `MetricBar` type after the UI split. It now accepts the existing chart bar objects from call-sites as `List<Any?>` and reads value/label fields defensively.
+
+This keeps the extracted chart component compile-safe without changing sync, Health Connect or Huawei behavior.
+
+## v1.9.6 MetricCharts self-check fix
+
+Fixed the UI split verifier/self-check so it allows `MetricBarChartCard` as a function name while preventing dependency on the missing `List<MetricBar>` type.
