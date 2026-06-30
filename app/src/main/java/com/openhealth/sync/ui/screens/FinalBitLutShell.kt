@@ -176,7 +176,22 @@ private fun Glass20BottomNavigation(
     palette: BitPalette,
     onSelected: (MainTab) -> Unit
 ) {
-    val shellShape = RoundedCornerShape(34.dp)
+    val shellShape = remember { RoundedCornerShape(34.dp) }
+    val shellBackground = remember(palette.card, palette.systemBackground, palette.dark) {
+        Brush.linearGradient(
+            listOf(
+                palette.card.copy(alpha = if (palette.dark) 0.76f else 0.74f),
+                palette.card.copy(alpha = if (palette.dark) 0.46f else 0.54f),
+                palette.systemBackground.copy(alpha = if (palette.dark) 0.28f else 0.38f)
+            )
+        )
+    }
+    val activityGlowColors = remember(palette.activity) {
+        listOf(palette.activity.copy(alpha = 0.22f), Color.Transparent)
+    }
+    val mindGlowColors = remember(palette.mind) {
+        listOf(palette.mind.copy(alpha = 0.18f), Color.Transparent)
+    }
 
     Box(
         modifier = Modifier
@@ -194,32 +209,18 @@ private fun Glass20BottomNavigation(
                     spotColor = palette.activity.copy(alpha = if (palette.dark) 0.32f else 0.14f)
                 )
                 .clip(shellShape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            palette.card.copy(alpha = if (palette.dark) 0.76f else 0.74f),
-                            palette.card.copy(alpha = if (palette.dark) 0.46f else 0.54f),
-                            palette.systemBackground.copy(alpha = if (palette.dark) 0.28f else 0.38f)
-                        )
-                    )
-                )
+                .background(shellBackground)
                 .drawBehind {
                     drawRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(
-                                palette.activity.copy(alpha = 0.22f),
-                                Color.Transparent
-                            ),
+                            colors = activityGlowColors,
                             center = Offset(size.width * 0.14f, size.height * 0.08f),
                             radius = size.maxDimension * 0.72f
                         )
                     )
                     drawRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(
-                                palette.mind.copy(alpha = 0.18f),
-                                Color.Transparent
-                            ),
+                            colors = mindGlowColors,
                             center = Offset(size.width * 0.92f, size.height * 0.92f),
                             radius = size.maxDimension * 0.84f
                         )
@@ -263,6 +264,8 @@ private fun Glass20NavButton(
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val shape = remember { RoundedCornerShape(26.dp) }
+    val selectedHighlightShape = remember { RoundedCornerShape(99.dp) }
     val iconTint by animateColorAsState(
         targetValue = if (selected) Color.White else palette.secondaryText.copy(alpha = 0.84f),
         label = "glass20NavIconTint"
@@ -275,7 +278,26 @@ private fun Glass20NavButton(
         ),
         label = "glass20NavScale"
     )
-    val shape = RoundedCornerShape(26.dp)
+    val selectedBrush = remember(palette.activity, palette.mind) {
+        Brush.linearGradient(
+            listOf(
+                palette.activity.copy(alpha = 0.98f),
+                palette.mind.copy(alpha = 0.76f),
+                palette.activity.copy(alpha = 0.30f)
+            )
+        )
+    }
+    val idleBrush = remember(palette.card, palette.dark) {
+        Brush.linearGradient(
+            listOf(
+                Color.White.copy(alpha = if (palette.dark) 0.08f else 0.34f),
+                palette.card.copy(alpha = if (palette.dark) 0.05f else 0.18f)
+            )
+        )
+    }
+    val selectedGlowColors = remember {
+        listOf(Color.White.copy(alpha = 0.34f), Color.Transparent)
+    }
 
     Box(
         modifier = Modifier
@@ -286,32 +308,12 @@ private fun Glass20NavButton(
             }
             .pressScale(interactionSource)
             .clip(shape)
-            .background(
-                if (selected) {
-                    Brush.linearGradient(
-                        listOf(
-                            palette.activity.copy(alpha = 0.98f),
-                            palette.mind.copy(alpha = 0.76f),
-                            palette.activity.copy(alpha = 0.30f)
-                        )
-                    )
-                } else {
-                    Brush.linearGradient(
-                        listOf(
-                            Color.White.copy(alpha = if (palette.dark) 0.08f else 0.34f),
-                            palette.card.copy(alpha = if (palette.dark) 0.05f else 0.18f)
-                        )
-                    )
-                }
-            )
+            .background(if (selected) selectedBrush else idleBrush)
             .drawBehind {
                 if (selected) {
                     drawRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.34f),
-                                Color.Transparent
-                            ),
+                            colors = selectedGlowColors,
                             center = Offset(size.width * 0.34f, size.height * 0.12f),
                             radius = size.maxDimension * 0.70f
                         )
@@ -347,7 +349,7 @@ private fun Glass20NavButton(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 6.dp)
                     .size(width = 16.dp, height = 3.dp)
-                    .clip(RoundedCornerShape(99.dp))
+                    .clip(selectedHighlightShape)
                     .background(Color.White.copy(alpha = 0.72f))
             )
         }
@@ -1308,13 +1310,28 @@ private fun SoftCard(
     tintWithAccent: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val shape = RoundedCornerShape(if (hero) 34.dp else 28.dp)
+    val shape = remember(hero) { RoundedCornerShape(if (hero) 34.dp else 28.dp) }
     val targetCardColor = if (palette.dark) {
         lerp(palette.card, accent, if (hero || tintWithAccent) 0.12f else 0.07f)
     } else {
         lerp(palette.card, accent, if (hero || tintWithAccent) 0.045f else 0.025f)
     }
     val bg by animateColorAsState(targetCardColor, label = "glass20CardBg")
+    val backgroundBrush = remember(bg, palette.systemBackground, palette.dark) {
+        Brush.linearGradient(
+            listOf(
+                bg.copy(alpha = if (palette.dark) 0.86f else 0.90f),
+                bg.copy(alpha = if (palette.dark) 0.62f else 0.72f),
+                palette.systemBackground.copy(alpha = if (palette.dark) 0.16f else 0.28f)
+            )
+        )
+    }
+    val accentGlowColors = remember(accent, hero) {
+        listOf(accent.copy(alpha = if (hero) 0.22f else 0.15f), Color.Transparent)
+    }
+    val mindGlowColors = remember(palette.mind, hero) {
+        listOf(palette.mind.copy(alpha = if (hero) 0.14f else 0.08f), Color.Transparent)
+    }
 
     Column(
         modifier = modifier
@@ -1325,32 +1342,18 @@ private fun SoftCard(
                 spotColor = accent.copy(alpha = if (palette.dark) 0.24f else 0.12f)
             )
             .clip(shape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        bg.copy(alpha = if (palette.dark) 0.86f else 0.90f),
-                        bg.copy(alpha = if (palette.dark) 0.62f else 0.72f),
-                        palette.systemBackground.copy(alpha = if (palette.dark) 0.16f else 0.28f)
-                    )
-                )
-            )
+            .background(backgroundBrush)
             .drawBehind {
                 drawRect(
                     brush = Brush.radialGradient(
-                        colors = listOf(
-                            accent.copy(alpha = if (hero) 0.22f else 0.15f),
-                            Color.Transparent
-                        ),
+                        colors = accentGlowColors,
                         center = Offset(size.width * 0.88f, size.height * 0.08f),
                         radius = size.maxDimension * 0.62f
                     )
                 )
                 drawRect(
                     brush = Brush.radialGradient(
-                        colors = listOf(
-                            palette.mind.copy(alpha = if (hero) 0.14f else 0.08f),
-                            Color.Transparent
-                        ),
+                        colors = mindGlowColors,
                         center = Offset(size.width * 0.10f, size.height * 0.98f),
                         radius = size.maxDimension * 0.58f
                     )
@@ -1400,7 +1403,21 @@ private fun MetricBarChartCard(
         Spacer(Modifier.height(14.dp))
 
         if (bars.isNotEmpty()) {
-            val maxValue = bars.maxOf { it.value }.takeIf { it > 0.0 } ?: 1.0
+            val maxValue = remember(bars) {
+                bars.maxOf { it.value }.takeIf { it > 0.0 } ?: 1.0
+            }
+            val barShape = remember { RoundedCornerShape(999.dp) }
+            val barBrush = remember(accent) {
+                Brush.verticalGradient(
+                    listOf(
+                        accent.copy(alpha = 0.98f),
+                        accent.copy(alpha = 0.62f)
+                    )
+                )
+            }
+            val shineColors = remember {
+                listOf(Color.White.copy(alpha = 0.28f), Color.Transparent)
+            }
 
             Row(
                 modifier = Modifier
@@ -1411,6 +1428,8 @@ private fun MetricBarChartCard(
             ) {
                 bars.forEach { bar ->
                     val fraction = (bar.value / maxValue).toFloat().coerceIn(0.05f, 1f)
+                    val valueLabel = remember(bar.value) { formatBarValueShort(bar.value) }
+                    val dateLabel = remember(bar.startDate, bar.endDate) { barDateLabel(bar) }
 
                     Column(
                         modifier = Modifier
@@ -1419,7 +1438,7 @@ private fun MetricBarChartCard(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = formatBarValueShort(bar.value),
+                            text = valueLabel,
                             color = palette.secondaryText,
                             fontWeight = FontWeight.Bold,
                             fontSize = 8.sp,
@@ -1441,22 +1460,12 @@ private fun MetricBarChartCard(
                                     .fillMaxWidth()
                                     .fillMaxHeight(fraction)
                                     .defaultMinSize(minHeight = 6.dp)
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                accent.copy(alpha = 0.98f),
-                                                accent.copy(alpha = 0.62f)
-                                            )
-                                        )
-                                    )
+                                    .clip(barShape)
+                                    .background(barBrush)
                                     .drawBehind {
                                         drawRect(
                                             brush = Brush.radialGradient(
-                                                colors = listOf(
-                                                    Color.White.copy(alpha = 0.28f),
-                                                    Color.Transparent
-                                                ),
+                                                colors = shineColors,
                                                 center = Offset(size.width * 0.35f, 0f),
                                                 radius = size.maxDimension * 0.80f
                                             )
@@ -1468,7 +1477,7 @@ private fun MetricBarChartCard(
                         Spacer(Modifier.height(5.dp))
 
                         Text(
-                            text = barDateLabel(bar),
+                            text = dateLabel,
                             color = palette.secondaryText,
                             fontWeight = FontWeight.Bold,
                             fontSize = 8.sp,

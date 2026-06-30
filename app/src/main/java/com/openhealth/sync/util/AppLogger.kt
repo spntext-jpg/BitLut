@@ -8,6 +8,9 @@ import java.util.Date
 import java.util.Locale
 
 object AppLogger {
+    private const val MAX_LOG_ENTRIES = 120
+    private const val MAX_LOG_MESSAGE_LENGTH = 700
+
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs = _logs.asStateFlow()
 
@@ -31,8 +34,17 @@ object AppLogger {
         if (!shouldShowInUi(level, tag, message)) return
 
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        _logs.value = (listOf("[$time] $level/$tag: $message") + _logs.value).take(160)
+        _logs.value = (listOf("[$time] $level/$tag: $message") + _logs.value).take(MAX_LOG_ENTRIES)
     }
+
+
+    private fun sanitizeLogMessage(message: String): String =
+        if (message.length <= MAX_LOG_MESSAGE_LENGTH) {
+            message
+        } else {
+            message.take(MAX_LOG_MESSAGE_LENGTH) + "…"
+        }
+
 
     fun d(tag: String, msg: String) {
         Log.d(tag, msg)

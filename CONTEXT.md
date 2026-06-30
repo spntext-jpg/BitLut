@@ -149,3 +149,19 @@ GUI baseline:
 - bounded history charts
 - refresh status buttons only in Settings
 - automatic status refresh on app launch
+
+## v1.9.6 lifecycle and Glass performance hardening
+
+Implemented after deep code review:
+
+- Compose state collection in `MainActivity` is lifecycle-aware via `collectAsStateWithLifecycle`.
+- Glass 2.0 UI helpers cache stable shapes, gradient color lists and static brushes with `remember(...)`.
+- History chart bars are bounded with fixed value/bar/date regions to avoid overflow on large step values.
+- App logger has conservative memory guards for retained in-app logs.
+
+Deferred to a separate architecture sprint:
+
+- Splitting `FinalBitLutShell.kt` into feature-level UI files.
+- Moving WorkManager orchestration out of `MainActivity`.
+- Introducing interfaces for `GoogleHealthManager` / `HuaweiHealthManager`.
+- Gradle Version Catalog migration.

@@ -1,4 +1,5 @@
 package com.openhealth.sync
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 import android.content.Context
 import android.os.Bundle
@@ -32,7 +33,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -157,8 +157,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             BitLutExpressiveTheme {
 FinalBitLutShell(
-                    dashboardStateProvider = { dashboardViewModel.state.collectAsState().value },
-                    syncStateProvider = { syncViewModel.uiState.collectAsState().value },
+                    dashboardStateProvider = { dashboardViewModel.state.collectAsStateWithLifecycle().value },
+                    syncStateProvider = { syncViewModel.uiState.collectAsStateWithLifecycle().value },
                     onRefresh = {
                         syncViewModel.refreshStatuses()
                         dashboardViewModel.refresh()
