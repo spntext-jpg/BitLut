@@ -1,6 +1,70 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import re
+
+SHELL = Path("app/src/main/java/com/openhealth/sync/ui/screens/FinalBitLutShell.kt")
+VERIFY_GLASS = Path("scripts/verify_glass20_gui_self_heal.py")
+VERIFY_GUI = Path("scripts/verify_gui_neoglass_activity_only.py")
+
+CORE_COMPOSABLES = [
+    "SummaryScreen",
+    "HistoryScreen",
+    "SettingsScreen",
+    "Glass20BottomNavigation",
+    "Glass20NavButton",
+    "SoftCard",
+    "MetricBarChartCard",
+]
+
+OPTIONAL_SCREEN_CANDIDATES = [
+    "ImportScreen",
+    "ImportDataScreen",
+    "SourcesScreen",
+    "SyncScreen",
+    "ConnectionsScreen",
+]
+
+def read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+def write(path: Path, text: str) -> None:
+    path.write_text(text, encoding="utf-8")
+
+def function_exists(text: str, fn: str) -> bool:
+    return re.search(rf"(?m)^(?:@Composable\s*\n)?private fun {re.escape(fn)}\(", text) is not None
+
+def ensure_composable(text: str, fn: str) -> str:
+    if not function_exists(text, fn):
+        return text
+
+    text = re.sub(
+        rf"(?m)(?:^@Composable\s*\n)+(?=private fun {re.escape(fn)}\()",
+        "@Composable\n",
+        text,
+    )
+
+    text = re.sub(
+        rf"(?m)^(private fun {re.escape(fn)}\()",
+        r"@Composable\n\1",
+        text,
+    )
+
+    return text
+
+shell = read(SHELL)
+
+required = CORE_COMPOSABLES[:]
+required += [fn for fn in OPTIONAL_SCREEN_CANDIDATES if function_exists(shell, fn)]
+
+for fn in required:
+    shell = ensure_composable(shell, fn)
+
+shell = re.sub(r"(?m)(^@Composable\s*\n){2,}", "@Composable\n", shell)
+write(SHELL, shell)
+
+verifier = r'''#!/usr/bin/env python3
+from pathlib import Path
+import re
 import sys
 
 errors = []
@@ -96,3 +160,24 @@ if errors:
     sys.exit(1)
 
 print("Glass 2.0 GUI verification passed.")
+'''
+
+for path in [VERIFY_GLASS, VERIFY_GUI]:
+    if path.exists():
+        write(path, verifier)
+        path.chmod(0o755)
+
+# Self-check only for functions that actually exist.
+shell = read(SHELL)
+failed = []
+for fn in required:
+    if re.search(r"@Composable\s*\nprivate fun " + re.escape(fn) + r"\(", shell) is None:
+        failed.append(fn)
+
+if failed:
+    print("Failed to mark existing functions as @Composable:")
+    for fn in failed:
+        print(" -", fn)
+    raise SystemExit(1)
+
+print("Fixed Glass 2.0 verifier to respect actual screen names.")

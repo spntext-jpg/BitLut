@@ -361,3 +361,15 @@ Health Connect export is limited to Huawei-derived activity/basic sport records:
 The app UI is activity-only in v1.9.6. Dashboard and Settings must not expose widgets, toggles or permission prompts for pulse, sleep, stress, SpO2, HRV or Activity Intensity.
 
 The bottom navigation is icon-only neo-glassmorphism. Status refresh actions live in Settings only; app startup refreshes status automatically.
+
+## BitLut v1.9.6 Glassmorphism 2.0 GUI polish
+
+The UI uses a premium activity-only glass system across all screens: translucent cards, soft depth shadows, radial glow, thin glass borders and an icon-only floating bottom navigation.
+
+The History chart reserves fixed vertical space for values, bars and dates so large step values cannot push bars outside the card bounds.
+
+## BitLut v1.9.6 Glass 2.0 UI system
+
+The UI uses a premium activity-only glass system across all screens: translucent surfaces, floating glass navigation, soft depth shadows, radial glow, thin highlight borders and bounded charts.
+
+History charts reserve fixed vertical space for values, bars and dates so large step values cannot push bars outside card bounds.

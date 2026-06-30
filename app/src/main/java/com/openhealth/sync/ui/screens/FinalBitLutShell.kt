@@ -1,4 +1,6 @@
 package com.openhealth.sync
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 
 import android.content.Context
@@ -138,7 +140,7 @@ fun FinalBitLutShell(
     Scaffold(
         containerColor = palette.systemBackground,
         bottomBar = {
-            NeoGlassBottomBar(
+            Glass20BottomNavigation(
                 selected = selected,
                 palette = palette,
                 onSelected = { selected = it }
@@ -169,109 +171,161 @@ fun FinalBitLutShell(
 }
 
 @Composable
-private fun NeoGlassBottomBar(
+private fun Glass20BottomNavigation(
     selected: MainTab,
     palette: BitPalette,
     onSelected: (MainTab) -> Unit
 ) {
-    val shape = RoundedCornerShape(36.dp)
+    val shellShape = RoundedCornerShape(34.dp)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
+            .padding(horizontal = 22.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .shadow(
-                    elevation = 34.dp,
-                    shape = shape,
-                    ambientColor = palette.activity.copy(alpha = if (palette.dark) 0.34f else 0.18f),
-                    spotColor = palette.mind.copy(alpha = if (palette.dark) 0.28f else 0.14f)
+                    elevation = 40.dp,
+                    shape = shellShape,
+                    ambientColor = Color.Black.copy(alpha = if (palette.dark) 0.34f else 0.09f),
+                    spotColor = palette.activity.copy(alpha = if (palette.dark) 0.32f else 0.14f)
                 )
-                .clip(shape)
+                .clip(shellShape)
                 .background(
                     Brush.linearGradient(
                         listOf(
-                            palette.card.copy(alpha = if (palette.dark) 0.78f else 0.86f),
-                            palette.card.copy(alpha = if (palette.dark) 0.44f else 0.62f)
+                            palette.card.copy(alpha = if (palette.dark) 0.76f else 0.74f),
+                            palette.card.copy(alpha = if (palette.dark) 0.46f else 0.54f),
+                            palette.systemBackground.copy(alpha = if (palette.dark) 0.28f else 0.38f)
                         )
                     )
                 )
                 .drawBehind {
                     drawRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(palette.activity.copy(alpha = 0.18f), Color.Transparent),
-                            center = Offset(size.width * 0.16f, size.height * 0.0f),
-                            radius = size.maxDimension * 0.76f
+                            colors = listOf(
+                                palette.activity.copy(alpha = 0.22f),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width * 0.14f, size.height * 0.08f),
+                            radius = size.maxDimension * 0.72f
                         )
                     )
                     drawRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(palette.mind.copy(alpha = 0.18f), Color.Transparent),
-                            center = Offset(size.width * 0.94f, size.height * 0.86f),
+                            colors = listOf(
+                                palette.mind.copy(alpha = 0.18f),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width * 0.92f, size.height * 0.92f),
                             radius = size.maxDimension * 0.84f
                         )
                     )
+                    drawLine(
+                        color = Color.White.copy(alpha = if (palette.dark) 0.18f else 0.46f),
+                        start = Offset(size.width * 0.08f, 1.2f),
+                        end = Offset(size.width * 0.92f, 1.2f),
+                        strokeWidth = 1.2f
+                    )
                 }
-                .border(1.dp, palette.stroke.copy(alpha = if (palette.dark) 0.62f else 0.42f), shape)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            MainTab.entries.forEach { tab ->
-                NeoGlassNavButton(
-                    tab = tab,
-                    selected = selected == tab,
-                    palette = palette,
-                    onClick = { onSelected(tab) }
+                .border(
+                    width = 1.dp,
+                    color = palette.stroke.copy(alpha = if (palette.dark) 0.72f else 0.52f),
+                    shape = shellShape
                 )
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MainTab.values().forEach { tab ->
+                    Glass20NavButton(
+                        tab = tab,
+                        selected = selected == tab,
+                        palette = palette,
+                        onClick = { onSelected(tab) }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun NeoGlassNavButton(
+private fun Glass20NavButton(
     tab: MainTab,
     selected: Boolean,
     palette: BitPalette,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val tint by animateColorAsState(
-        targetValue = if (selected) Color.White else palette.secondaryText,
-        label = "navIconTint"
+    val iconTint by animateColorAsState(
+        targetValue = if (selected) Color.White else palette.secondaryText.copy(alpha = 0.84f),
+        label = "glass20NavIconTint"
     )
-    val brush = if (selected) {
-        Brush.radialGradient(
-            listOf(
-                palette.activity.copy(alpha = 0.96f),
-                palette.mind.copy(alpha = 0.56f),
-                palette.activity.copy(alpha = 0.16f)
-            )
-        )
-    } else {
-        Brush.linearGradient(
-            listOf(
-                palette.card.copy(alpha = 0.18f),
-                Color.Transparent
-            )
-        )
-    }
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.0f else 0.94f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "glass20NavScale"
+    )
+    val shape = RoundedCornerShape(26.dp)
 
     Box(
         modifier = Modifier
-            .size(56.dp)
+            .size(54.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .pressScale(interactionSource)
-            .clip(RoundedCornerShape(28.dp))
-            .background(brush)
+            .clip(shape)
+            .background(
+                if (selected) {
+                    Brush.linearGradient(
+                        listOf(
+                            palette.activity.copy(alpha = 0.98f),
+                            palette.mind.copy(alpha = 0.76f),
+                            palette.activity.copy(alpha = 0.30f)
+                        )
+                    )
+                } else {
+                    Brush.linearGradient(
+                        listOf(
+                            Color.White.copy(alpha = if (palette.dark) 0.08f else 0.34f),
+                            palette.card.copy(alpha = if (palette.dark) 0.05f else 0.18f)
+                        )
+                    )
+                }
+            )
+            .drawBehind {
+                if (selected) {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.34f),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width * 0.34f, size.height * 0.12f),
+                            radius = size.maxDimension * 0.70f
+                        )
+                    )
+                }
+            }
             .border(
-                1.dp,
-                if (selected) Color.White.copy(alpha = 0.28f) else palette.stroke.copy(alpha = 0.32f),
-                RoundedCornerShape(28.dp)
+                width = 1.dp,
+                color = if (selected) {
+                    Color.White.copy(alpha = 0.34f)
+                } else {
+                    palette.stroke.copy(alpha = if (palette.dark) 0.38f else 0.32f)
+                },
+                shape = shape
             )
             .clickable(
                 interactionSource = interactionSource,
@@ -283,9 +337,20 @@ private fun NeoGlassNavButton(
         Icon(
             imageVector = tab.icon,
             contentDescription = null,
-            tint = tint,
+            tint = iconTint,
             modifier = Modifier.size(if (selected) 27.dp else 24.dp)
         )
+
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 6.dp)
+                    .size(width = 16.dp, height = 3.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(Color.White.copy(alpha = 0.72f))
+            )
+        }
     }
 }
 
@@ -780,66 +845,6 @@ private object HealthAccent {
     val systemLight = Color(0xFFF2F2F7)
 }
 
-@Composable
-private fun SoftCard(
-    palette: BitPalette,
-    modifier: Modifier = Modifier.fillMaxWidth(),
-    accent: Color = palette.activity,
-    hero: Boolean = false,
-    tintWithAccent: Boolean = false,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    val shape = RoundedCornerShape(if (hero) 32.dp else 28.dp)
-    val targetCardColor = if (tintWithAccent && palette.dark) {
-        // Subtle "Expressive" tint: blend a touch of the metric's accent into the
-        // flat dark card color, instead of every card sharing one identical gray.
-        lerp(palette.card, accent, 0.10f)
-    } else {
-        palette.card
-    }
-    val bg by animateColorAsState(targetCardColor, label = "cardBg")
-    val showMeshGradient = true
-    Column(
-        modifier = modifier
-            .shadow(28.dp, shape, ambientColor = Color.Black.copy(alpha = if (palette.dark) 0.28f else 0.055f), spotColor = accent.copy(alpha = if (palette.dark) 0.26f else 0.10f))
-            .clip(shape)
-            .background(bg)
-            .then(
-                if (showMeshGradient) {
-                    // Two soft radial "mesh" blobs per the Material 3 Expressive
-                    // brief's "breathing", non-flat card backgrounds. Built with
-                    // plain Brush.radialGradient (alpha fading smoothly to 0)
-                    // rather than Modifier.blur(), since blur silently no-ops
-                    // below Android 12 — a meaningful share of real devices would
-                    // see no effect at all. The soft alpha falloff here still
-                    // reads as "breathing" rather than a hard-edged circle on
-                    // every Android version, not just the newest ones.
-                    Modifier.drawBehind {
-                        drawRect(
-                            brush = Brush.radialGradient(
-                                colors = listOf(accent.copy(alpha = 0.16f), accent.copy(alpha = 0.0f)),
-                                center = Offset(size.width * 0.88f, size.height * 0.05f),
-                                radius = size.maxDimension * 0.55f
-                            )
-                        )
-                        drawRect(
-                            brush = Brush.radialGradient(
-                                colors = listOf(accent.copy(alpha = 0.10f), accent.copy(alpha = 0.0f)),
-                                center = Offset(size.width * 0.05f, size.height * 0.95f),
-                                radius = size.maxDimension * 0.5f
-                            )
-                        )
-                    }
-                } else {
-                    Modifier
-                }
-            )
-            .border(1.dp, palette.stroke, shape)
-            .padding(if (hero) 24.dp else 16.dp),
-        content = content
-    )
-}
-
 /**
  * iOS/Apple-Health-style tactile press feedback: scales a tappable surface down
  * slightly while pressed, using spring physics rather than a linear tween so the
@@ -1133,77 +1138,6 @@ private fun coerceProgress(value: Double, goal: Double): Float =
  * nothing rather than dividing by zero; an all-zero bar list renders all bars at
  * minimum height rather than NaN-height bars.
  */
-@Composable
-private fun MetricBarChartCard(
-    palette: BitPalette,
-    title: String,
-    periodValueLabel: String,
-    bars: List<MetricBar>,
-    accent: Color,
-    valueFormatter: (Double) -> String
-) {
-    SoftCard(palette = palette, accent = accent, hero = false, tintWithAccent = true) {
-        Text(
-            text = title,
-            color = palette.text,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 14.sp
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = periodValueLabel,
-            color = palette.secondaryText,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 12.sp
-        )
-        Spacer(Modifier.height(14.dp))
-        if (bars.isNotEmpty()) {
-            val maxValue = bars.maxOf { it.value }.takeIf { it > 0.0 } ?: 1.0
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(96.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                bars.forEach { bar ->
-                    val fraction = (bar.value / maxValue).toFloat().coerceIn(0.04f, 1f)
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Bottom
-                    ) {
-                        Text(
-                            text = formatBarValueShort(bar.value),
-                            color = palette.secondaryText,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 9.sp,
-                            maxLines = 1
-                        )
-                        Spacer(Modifier.height(3.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight(fraction)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(accent.copy(alpha = 0.85f))
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = barDateLabel(bar),
-                            color = palette.secondaryText,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 9.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 /** Short numeric label above a bar (e.g. "1.2k" for 1200 steps, "72" for bpm). */
 private fun formatBarValueShort(value: Double): String = when {
     value <= 0.0 -> "0"
@@ -1364,3 +1298,189 @@ private data class BitPalette(
  */
 
 private fun formatNumber(value: Long): String = String.format(Locale.getDefault(), "%,d", value).replace(',', ' ')
+
+@Composable
+private fun SoftCard(
+    palette: BitPalette,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    accent: Color = palette.activity,
+    hero: Boolean = false,
+    tintWithAccent: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val shape = RoundedCornerShape(if (hero) 34.dp else 28.dp)
+    val targetCardColor = if (palette.dark) {
+        lerp(palette.card, accent, if (hero || tintWithAccent) 0.12f else 0.07f)
+    } else {
+        lerp(palette.card, accent, if (hero || tintWithAccent) 0.045f else 0.025f)
+    }
+    val bg by animateColorAsState(targetCardColor, label = "glass20CardBg")
+
+    Column(
+        modifier = modifier
+            .shadow(
+                elevation = if (hero) 36.dp else 24.dp,
+                shape = shape,
+                ambientColor = Color.Black.copy(alpha = if (palette.dark) 0.32f else 0.06f),
+                spotColor = accent.copy(alpha = if (palette.dark) 0.24f else 0.12f)
+            )
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        bg.copy(alpha = if (palette.dark) 0.86f else 0.90f),
+                        bg.copy(alpha = if (palette.dark) 0.62f else 0.72f),
+                        palette.systemBackground.copy(alpha = if (palette.dark) 0.16f else 0.28f)
+                    )
+                )
+            )
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            accent.copy(alpha = if (hero) 0.22f else 0.15f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.88f, size.height * 0.08f),
+                        radius = size.maxDimension * 0.62f
+                    )
+                )
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            palette.mind.copy(alpha = if (hero) 0.14f else 0.08f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.10f, size.height * 0.98f),
+                        radius = size.maxDimension * 0.58f
+                    )
+                )
+                drawLine(
+                    color = Color.White.copy(alpha = if (palette.dark) 0.15f else 0.36f),
+                    start = Offset(size.width * 0.08f, 1.1f),
+                    end = Offset(size.width * 0.92f, 1.1f),
+                    strokeWidth = 1.1f
+                )
+            }
+            .border(
+                width = 1.dp,
+                color = palette.stroke.copy(alpha = if (palette.dark) 0.70f else 0.50f),
+                shape = shape
+            )
+            .padding(if (hero) 24.dp else 16.dp),
+        content = content
+    )
+}
+
+@Composable
+private fun MetricBarChartCard(
+    palette: BitPalette,
+    title: String,
+    periodValueLabel: String,
+    bars: List<MetricBar>,
+    accent: Color,
+    valueFormatter: (Double) -> String
+) {
+    SoftCard(palette = palette, accent = accent, hero = false, tintWithAccent = true) {
+        Text(
+            text = title,
+            color = palette.text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 14.sp
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = periodValueLabel,
+            color = palette.secondaryText,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(14.dp))
+
+        if (bars.isNotEmpty()) {
+            val maxValue = bars.maxOf { it.value }.takeIf { it > 0.0 } ?: 1.0
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(132.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                bars.forEach { bar ->
+                    val fraction = (bar.value / maxValue).toFloat().coerceIn(0.05f, 1f)
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = formatBarValueShort(bar.value),
+                            color = palette.secondaryText,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 8.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .height(18.dp)
+                                .fillMaxWidth()
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .height(84.dp)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .fillMaxHeight(fraction)
+                                    .defaultMinSize(minHeight = 6.dp)
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(
+                                                accent.copy(alpha = 0.98f),
+                                                accent.copy(alpha = 0.62f)
+                                            )
+                                        )
+                                    )
+                                    .drawBehind {
+                                        drawRect(
+                                            brush = Brush.radialGradient(
+                                                colors = listOf(
+                                                    Color.White.copy(alpha = 0.28f),
+                                                    Color.Transparent
+                                                ),
+                                                center = Offset(size.width * 0.35f, 0f),
+                                                radius = size.maxDimension * 0.80f
+                                            )
+                                        )
+                                    }
+                            )
+                        }
+
+                        Spacer(Modifier.height(5.dp))
+
+                        Text(
+                            text = barDateLabel(bar),
+                            color = palette.secondaryText,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 8.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .height(18.dp)
+                                .fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
