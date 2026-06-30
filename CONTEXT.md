@@ -135,3 +135,17 @@ The History chart reserves fixed vertical space for values, bars and dates so la
 The UI uses a premium activity-only glass system across all screens: translucent surfaces, floating glass navigation, soft depth shadows, radial glow, thin highlight borders and bounded charts.
 
 History charts reserve fixed vertical space for values, bars and dates so large step values cannot push bars outside card bounds.
+
+## v1.9.6 current baseline
+
+BitLut v1.9.6 is activity-only for Huawei Health and Google Health Connect.
+
+Do not reintroduce sleep, pulse, SpO2, HRV, stress or Activity Intensity until Huawei approval scope is expanded.
+
+GUI baseline:
+- Glass 2.0 visual system
+- icon-only floating bottom navigation
+- premium translucent cards
+- bounded history charts
+- refresh status buttons only in Settings
+- automatic status refresh on app launch

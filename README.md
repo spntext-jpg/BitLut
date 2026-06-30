@@ -373,3 +373,24 @@ The History chart reserves fixed vertical space for values, bars and dates so la
 The UI uses a premium activity-only glass system across all screens: translucent surfaces, floating glass navigation, soft depth shadows, radial glow, thin highlight borders and bounded charts.
 
 History charts reserve fixed vertical space for values, bars and dates so large step values cannot push bars outside card bounds.
+
+## v1.9.6 current baseline
+
+BitLut v1.9.6 is now locked to activity-only health sync.
+
+Supported health data:
+- steps
+- distance
+- floors / ascent / elevation
+- active calories / active hours
+- activity sessions / workout records
+
+Unsupported metrics are intentionally removed from sync and UI:
+- sleep
+- pulse / heart rate
+- SpO2
+- HRV
+- stress
+- Activity Intensity
+
+The UI uses the Glass 2.0 system: translucent surfaces, floating icon-only navigation, soft depth, radial glow, thin highlight borders and bounded charts.
