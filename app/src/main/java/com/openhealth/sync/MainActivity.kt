@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setupPeriodicSync()
+        refreshUiStatusOnLaunch()
         setContent {
             BitLutExpressiveTheme {
 FinalBitLutShell(
@@ -180,6 +181,12 @@ FinalBitLutShell(
                 )
             }
         }
+    }
+
+
+    private fun refreshUiStatusOnLaunch() {
+        syncViewModel.refreshStatuses()
+        dashboardViewModel.refresh()
     }
 
     private fun startHuaweiAuthorization() {

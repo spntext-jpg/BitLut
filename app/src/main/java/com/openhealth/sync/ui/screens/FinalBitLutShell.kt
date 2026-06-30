@@ -1,4 +1,5 @@
 package com.openhealth.sync
+import androidx.compose.foundation.layout.navigationBarsPadding
 
 import android.content.Context
 import android.os.Bundle
@@ -32,8 +33,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -139,33 +138,11 @@ fun FinalBitLutShell(
     Scaffold(
         containerColor = palette.systemBackground,
         bottomBar = {
-            NavigationBar(containerColor = palette.card.copy(alpha = if (isDark) 0.72f else 0.96f)) {
-                MainTab.values().forEach { tab ->
-                    NavigationBarItem(
-                        selected = selected == tab,
-                        onClick = { selected = tab },
-                        icon = {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = when (tab) {
-                                    MainTab.Today -> stringResource(R.string.tab_today)
-                                    MainTab.SevenDays -> stringResource(R.string.tab_7days)
-                                    MainTab.Settings -> stringResource(R.string.tab_settings)
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    )
-                }
-            }
+            NeoGlassBottomBar(
+                selected = selected,
+                palette = palette,
+                onSelected = { selected = it }
+            )
         }
     ) { padding ->
         Box(
@@ -192,6 +169,127 @@ fun FinalBitLutShell(
 }
 
 @Composable
+private fun NeoGlassBottomBar(
+    selected: MainTab,
+    palette: BitPalette,
+    onSelected: (MainTab) -> Unit
+) {
+    val shape = RoundedCornerShape(36.dp)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                .shadow(
+                    elevation = 34.dp,
+                    shape = shape,
+                    ambientColor = palette.activity.copy(alpha = if (palette.dark) 0.34f else 0.18f),
+                    spotColor = palette.mind.copy(alpha = if (palette.dark) 0.28f else 0.14f)
+                )
+                .clip(shape)
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            palette.card.copy(alpha = if (palette.dark) 0.78f else 0.86f),
+                            palette.card.copy(alpha = if (palette.dark) 0.44f else 0.62f)
+                        )
+                    )
+                )
+                .drawBehind {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(palette.activity.copy(alpha = 0.18f), Color.Transparent),
+                            center = Offset(size.width * 0.16f, size.height * 0.0f),
+                            radius = size.maxDimension * 0.76f
+                        )
+                    )
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(palette.mind.copy(alpha = 0.18f), Color.Transparent),
+                            center = Offset(size.width * 0.94f, size.height * 0.86f),
+                            radius = size.maxDimension * 0.84f
+                        )
+                    )
+                }
+                .border(1.dp, palette.stroke.copy(alpha = if (palette.dark) 0.62f else 0.42f), shape)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MainTab.entries.forEach { tab ->
+                NeoGlassNavButton(
+                    tab = tab,
+                    selected = selected == tab,
+                    palette = palette,
+                    onClick = { onSelected(tab) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NeoGlassNavButton(
+    tab: MainTab,
+    selected: Boolean,
+    palette: BitPalette,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val tint by animateColorAsState(
+        targetValue = if (selected) Color.White else palette.secondaryText,
+        label = "navIconTint"
+    )
+    val brush = if (selected) {
+        Brush.radialGradient(
+            listOf(
+                palette.activity.copy(alpha = 0.96f),
+                palette.mind.copy(alpha = 0.56f),
+                palette.activity.copy(alpha = 0.16f)
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                palette.card.copy(alpha = 0.18f),
+                Color.Transparent
+            )
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .pressScale(interactionSource)
+            .clip(RoundedCornerShape(28.dp))
+            .background(brush)
+            .border(
+                1.dp,
+                if (selected) Color.White.copy(alpha = 0.28f) else palette.stroke.copy(alpha = 0.32f),
+                RoundedCornerShape(28.dp)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = tab.icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(if (selected) 27.dp else 24.dp)
+        )
+    }
+}
+
+@Composable
 private fun SummaryScreen(
     palette: BitPalette,
     state: DashboardUiState,
@@ -204,11 +302,9 @@ private fun SummaryScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            MinimalTopBar(
+            MinimalHeader(
                 palette = palette,
-                title = stringResource(R.string.summary_short_title),
-                action = stringResource(R.string.refresh_status),
-                onAction = onRefresh
+                title = stringResource(R.string.summary_short_title)
             )
         }
 
@@ -242,31 +338,6 @@ private fun SummaryScreen(
                 DashboardWidgetGrid(
                     palette = palette,
                     state = state
-                )
-            }
-
-            if (state.isWidgetVisible(DashboardWidget.HEART_RATE)) {
-                item {
-                    HeartRateWidgetCard(
-                        palette = palette,
-                        state = state
-                    )
-                }
-            }
-
-            if (state.isWidgetVisible(DashboardWidget.SLEEP)) {
-                item {
-                    SleepWidgetCard(
-                        palette = palette,
-                        state = state
-                    )
-                }
-            }
-            item {
-                PrimaryButton(
-                    text = stringResource(R.string.refresh_status),
-                    accent = HealthAccent.activity,
-                    onClick = onRefresh
                 )
             }
         }
@@ -317,8 +388,6 @@ private fun HistoryScreen(
         } else {
             val rangeDays = state.selectedHistoryRangeDays
             val stepsTotal = state.stepsBars.sumOf { it.value }
-            val heartAvg = state.heartRateBars.map { it.value }.filter { it > 0.0 }.safeAverage()
-            val sleepTotal = state.sleepBars.sumOf { it.value }
 
             if (state.isWidgetVisible(DashboardWidget.STEPS)) {
                 item {
@@ -329,35 +398,6 @@ private fun HistoryScreen(
                         bars = state.stepsBars,
                         accent = HealthAccent.activity,
                         valueFormatter = { formatNumber(it.toLong()) }
-                    )
-                }
-            }
-
-            if (state.isWidgetVisible(DashboardWidget.HEART_RATE)) {
-                item {
-                    MetricBarChartCard(
-                        palette = palette,
-                        title = stringResource(R.string.heart_label_days, rangeDays),
-                        periodValueLabel = if (heartAvg > 0.0)
-                            stringResource(R.string.period_avg_heart, heartAvg.toLong().toString())
-                        else
-                            stringResource(R.string.no_data_short),
-                        bars = state.heartRateBars,
-                        accent = HealthAccent.heart,
-                        valueFormatter = { it.toLong().toString() }
-                    )
-                }
-            }
-
-            if (state.isWidgetVisible(DashboardWidget.SLEEP)) {
-                item {
-                    MetricBarChartCard(
-                        palette = palette,
-                        title = stringResource(R.string.sleep_label_days, rangeDays),
-                        periodValueLabel = stringResource(R.string.period_total_sleep, formatOneDecimal(sleepTotal)),
-                        bars = state.sleepBars,
-                        accent = HealthAccent.sleep,
-                        valueFormatter = { formatOneDecimal(it) }
                     )
                 }
             }
@@ -472,7 +512,6 @@ private fun WorkoutTypeCard(
     }
 }
 
-
 @Composable
 private fun DashboardWidgetGrid(
     palette: BitPalette,
@@ -484,11 +523,7 @@ private fun DashboardWidgetGrid(
         if (state.isWidgetVisible(DashboardWidget.WORKOUT_MINUTES))
             Triple(stringResource(R.string.workout_minutes_title), "${state.workoutMinutesToday}", stringResource(R.string.minutes_short)) to HealthAccent.activity else null,
         if (state.isWidgetVisible(DashboardWidget.ACTIVE_HOURS))
-            Triple(stringResource(R.string.active_hours_title), "${state.activeHoursToday}", stringResource(R.string.hours_short)) to HealthAccent.mind else null,
-        if (state.isWidgetVisible(DashboardWidget.STRESS))
-            Triple(stringResource(R.string.stress_title), state.stressScore?.toString() ?: stringResource(R.string.no_data_short), stringResource(R.string.score_100_unit)) to HealthAccent.mind else null,
-        if (state.isWidgetVisible(DashboardWidget.SPO2))
-            Triple(stringResource(R.string.spo2_title), state.spo2Percent?.let { formatOneDecimal(it) } ?: stringResource(R.string.no_data_short), "%") to HealthAccent.mind else null
+            Triple(stringResource(R.string.active_hours_title), "${state.activeHoursToday}", stringResource(R.string.hours_short)) to HealthAccent.mind else null
     )
 
     if (tiles.isEmpty()) return
@@ -537,60 +572,6 @@ private fun MiniMetricWidget(
 }
 
 @Composable
-private fun HeartRateWidgetCard(
-    palette: BitPalette,
-    state: DashboardUiState
-) {
-    SoftCard(palette = palette, accent = HealthAccent.heart, hero = false, tintWithAccent = true) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text(stringResource(R.string.heart_today), color = palette.secondaryText, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Text(
-                    state.heartRateBpm?.let { "$it ${stringResource(R.string.bpm_unit)}" } ?: stringResource(R.string.no_data_short),
-                    color = palette.text,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 26.sp
-                )
-            }
-            Text("♥", color = HealthAccent.heart, fontWeight = FontWeight.Black, fontSize = 28.sp)
-        }
-        Spacer(Modifier.height(12.dp))
-        MiniSparkline(
-            bars = state.heartRateTodayBars,
-            accent = HealthAccent.heart,
-            modifier = Modifier.fillMaxWidth().height(52.dp)
-        )
-    }
-}
-
-@Composable
-private fun SleepWidgetCard(
-    palette: BitPalette,
-    state: DashboardUiState
-) {
-    SoftCard(palette = palette, accent = HealthAccent.sleep, hero = false, tintWithAccent = true) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text(stringResource(R.string.sleep_today), color = palette.secondaryText, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Text(formatSleepDuration(state.sleepHours), color = palette.text, fontWeight = FontWeight.Black, fontSize = 26.sp)
-                Text(
-                    state.sleepQualityScore?.let { stringResource(R.string.sleep_quality_score, it) } ?: stringResource(R.string.no_data_short),
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp
-                )
-            }
-            ProgressRingChip(
-                progress = coerceProgress(state.sleepHours, SLEEP_GOAL_HOURS),
-                accent = HealthAccent.sleep,
-                size = 48.dp,
-                centerText = "☾"
-            )
-        }
-    }
-}
-
-@Composable
 private fun MiniSparkline(
     bars: List<MetricBar>,
     accent: Color,
@@ -613,13 +594,6 @@ private fun MiniSparkline(
         }
     }
 }
-
-private fun formatSleepDuration(hours: Double): String {
-    if (hours <= 0.0) return "—"
-    val totalMinutes = (hours * 60.0).toInt()
-    return "${totalMinutes / 60}h ${totalMinutes % 60}m"
-}
-
 
 @Composable
 private fun SettingsScreen(
@@ -701,7 +675,7 @@ private fun SettingsScreen(
         }
 
         item {
-            SoftCard(palette = palette, accent = HealthAccent.activity, hero = false) {
+            SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
                 Text(
                     text = stringResource(R.string.widget_visibility_section_body),
                     color = palette.secondaryText,
@@ -737,34 +711,6 @@ private fun SettingsScreen(
                     accent = HealthAccent.mind,
                     checked = dashboardState.isWidgetVisible(DashboardWidget.ACTIVE_HOURS),
                     onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.ACTIVE_HOURS, it) }
-                )
-                WidgetVisibilityRow(
-                    palette = palette,
-                    label = stringResource(R.string.widget_toggle_heart),
-                    accent = HealthAccent.heart,
-                    checked = dashboardState.isWidgetVisible(DashboardWidget.HEART_RATE),
-                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.HEART_RATE, it) }
-                )
-                WidgetVisibilityRow(
-                    palette = palette,
-                    label = stringResource(R.string.widget_toggle_sleep),
-                    accent = HealthAccent.sleep,
-                    checked = dashboardState.isWidgetVisible(DashboardWidget.SLEEP),
-                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.SLEEP, it) }
-                )
-                WidgetVisibilityRow(
-                    palette = palette,
-                    label = stringResource(R.string.widget_toggle_stress),
-                    accent = HealthAccent.mind,
-                    checked = dashboardState.isWidgetVisible(DashboardWidget.STRESS),
-                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.STRESS, it) }
-                )
-                WidgetVisibilityRow(
-                    palette = palette,
-                    label = stringResource(R.string.widget_toggle_spo2),
-                    accent = HealthAccent.mind,
-                    checked = dashboardState.isWidgetVisible(DashboardWidget.SPO2),
-                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.SPO2, it) }
                 )
                 WidgetVisibilityRow(
                     palette = palette,
@@ -817,8 +763,6 @@ private fun WidgetVisibilityRow(
     }
 }
 
-
-
 /**
  * Generic reference target for the Sleep progress ring on Summary, in hours.
  * Unlike [DashboardUiState.stepsGoal], this is NOT a personalized or
@@ -826,8 +770,6 @@ private fun WidgetVisibilityRow(
  * used only to give the ring a sense of "how close to a typical night" the
  * person is. If/when per-user sleep goals are added, replace this constant.
  */
-private const val SLEEP_GOAL_HOURS = 8.0
-
 private object HealthAccent {
     val activity = Color(0xFFFF6B5A)
     val sleep = Color(0xFF6D5DF6)
@@ -856,7 +798,7 @@ private fun SoftCard(
         palette.card
     }
     val bg by animateColorAsState(targetCardColor, label = "cardBg")
-    val showMeshGradient = tintWithAccent && palette.dark
+    val showMeshGradient = true
     Column(
         modifier = modifier
             .shadow(28.dp, shape, ambientColor = Color.Black.copy(alpha = if (palette.dark) 0.28f else 0.055f), spotColor = accent.copy(alpha = if (palette.dark) 0.26f else 0.10f))
@@ -937,7 +879,6 @@ private fun PrimaryButton(
         colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White)
     ) { Text(text, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
 }
-
 
 @Composable
 private fun MinimalTopBar(
@@ -1290,8 +1231,6 @@ private fun List<Double>.safeAverage(): Double =
 private fun formatOneDecimal(value: Double): String =
     String.format(Locale.getDefault(), "%.1f", value)
 
-
-
 @Composable
 private fun SettingsConnectionCard(
     palette: BitPalette,
@@ -1305,7 +1244,7 @@ private fun SettingsConnectionCard(
     secondaryAction: String? = null,
     onSecondaryAction: (() -> Unit)? = null
 ) {
-    SoftCard(palette = palette, accent = accent, hero = false) {
+    SoftCard(palette = palette, accent = accent, hero = false, tintWithAccent = true) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1375,7 +1314,6 @@ private fun SettingsConnectionCard(
     }
 }
 
-
 private data class BitPalette(
     val dark: Boolean,
     val systemBackground: Color,
@@ -1418,7 +1356,6 @@ private data class BitPalette(
         )
     }
 }
-
 
 /*
  * UI sprint note:
