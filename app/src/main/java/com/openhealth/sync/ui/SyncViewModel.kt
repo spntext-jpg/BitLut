@@ -1,12 +1,12 @@
 package com.openhealth.sync.ui
+import com.openhealth.sync.data.HuaweiHealthReader
+import com.openhealth.sync.data.HealthConnectManager
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.openhealth.sync.data.GoogleHealthManager
 import com.openhealth.sync.data.HealthConnectStatus
-import com.openhealth.sync.data.HuaweiHealthManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,8 +28,8 @@ data class SyncUiState(
 )
 
 class SyncViewModel(
-    val googleManager: GoogleHealthManager,
-    val huaweiHealthManager: HuaweiHealthManager,
+    val googleManager: HealthConnectManager,
+    val huaweiHealthManager: HuaweiHealthReader,
     private val prefs: android.content.SharedPreferences
 ) : ViewModel() {
 
@@ -81,8 +81,8 @@ class SyncViewModel(
 
     companion object {
         fun provideFactory(
-            googleManager: GoogleHealthManager,
-            huaweiHealthManager: HuaweiHealthManager,
+            googleManager: HealthConnectManager,
+            huaweiHealthManager: HuaweiHealthReader,
             context: Context
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")

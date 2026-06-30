@@ -1,11 +1,11 @@
 package com.openhealth.sync.ui
+import com.openhealth.sync.data.HealthConnectManager
 
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.openhealth.sync.data.GoogleHealthManager
 import com.openhealth.sync.data.import.HuaweiExportParser
 import com.openhealth.sync.data.import.HuaweiExportSummary
 import com.openhealth.sync.util.AppLogger
@@ -34,7 +34,7 @@ sealed class ImportState {
 }
 
 class ImportViewModel(
-    private val googleManager: GoogleHealthManager,
+    private val googleManager: HealthConnectManager,
     private val context: Context
 ) : ViewModel() {
 
@@ -116,7 +116,7 @@ class ImportViewModel(
 
     companion object {
         fun provideFactory(
-            googleManager: GoogleHealthManager,
+            googleManager: HealthConnectManager,
             context: Context
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")

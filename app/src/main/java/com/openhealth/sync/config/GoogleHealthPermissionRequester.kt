@@ -1,10 +1,10 @@
 package com.openhealth.sync.config
+import com.openhealth.sync.data.HealthConnectManager
 
 import android.content.Context
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import com.openhealth.sync.R
-import com.openhealth.sync.data.GoogleHealthManager
 import com.openhealth.sync.data.HealthConnectStatus
 import com.openhealth.sync.util.AppLogger
 
@@ -26,7 +26,7 @@ private const val TAG = "GoogleHealthPermissionRequester"
  */
 fun requestGoogleHealthPermissions(
     context: Context,
-    googleManager: GoogleHealthManager,
+    googleManager: HealthConnectManager,
     launcher: ActivityResultLauncher<Set<String>>
 ) {
     when (googleManager.getStatus()) {

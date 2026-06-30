@@ -1,4 +1,7 @@
 package com.openhealth.sync.data
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 
 import android.app.Activity
 import android.content.Context
@@ -48,7 +51,10 @@ private data class HuaweiMetricSample(
     val value: Double
 )
 
-class HuaweiHealthManager(private val context: Context) {
+class HuaweiHealthManager(
+    private val context: Context,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+) : HuaweiHealthReader {
 private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
         val normalized = descriptor.lowercase()
         return normalized.contains("activity") ||
@@ -80,25 +86,25 @@ private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
         Scopes.HEALTHKIT_HISTORYDATA_OPEN_WEEK
     )
 
-    fun requestedScopeNames(): String =
+    override fun requestedScopeNames(): String =
         "HEALTHKIT_STEP_READ, HEALTHKIT_DISTANCE_READ, HEALTHKIT_ACTIVITY_READ, HEALTHKIT_ACTIVITY_RECORD_READ, HEALTHKIT_HISTORYDATA_OPEN_WEEK"
 
-    fun isAuthorized(): Boolean =
+    override fun isAuthorized(): Boolean =
         prefs.getBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, false)
 
-    fun isPendingApproval(): Boolean =
+    override fun isPendingApproval(): Boolean =
         prefs.getBoolean(KEY_HUAWEI_PENDING_APPROVAL, false)
 
-    fun isAppGalleryVerificationRequired(): Boolean =
+    override fun isAppGalleryVerificationRequired(): Boolean =
         prefs.getBoolean(KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED, false)
 
-    fun clearAppGalleryVerificationRequired() {
+    override fun clearAppGalleryVerificationRequired() {
         prefs.edit()
             .putBoolean(KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED, false)
             .apply()
     }
 
-    fun markAppGalleryVerificationRequired() {
+    override fun markAppGalleryVerificationRequired() {
         prefs.edit()
             .putBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, false)
             .putBoolean(KEY_HUAWEI_PENDING_APPROVAL, true)
@@ -106,12 +112,12 @@ private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
             .apply()
     }
 
-    fun getAuthorizationIntent(): Intent {
+    override fun getAuthorizationIntent(): Intent {
         AppLogger.i(TAG, "Requesting Huawei Health Kit authorization via SettingController: ${requestedScopeNames()}")
         return settingController.requestAuthorizationIntent(scopes, true)
     }
 
-    fun getHuaweiIdAuthorizationIntent(): Intent {
+    override fun getHuaweiIdAuthorizationIntent(): Intent {
         AppLogger.i(TAG, "Requesting Huawei ID Health Kit authorization: ${requestedScopeNames()}")
 
         val scopeList = scopes.map { Scope(it) }
@@ -124,7 +130,7 @@ private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
         return HuaweiIdAuthManager.getService(context, authParams).signInIntent
     }
 
-    fun handleAuthorizationResult(resultCode: Int, data: Intent?): Boolean {
+    override fun handleAuthorizationResult(resultCode: Int, data: Intent?): Boolean {
         if (data == null) {
             saveAuthorizationState(success = false, pendingApproval = false)
             AppLogger.e(TAG, "Huawei authorization returned no result intent")
@@ -172,11 +178,12 @@ private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
         return false
     }
 
-    fun markAuthorizationUnknown() {
+    override fun markAuthorizationUnknown() {
         saveAuthorizationState(success = false, pendingApproval = false)
     }
 
-    suspend fun readSnapshot(startTimeMs: Long, endTimeMs: Long): HuaweiHealthSnapshot {
+    override suspend fun readSnapshot(startTimeMs: Long, endTimeMs: Long): HuaweiHealthSnapshot {
+        return withContext(ioDispatcher) {
         require(startTimeMs < endTimeMs) { "startTimeMs must be before endTimeMs" }
         ensureRuntimeReady()
 
@@ -196,7 +203,9 @@ private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
             "Huawei read complete: steps=${snapshot.steps.size}, distances=${snapshot.distances.size}, floors=${snapshot.floors.size}, elevations=${snapshot.elevations.size}, activeCalories=${snapshot.activeCalories.size}, activities=${snapshot.activities.size}"
         )
 
-        return snapshot
+        snapshot
+    
+        }
     }
 
     private fun saveAuthorizationState(success: Boolean, pendingApproval: Boolean) {

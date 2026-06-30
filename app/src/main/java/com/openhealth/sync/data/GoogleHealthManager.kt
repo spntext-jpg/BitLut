@@ -134,7 +134,7 @@ private fun calendarMonthBuckets(monthCount: Int, today: LocalDate): List<Pair<L
     }
 }
 
-class GoogleHealthManager(private val context: Context) {
+class GoogleHealthManager(private val context: Context) : HealthConnectManager {
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
 
@@ -154,11 +154,11 @@ class GoogleHealthManager(private val context: Context) {
         }
     }
 
-    val permissions: Set<String> = HealthPermissionPolicy.requestPermissions
+    override val permissions: Set<String> = HealthPermissionPolicy.requestPermissions
 
-    fun requiredPermissions(): Set<String> = HealthPermissionPolicy.syncPermissions
+    override fun requiredPermissions(): Set<String> = HealthPermissionPolicy.syncPermissions
 
-    fun getStatus(): HealthConnectStatus {
+    override fun getStatus(): HealthConnectStatus {
         val sdkStatus = HealthConnectClient.getSdkStatus(context)
         val installedPackage = findInstalledHcPackage()
 
@@ -197,7 +197,7 @@ class GoogleHealthManager(private val context: Context) {
         }
     }
 
-    suspend fun missingRequiredPermissions(): Set<String> {
+    override suspend fun missingRequiredPermissions(): Set<String> {
         return try {
             requiredPermissions() - grantedPermissionsOrEmpty()
         } catch (e: Exception) {
@@ -206,7 +206,7 @@ class GoogleHealthManager(private val context: Context) {
         }
     }
 
-    suspend fun hasAllPermissions(): Boolean {
+    override suspend fun hasAllPermissions(): Boolean {
         return try {
             val granted = grantedPermissionsOrEmpty()
             AppLogger.d(TAG, "Granted Health Connect permissions: $granted")
@@ -217,7 +217,7 @@ class GoogleHealthManager(private val context: Context) {
         }
     }
 
-    suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): Boolean {
+    override suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): Boolean {
         val results = listOf(
             "steps" to writeStepsBatch(snapshot.steps),
             "distance" to writeDistanceBatch(snapshot.distances),
@@ -385,7 +385,7 @@ class GoogleHealthManager(private val context: Context) {
         }
     }
 
-    suspend fun readDashboardSnapshot(daysBack: Int): GoogleDashboardSnapshot? {
+    override suspend fun readDashboardSnapshot(daysBack: Int): GoogleDashboardSnapshot? {
         val client = healthConnectClient ?: return null
         return try {
             val startOfToday = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()

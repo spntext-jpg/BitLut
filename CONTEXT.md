@@ -165,3 +165,19 @@ Deferred to a separate architecture sprint:
 - Moving WorkManager orchestration out of `MainActivity`.
 - Introducing interfaces for `GoogleHealthManager` / `HuaweiHealthManager`.
 - Gradle Version Catalog migration.
+
+## v1.9.6 Architecture Hardening 1
+
+Implemented:
+
+- `HealthConnectManager` and `HuaweiHealthReader` interfaces define the app-facing health contracts.
+- `GoogleHealthManager` and `HuaweiHealthManager` implement these contracts.
+- `DashboardViewModel`, `SyncViewModel`, `ImportViewModel` and the Health Connect permission requester depend on interfaces instead of concrete manager classes.
+- `AppContainer` exposes health dependencies through interfaces.
+- Huawei snapshot reads are explicitly offloaded through an injectable `CoroutineDispatcher`, defaulting to `Dispatchers.IO`.
+
+Still deferred to a later sprint:
+
+- Moving WorkManager orchestration out of `MainActivity`.
+- Splitting `FinalBitLutShell.kt` into feature-level UI files.
+- Gradle Version Catalog migration.

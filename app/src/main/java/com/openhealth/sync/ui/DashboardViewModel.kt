@@ -1,4 +1,5 @@
 package com.openhealth.sync.ui
+import com.openhealth.sync.data.HealthConnectManager
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -7,7 +8,6 @@ import com.openhealth.sync.config.DashboardWidget
 import com.openhealth.sync.config.WidgetVisibilityPrefs
 import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.GoogleDashboardSnapshot
-import com.openhealth.sync.data.GoogleHealthManager
 import com.openhealth.sync.data.MetricBar
 import com.openhealth.sync.data.WorkoutTypeSummary
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,7 +49,7 @@ data class DashboardUiState(
 }
 
 class DashboardViewModel(
-    private val googleManager: GoogleHealthManager,
+    private val googleManager: HealthConnectManager,
     private val widgetVisibilityPrefs: WidgetVisibilityPrefs
 ) : ViewModel() {
 
@@ -134,7 +134,7 @@ class DashboardViewModel(
 
     companion object {
         fun provideFactory(
-            googleManager: GoogleHealthManager,
+            googleManager: HealthConnectManager,
             widgetVisibilityPrefs: WidgetVisibilityPrefs
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
