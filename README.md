@@ -456,3 +456,23 @@ Still deferred:
 - manual sync delegation through `SyncOrchestrator`.
 
 `MainActivity` must not directly import WorkManager or `BackgroundSyncScheduler`.
+
+## v1.9.6 UI File Split Sprint 1
+
+Implemented:
+
+- Extracted stable Glass 2.0 UI components from `FinalBitLutShell.kt`.
+- Added `GlassNavigation.kt` for the floating icon-only bottom navigation.
+- Added `GlassCards.kt` for the shared translucent `SoftCard` surface.
+- Added `MetricCharts.kt` for bounded metric chart rendering.
+- Kept screen behavior, sync behavior, Health Connect contract and Huawei scope unchanged.
+
+This is intentionally a low-risk first split. Screen-level extraction remains deferred to the next UI architecture sprint.
+
+## v1.9.6 split-aware Glass performance verification
+
+`verify_lifecycle_glass_perf_hardening.py` now validates Glass 2.0 performance tokens across both `FinalBitLutShell.kt` and extracted `ui/components/*.kt` files.
+
+## v1.9.6 split-aware Glass GUI verification
+
+`verify_glass20_gui_self_heal.py` and `verify_gui_neoglass_activity_only.py` now validate Glass 2.0 UI across both `FinalBitLutShell.kt` and extracted `ui/components/*.kt` files.

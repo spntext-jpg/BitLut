@@ -112,7 +112,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.geometry.Offset
 
-private enum class MainTab(val key: String, val icon: ImageVector) {
+internal enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
     SevenDays("tab_7days", Icons.Rounded.TrendingUp),
     Settings("tab_settings", Icons.Rounded.Settings)
@@ -166,192 +166,6 @@ fun FinalBitLutShell(
                     onImportArchive = { showArchiveImport = true },
                     onWidgetVisibilityChanged = onWidgetVisibilityChanged)
             }
-        }
-    }
-}
-
-@Composable
-private fun Glass20BottomNavigation(
-    selected: MainTab,
-    palette: BitPalette,
-    onSelected: (MainTab) -> Unit
-) {
-    val shellShape = remember { RoundedCornerShape(34.dp) }
-    val shellBackground = remember(palette.card, palette.systemBackground, palette.dark) {
-        Brush.linearGradient(
-            listOf(
-                palette.card.copy(alpha = if (palette.dark) 0.76f else 0.74f),
-                palette.card.copy(alpha = if (palette.dark) 0.46f else 0.54f),
-                palette.systemBackground.copy(alpha = if (palette.dark) 0.28f else 0.38f)
-            )
-        )
-    }
-    val activityGlowColors = remember(palette.activity) {
-        listOf(palette.activity.copy(alpha = 0.22f), Color.Transparent)
-    }
-    val mindGlowColors = remember(palette.mind) {
-        listOf(palette.mind.copy(alpha = 0.18f), Color.Transparent)
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 22.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .shadow(
-                    elevation = 40.dp,
-                    shape = shellShape,
-                    ambientColor = Color.Black.copy(alpha = if (palette.dark) 0.34f else 0.09f),
-                    spotColor = palette.activity.copy(alpha = if (palette.dark) 0.32f else 0.14f)
-                )
-                .clip(shellShape)
-                .background(shellBackground)
-                .drawBehind {
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = activityGlowColors,
-                            center = Offset(size.width * 0.14f, size.height * 0.08f),
-                            radius = size.maxDimension * 0.72f
-                        )
-                    )
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = mindGlowColors,
-                            center = Offset(size.width * 0.92f, size.height * 0.92f),
-                            radius = size.maxDimension * 0.84f
-                        )
-                    )
-                    drawLine(
-                        color = Color.White.copy(alpha = if (palette.dark) 0.18f else 0.46f),
-                        start = Offset(size.width * 0.08f, 1.2f),
-                        end = Offset(size.width * 0.92f, 1.2f),
-                        strokeWidth = 1.2f
-                    )
-                }
-                .border(
-                    width = 1.dp,
-                    color = palette.stroke.copy(alpha = if (palette.dark) 0.72f else 0.52f),
-                    shape = shellShape
-                )
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                MainTab.values().forEach { tab ->
-                    Glass20NavButton(
-                        tab = tab,
-                        selected = selected == tab,
-                        palette = palette,
-                        onClick = { onSelected(tab) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Glass20NavButton(
-    tab: MainTab,
-    selected: Boolean,
-    palette: BitPalette,
-    onClick: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val shape = remember { RoundedCornerShape(26.dp) }
-    val selectedHighlightShape = remember { RoundedCornerShape(99.dp) }
-    val iconTint by animateColorAsState(
-        targetValue = if (selected) Color.White else palette.secondaryText.copy(alpha = 0.84f),
-        label = "glass20NavIconTint"
-    )
-    val scale by animateFloatAsState(
-        targetValue = if (selected) 1.0f else 0.94f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "glass20NavScale"
-    )
-    val selectedBrush = remember(palette.activity, palette.mind) {
-        Brush.linearGradient(
-            listOf(
-                palette.activity.copy(alpha = 0.98f),
-                palette.mind.copy(alpha = 0.76f),
-                palette.activity.copy(alpha = 0.30f)
-            )
-        )
-    }
-    val idleBrush = remember(palette.card, palette.dark) {
-        Brush.linearGradient(
-            listOf(
-                Color.White.copy(alpha = if (palette.dark) 0.08f else 0.34f),
-                palette.card.copy(alpha = if (palette.dark) 0.05f else 0.18f)
-            )
-        )
-    }
-    val selectedGlowColors = remember {
-        listOf(Color.White.copy(alpha = 0.34f), Color.Transparent)
-    }
-
-    Box(
-        modifier = Modifier
-            .size(54.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .pressScale(interactionSource)
-            .clip(shape)
-            .background(if (selected) selectedBrush else idleBrush)
-            .drawBehind {
-                if (selected) {
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = selectedGlowColors,
-                            center = Offset(size.width * 0.34f, size.height * 0.12f),
-                            radius = size.maxDimension * 0.70f
-                        )
-                    )
-                }
-            }
-            .border(
-                width = 1.dp,
-                color = if (selected) {
-                    Color.White.copy(alpha = 0.34f)
-                } else {
-                    palette.stroke.copy(alpha = if (palette.dark) 0.38f else 0.32f)
-                },
-                shape = shape
-            )
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = tab.icon,
-            contentDescription = null,
-            tint = iconTint,
-            modifier = Modifier.size(if (selected) 27.dp else 24.dp)
-        )
-
-        if (selected) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 6.dp)
-                    .size(width = 16.dp, height = 3.dp)
-                    .clip(selectedHighlightShape)
-                    .background(Color.White.copy(alpha = 0.72f))
-            )
         }
     }
 }
@@ -837,7 +651,7 @@ private fun WidgetVisibilityRow(
  * used only to give the ring a sense of "how close to a typical night" the
  * person is. If/when per-user sleep goals are added, replace this constant.
  */
-private object HealthAccent {
+internal object HealthAccent {
     val activity = Color(0xFFFF6B5A)
     val sleep = Color(0xFF6D5DF6)
     val heart = Color(0xFFE53935)
@@ -857,7 +671,7 @@ private object HealthAccent {
  * so the real onClick still fires exactly as before.
  */
 @Composable
-private fun Modifier.pressScale(interactionSource: MutableInteractionSource): Modifier {
+internal fun Modifier.pressScale(interactionSource: MutableInteractionSource): Modifier {
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.97f else 1f,
@@ -1141,7 +955,7 @@ private fun coerceProgress(value: Double, goal: Double): Float =
  * minimum height rather than NaN-height bars.
  */
 /** Short numeric label above a bar (e.g. "1.2k" for 1200 steps, "72" for bpm). */
-private fun formatBarValueShort(value: Double): String = when {
+internal fun formatBarValueShort(value: Double): String = when {
     value <= 0.0 -> "0"
     value >= 1000.0 -> String.format(Locale.getDefault(), "%.1fk", value / 1000.0)
     value == value.toLong().toDouble() -> value.toLong().toString()
@@ -1151,7 +965,7 @@ private fun formatBarValueShort(value: Double): String = when {
 /** Short date label under a bar: day-of-month for single-day bars, month
  *  abbreviation for real calendar-month bars (180/365-day ranges), otherwise a
  *  compact day-range for the multi-day week-style buckets. */
-private fun barDateLabel(bar: MetricBar): String {
+internal fun barDateLabel(bar: MetricBar): String {
     val isWholeMonth = bar.startDate.dayOfMonth == 1 &&
         bar.endDate == bar.startDate.plusMonths(1).minusDays(1)
     return when {
@@ -1250,7 +1064,7 @@ private fun SettingsConnectionCard(
     }
 }
 
-private data class BitPalette(
+internal data class BitPalette(
     val dark: Boolean,
     val systemBackground: Color,
     val card: Color,
@@ -1300,196 +1114,3 @@ private data class BitPalette(
  */
 
 private fun formatNumber(value: Long): String = String.format(Locale.getDefault(), "%,d", value).replace(',', ' ')
-
-@Composable
-private fun SoftCard(
-    palette: BitPalette,
-    modifier: Modifier = Modifier.fillMaxWidth(),
-    accent: Color = palette.activity,
-    hero: Boolean = false,
-    tintWithAccent: Boolean = false,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    val shape = remember(hero) { RoundedCornerShape(if (hero) 34.dp else 28.dp) }
-    val targetCardColor = if (palette.dark) {
-        lerp(palette.card, accent, if (hero || tintWithAccent) 0.12f else 0.07f)
-    } else {
-        lerp(palette.card, accent, if (hero || tintWithAccent) 0.045f else 0.025f)
-    }
-    val bg by animateColorAsState(targetCardColor, label = "glass20CardBg")
-    val backgroundBrush = remember(bg, palette.systemBackground, palette.dark) {
-        Brush.linearGradient(
-            listOf(
-                bg.copy(alpha = if (palette.dark) 0.86f else 0.90f),
-                bg.copy(alpha = if (palette.dark) 0.62f else 0.72f),
-                palette.systemBackground.copy(alpha = if (palette.dark) 0.16f else 0.28f)
-            )
-        )
-    }
-    val accentGlowColors = remember(accent, hero) {
-        listOf(accent.copy(alpha = if (hero) 0.22f else 0.15f), Color.Transparent)
-    }
-    val mindGlowColors = remember(palette.mind, hero) {
-        listOf(palette.mind.copy(alpha = if (hero) 0.14f else 0.08f), Color.Transparent)
-    }
-
-    Column(
-        modifier = modifier
-            .shadow(
-                elevation = if (hero) 36.dp else 24.dp,
-                shape = shape,
-                ambientColor = Color.Black.copy(alpha = if (palette.dark) 0.32f else 0.06f),
-                spotColor = accent.copy(alpha = if (palette.dark) 0.24f else 0.12f)
-            )
-            .clip(shape)
-            .background(backgroundBrush)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = accentGlowColors,
-                        center = Offset(size.width * 0.88f, size.height * 0.08f),
-                        radius = size.maxDimension * 0.62f
-                    )
-                )
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = mindGlowColors,
-                        center = Offset(size.width * 0.10f, size.height * 0.98f),
-                        radius = size.maxDimension * 0.58f
-                    )
-                )
-                drawLine(
-                    color = Color.White.copy(alpha = if (palette.dark) 0.15f else 0.36f),
-                    start = Offset(size.width * 0.08f, 1.1f),
-                    end = Offset(size.width * 0.92f, 1.1f),
-                    strokeWidth = 1.1f
-                )
-            }
-            .border(
-                width = 1.dp,
-                color = palette.stroke.copy(alpha = if (palette.dark) 0.70f else 0.50f),
-                shape = shape
-            )
-            .padding(if (hero) 24.dp else 16.dp),
-        content = content
-    )
-}
-
-@Composable
-private fun MetricBarChartCard(
-    palette: BitPalette,
-    title: String,
-    periodValueLabel: String,
-    bars: List<MetricBar>,
-    accent: Color,
-    valueFormatter: (Double) -> String
-) {
-    SoftCard(palette = palette, accent = accent, hero = false, tintWithAccent = true) {
-        Text(
-            text = title,
-            color = palette.text,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 14.sp
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = periodValueLabel,
-            color = palette.secondaryText,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(14.dp))
-
-        if (bars.isNotEmpty()) {
-            val maxValue = remember(bars) {
-                bars.maxOf { it.value }.takeIf { it > 0.0 } ?: 1.0
-            }
-            val barShape = remember { RoundedCornerShape(999.dp) }
-            val barBrush = remember(accent) {
-                Brush.verticalGradient(
-                    listOf(
-                        accent.copy(alpha = 0.98f),
-                        accent.copy(alpha = 0.62f)
-                    )
-                )
-            }
-            val shineColors = remember {
-                listOf(Color.White.copy(alpha = 0.28f), Color.Transparent)
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(132.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                bars.forEach { bar ->
-                    val fraction = (bar.value / maxValue).toFloat().coerceIn(0.05f, 1f)
-                    val valueLabel = remember(bar.value) { formatBarValueShort(bar.value) }
-                    val dateLabel = remember(bar.startDate, bar.endDate) { barDateLabel(bar) }
-
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = valueLabel,
-                            color = palette.secondaryText,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 8.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .height(18.dp)
-                                .fillMaxWidth()
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .height(84.dp)
-                                .fillMaxWidth(),
-                            contentAlignment = Alignment.BottomCenter
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight(fraction)
-                                    .defaultMinSize(minHeight = 6.dp)
-                                    .clip(barShape)
-                                    .background(barBrush)
-                                    .drawBehind {
-                                        drawRect(
-                                            brush = Brush.radialGradient(
-                                                colors = shineColors,
-                                                center = Offset(size.width * 0.35f, 0f),
-                                                radius = size.maxDimension * 0.80f
-                                            )
-                                        )
-                                    }
-                            )
-                        }
-
-                        Spacer(Modifier.height(5.dp))
-
-                        Text(
-                            text = dateLabel,
-                            color = palette.secondaryText,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 8.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .height(18.dp)
-                                .fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-    }
-}

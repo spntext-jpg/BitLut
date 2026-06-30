@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
 from pathlib import Path
+
+VERIFY_GLASS = Path("scripts/verify_glass20_gui_self_heal.py")
+VERIFY_GUI = Path("scripts/verify_gui_neoglass_activity_only.py")
+README = Path("README.md")
+CONTEXT = Path("CONTEXT.md")
+
+def read(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+def write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+verifier = r'''#!/usr/bin/env python3
+from pathlib import Path
 import re
 import sys
 
@@ -113,3 +130,23 @@ if errors:
     sys.exit(1)
 
 print("Glass 2.0 GUI verification passed.")
+'''
+
+for path in [VERIFY_GLASS, VERIFY_GUI]:
+    write(path, verifier)
+    path.chmod(0o755)
+
+note = """
+## v1.9.6 split-aware Glass GUI verification
+
+`verify_glass20_gui_self_heal.py` and `verify_gui_neoglass_activity_only.py` now validate Glass 2.0 UI across both `FinalBitLutShell.kt` and extracted `ui/components/*.kt` files.
+""".strip()
+
+for doc in [README, CONTEXT]:
+    if doc.exists():
+        content = read(doc)
+        if "## v1.9.6 split-aware Glass GUI verification" not in content:
+            content = content.rstrip() + "\n\n" + note + "\n"
+        write(doc, content)
+
+print("Updated Glass GUI verifiers for split UI components.")
