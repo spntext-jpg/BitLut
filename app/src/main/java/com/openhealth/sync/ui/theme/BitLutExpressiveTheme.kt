@@ -11,43 +11,55 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 // ── Design System Tokens ──────────────────────────────────────────────────────
+//
+// Single source of truth (v1.9.11): these are now the SAME values used by
+// BitPalette.dark() and HealthAccent in FinalBitLutShell.kt, instead of an
+// independent blue/orange/purple palette that no screen actually rendered
+// with. Previously, MaterialTheme(colorScheme = DarkScheme) carried tokens
+// (Blue #19AEF9, Orange #FF9839, Purple #8B5CF6) that never appeared
+// anywhere in the actual UI -- every screen built its visuals through the
+// separate BitPalette/HealthAccent system instead. That meant any future
+// code accidentally referencing MaterialTheme.colorScheme.primary would get
+// a blue that doesn't exist anywhere else in the product. Aligning them
+// means there is exactly one health-accent orange, one "mind" teal, etc.,
+// no matter which system a given piece of UI reads its color from.
 
-// Backgrounds
-val BgPrimary      = Color(0xFF0F172A)   // #0F172A — main background
-val BgSecondary    = Color(0xFF111827)   // #111827 — dark slate
-val BgElevated     = Color(0xFF162033)   // #162033 — elevated surface
+// Backgrounds (mirrors BitPalette.dark())
+val BgPrimary      = Color(0xFF0C0C0E)   // BitPalette.dark().systemBackground
+val BgSecondary    = Color(0xFF0C0C0E)
+val BgElevated     = Color(0xCC1C1C1E)   // BitPalette.dark().card
 
-// Accent Colors
-val Blue           = Color(0xFF19AEF9)   // primary interactive
-val BlueDim        = Color(0xFF0D8AC5)
-val Orange         = Color(0xFFFF9839)   // CTA / AI button
-val Purple         = Color(0xFF8B5CF6)   // secondary
+// Accent Colors (mirrors HealthAccent / BitPalette.dark())
+val Orange         = Color(0xFFFF6B5A)   // HealthAccent.activity -- the one true "activity" accent
+val OrangeDim      = Color(0xFFE25A4B)
+val Purple         = Color(0xFF9E6FC3)   // BitPalette.dark().sleep -- the one true "sleep" accent
+val Mind           = Color(0xFF5FE0C6)   // BitPalette.dark().mind / HealthAccent.mind
 
 // Semantic
 val Success        = Color(0xFF22C55E)
 val Warning        = Color(0xFFF59E0B)
-val Danger         = Color(0xFFEF4444)
+val Danger         = Color(0xFFFF453A)   // BitPalette.dark().heart
 
-// Text
-val TextPrimary    = Color(0xFFF8F9FA)
-val TextSecondary  = Color(0xFF94A3B8)
+// Text (mirrors BitPalette.dark())
+val TextPrimary    = Color(0xFFF8F8F8)
+val TextSecondary  = Color(0xFF8E8E93)
 
-// Glass borders
-val GlassBorder    = Color(0x14FFFFFF)   // rgba(255,255,255,0.08)
+// Glass borders (mirrors BitPalette.dark().stroke)
+val GlassBorder    = Color(0x22FFFFFF)
 
 private val DarkScheme = darkColorScheme(
-    primary              = Blue,
-    onPrimary            = Color(0xFF001529),
-    primaryContainer     = Color(0xFF0D2B45),
-    onPrimaryContainer   = Blue,
+    primary              = Orange,
+    onPrimary            = Color(0xFF2D1500),
+    primaryContainer     = Color(0xFF3D2000),
+    onPrimaryContainer   = Orange,
     secondary            = Purple,
     onSecondary          = Color(0xFF1A0040),
     secondaryContainer   = Color(0xFF2D1B69),
     onSecondaryContainer = Purple,
-    tertiary             = Orange,
-    onTertiary           = Color(0xFF2D1500),
-    tertiaryContainer    = Color(0xFF3D2000),
-    onTertiaryContainer  = Orange,
+    tertiary             = Mind,
+    onTertiary           = Color(0xFF00261F),
+    tertiaryContainer    = Color(0xFF003D32),
+    onTertiaryContainer  = Mind,
     error                = Danger,
     onError              = Color(0xFF1A0000),
     errorContainer       = Color(0xFF4C0000),
@@ -62,8 +74,8 @@ private val DarkScheme = darkColorScheme(
     outlineVariant       = Color(0xFF1E293B),
     inverseSurface       = TextPrimary,
     inverseOnSurface     = BgPrimary,
-    inversePrimary       = BlueDim,
-    surfaceTint          = Blue,
+    inversePrimary       = OrangeDim,
+    surfaceTint          = Orange,
     scrim                = Color(0xCC0A1428),
 )
 

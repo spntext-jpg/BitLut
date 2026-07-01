@@ -185,7 +185,8 @@ private fun SummaryScreen(
         item {
             MinimalHeader(
                 palette = palette,
-                title = stringResource(R.string.summary_short_title)
+                title = stringResource(R.string.summary_short_title),
+                subtitle = formatUpdatedAgo(state.lastUpdatedAtMs, state.isFromCache)
             )
         }
 
@@ -666,9 +667,9 @@ private fun WidgetVisibilityRow(
  */
 internal object HealthAccent {
     val activity = Color(0xFFFF6B5A)
-    val sleep = Color(0xFF6D5DF6)
-    val heart = Color(0xFFE53935)
-    val mind = Color(0xFF64D2C8)
+    val sleep = Color(0xFF9E6FC3)
+    val heart = Color(0xFFFF453A)
+    val mind = Color(0xFF5FE0C6)
     val cardLight = Color.White
     val cardDark = Color(0xCC1C1C1E)
     val systemLight = Color(0xFFF2F2F7)
@@ -747,15 +748,28 @@ private fun MinimalTopBar(
 @Composable
 private fun MinimalHeader(
     palette: BitPalette,
-    title: String
+    title: String,
+    subtitle: String? = null
 ) {
-    Text(
-        text = title,
-        color = palette.text,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 30.sp,
-        modifier = Modifier.fillMaxWidth()
-    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title,
+            color = palette.text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 30.sp,
+            modifier = Modifier.fillMaxWidth()
+        )
+        if (subtitle != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = subtitle,
+                color = palette.secondaryText,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
 }
 
 @Composable
@@ -950,17 +964,33 @@ private fun MinimalSquareTile(
  * [progress] is expected pre-clamped to 0f..1f by the caller (see [coerceProgress]).
  */
 @Composable
+/**
+ * Redesigned (v1.9.11) to carry more visual weight against the 56sp hero
+ * number it sits beside on the steps card: a thicker stroke, a soft glow
+ * behind the ring (instead of just the bare arc), and the actual percentage
+ * by default instead of a plain "•" -- matching the convention set by
+ * Apple Health / Oura rings, where the ring itself communicates real
+ * progress information rather than functioning as pure decoration.
+ */
+@Composable
 private fun ProgressRingChip(
     progress: Float,
     accent: Color,
     size: androidx.compose.ui.unit.Dp,
-    centerText: String = "•"
+    centerText: String? = null
 ) {
+    val resolvedCenterText = centerText ?: "${(progress.coerceIn(0f, 1f) * 100).toInt()}%"
+    val glowColors = remember(accent) { listOf(accent.copy(alpha = 0.30f), Color.Transparent) }
+
     Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.matchParentSize()) {
-            val stroke = Stroke(width = 3.5.dp.toPx(), cap = StrokeCap.Round)
+            drawCircle(
+                brush = Brush.radialGradient(colors = glowColors, radius = this.size.maxDimension * 0.62f),
+                radius = this.size.maxDimension * 0.55f
+            )
+            val stroke = Stroke(width = 4.5.dp.toPx(), cap = StrokeCap.Round)
             drawArc(
-                color = accent.copy(alpha = 0.18f),
+                color = accent.copy(alpha = 0.20f),
                 startAngle = -90f,
                 sweepAngle = 360f,
                 useCenter = false,
@@ -974,7 +1004,13 @@ private fun ProgressRingChip(
                 style = stroke
             )
         }
-        Text(centerText, color = accent, fontSize = 13.sp, fontWeight = FontWeight.Black)
+        Text(
+            resolvedCenterText,
+            color = accent,
+            fontSize = if (resolvedCenterText.length > 2) 11.sp else 13.sp,
+            fontWeight = FontWeight.Black,
+            maxLines = 1
+        )
     }
 }
 
@@ -1124,9 +1160,16 @@ internal data class BitPalette(
     val backgroundBrush: Brush
 ) {
     companion object {
+        // light() intentionally uses its own, slightly more saturated accent
+        // values rather than HealthAccent's dark-mode hexes verbatim: the same
+        // glow-tinted accent that reads as rich against a near-black card
+        // washes out and looks chalky against white, so a small amount of
+        // per-theme accent tuning is correct design, not drift -- unlike the
+        // old dark() values below, which differed from HealthAccent by a few
+        // hex units for no reason and would have drifted further over time.
         fun light(): BitPalette = BitPalette(
             dark = false,
-            systemBackground = Color(0xFFF2F2F7),
+            systemBackground = Color(0xFFF6F4F1),
             card = Color.White,
             text = Color(0xFF111318),
             secondaryText = Color(0xFF6E6E73),
@@ -1135,8 +1178,14 @@ internal data class BitPalette(
             sleep = Color(0xFF7B61FF),
             mind = Color(0xFF46C7B7),
             heart = Color(0xFFE53935),
-            backgroundBrush = Brush.verticalGradient(listOf(Color(0xFFF2F2F7), Color(0xFFFFFFFF)))
+            backgroundBrush = Brush.verticalGradient(listOf(Color(0xFFF6F4F1), Color(0xFFFFFFFF)))
         )
+        // dark() now matches HealthAccent exactly (single source of truth):
+        // previously activity was FF6B5F here vs FF6B5A in HealthAccent, and
+        // sleep had three different values across the file (FF6B5A's sibling
+        // mismatch, 9E6FC3 here, 7B61FF in light(), 6D5DF6 in the old
+        // HealthAccent) -- imperceptible individually, but exactly the kind
+        // of token drift that compounds into visible inconsistency over time.
         fun dark(): BitPalette = BitPalette(
             dark = true,
             systemBackground = Color(0xFF0C0C0E),
@@ -1144,10 +1193,10 @@ internal data class BitPalette(
             text = Color(0xFFF8F8F8),
             secondaryText = Color(0xFF8E8E93),
             stroke = Color(0x22FFFFFF),
-            activity = Color(0xFFFF6B5F),
-            sleep = Color(0xFF9E6FC3),
-            mind = Color(0xFF5FE0C6),
-            heart = Color(0xFFFF453A),
+            activity = HealthAccent.activity,
+            sleep = HealthAccent.sleep,
+            mind = HealthAccent.mind,
+            heart = HealthAccent.heart,
             backgroundBrush = Brush.verticalGradient(listOf(Color(0xFF0C0C0E), Color(0xFF1C1C1E)))
         )
     }
@@ -1160,3 +1209,33 @@ internal data class BitPalette(
  */
 
 private fun formatNumber(value: Long): String = String.format(Locale.getDefault(), "%,d", value).replace(',', ' ')
+
+/**
+ * Builds the "Обновлено только что / N мин назад / N ч назад" subtitle shown
+ * under the Summary title (v1.9.11). [lastUpdatedAtMs] of 0 means no
+ * successful read has ever completed in this install (genuinely brand new),
+ * in which case this returns null and no subtitle is shown at all.
+ *
+ * This exists to directly answer the original complaint that prompted this
+ * whole persistence effort: "data doesn't seem to be saved, every launch
+ * looks like a blank slate". Showing concretely how fresh the on-screen
+ * numbers are turns that uncertainty into visible, verifiable trust -- the
+ * same pattern Apple Health/Oura/Whoop use for exactly this reason.
+ */
+@Composable
+private fun formatUpdatedAgo(lastUpdatedAtMs: Long, isFromCache: Boolean): String? {
+    if (lastUpdatedAtMs <= 0L) return null
+
+    val ageMs = (System.currentTimeMillis() - lastUpdatedAtMs).coerceAtLeast(0L)
+    val ageMinutes = ageMs / 60_000L
+    val ageHours = ageMinutes / 60L
+
+    val whenText = when {
+        ageMinutes < 1L -> stringResource(R.string.updated_just_now)
+        ageMinutes < 60L -> stringResource(R.string.updated_minutes_ago, ageMinutes.toInt())
+        ageHours < 24L -> stringResource(R.string.updated_hours_ago, ageHours.toInt())
+        else -> stringResource(R.string.updated_days_ago, (ageHours / 24L).toInt())
+    }
+
+    return if (isFromCache) "$whenText · ${stringResource(R.string.updated_cached_suffix)}" else whenText
+}

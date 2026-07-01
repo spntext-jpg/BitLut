@@ -24,7 +24,10 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.reflect.KClass
 
 private const val TAG = "GoogleHealthManager"
@@ -138,19 +141,64 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
 
-    val healthConnectClient: HealthConnectClient? by lazy {
-        if (HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE) {
+    /**
+     * Self-healing replacement for the previous `by lazy { ... }` client cache.
+     *
+     * The previous implementation cached a `null` result forever the moment
+     * `HealthConnectClient.getOrCreate()` failed once -- a single transient
+     * failure (Health Connect provider not yet warmed up right after device
+     * boot, OEM process death, etc.) would permanently disable Google Health
+     * for the rest of the app process's lifetime, with no way to recover
+     * short of force-stopping the app. That is the opposite of self-healing.
+     *
+     * This cache instead retries client creation on every access where the
+     * cached value is null, so a later attempt (e.g. the next periodic sync,
+     * 30 minutes later) gets a fresh chance once the underlying dependency
+     * has recovered. A successful client is still cached and reused (no
+     * repeated work on the hot path); only the failure case retries.
+     *
+     * [clientLock] serializes concurrent creation attempts (manual sync and
+     * periodic sync can race) so we don't call `getOrCreate()` twice
+     * concurrently from two coroutines.
+     */
+    private val cachedClient = AtomicReference<HealthConnectClient?>(null)
+    private val clientLock = Mutex()
+
+    val healthConnectClient: HealthConnectClient?
+        get() = cachedClient.get()
+
+    /** Suspend-safe accessor that retries creation if the cache is currently empty. */
+    private suspend fun resolveClient(): HealthConnectClient? {
+        cachedClient.get()?.let { return it }
+
+        return clientLock.withLock {
+            // Re-check after acquiring the lock: another coroutine may have
+            // already resolved the client while we were waiting.
+            cachedClient.get()?.let { return@withLock it }
+
+            if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) {
+                AppLogger.w(TAG, "Health Connect SDK is not available")
+                return@withLock null
+            }
+
             try {
-                HealthConnectClient.getOrCreate(context).also {
-                    AppLogger.i(TAG, "HealthConnectClient created OK")
-                }
+                val client = HealthConnectClient.getOrCreate(context)
+                cachedClient.set(client)
+                AppLogger.i(TAG, "HealthConnectClient created OK")
+                client
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                AppLogger.e(TAG, "getOrCreate failed: ${e.message}", e)
+                AppLogger.e(TAG, "getOrCreate failed; will retry on next access: ${e.message}", e)
                 null
             }
-        } else {
-            AppLogger.w(TAG, "Health Connect SDK is not available")
-            null
+        }
+    }
+
+    override fun invalidateClientCache() {
+        val hadClient = cachedClient.getAndSet(null) != null
+        if (hadClient) {
+            AppLogger.w(TAG, "Health Connect client cache invalidated; will recreate on next access")
         }
     }
 
@@ -188,9 +236,19 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     private suspend fun grantedPermissionsOrEmpty(): Set<String> {
-        val client = healthConnectClient ?: return emptySet()
+        val client = resolveClient() ?: return emptySet()
         return try {
             client.permissionController.getGrantedPermissions()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SecurityException) {
+            // A SecurityException here can mean the cached client reference is
+            // stale (e.g. Health Connect was reinstalled/updated under us).
+            // Invalidate so the next call gets a fresh client instead of
+            // repeating the same failure forever.
+            AppLogger.e(TAG, "Permission snapshot denied; invalidating client cache: ${e.message}", e)
+            invalidateClientCache()
+            emptySet()
         } catch (e: Exception) {
             AppLogger.e(TAG, "Permission snapshot failed: ${e.message}", e)
             emptySet()
@@ -200,6 +258,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     override suspend fun missingRequiredPermissions(): Set<String> {
         return try {
             requiredPermissions() - grantedPermissionsOrEmpty()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "Missing permission check failed: ${e.message}", e)
             requiredPermissions()
@@ -211,13 +271,25 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             val granted = grantedPermissionsOrEmpty()
             AppLogger.d(TAG, "Granted Health Connect permissions: $granted")
             granted.containsAll(requiredPermissions())
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "Permission check failed: ${e.message}", e)
             false
         }
     }
 
-    override suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): Boolean {
+    /**
+     * Writes every category in [snapshot] independently and reports which
+     * categories succeeded vs failed, instead of collapsing the whole write
+     * into a single Boolean. This lets the caller (SyncWorker) advance the
+     * sync cursor for categories that wrote successfully even if one
+     * category -- e.g. floors, which several Huawei device/firmware
+     * combinations don't expose at all -- keeps failing. Without this, a
+     * single permanently-failing category would block the cursor for every
+     * other category forever, retry after retry.
+     */
+    override suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): WriteSnapshotResult {
         val results = listOf(
             "steps" to writeStepsBatch(snapshot.steps),
             "distance" to writeDistanceBatch(snapshot.distances),
@@ -227,11 +299,14 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             "activitySessions" to writeActivitySessionsBatch(snapshot.activities)
         )
 
-        val failed = results.filterNot { it.second }.map { it.first }
+        val succeeded = results.filter { it.second }.map { it.first }.toSet()
+        val failed = results.filterNot { it.second }.map { it.first }.toSet()
+
         if (failed.isNotEmpty()) {
             AppLogger.e(TAG, "writeSnapshot partial failure: ${failed.joinToString()}")
         }
-        return failed.isEmpty()
+
+        return WriteSnapshotResult(succeededCategories = succeeded, failedCategories = failed)
     }
 
     suspend fun writeStepsBatch(records: List<StepData>): Boolean {
@@ -354,7 +429,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
         records: List<Record>,
         recordType: KClass<out Record>
     ): Boolean {
-        val client = healthConnectClient ?: run {
+        val client = resolveClient() ?: run {
             AppLogger.e(TAG, "write $label: no Health Connect client")
             return false
         }
@@ -378,6 +453,11 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             throw e
         } catch (e: SecurityException) {
             AppLogger.e(TAG, "write $label denied by Health Connect permission policy: ${e.message}", e)
+            // A SecurityException here can also indicate a stale client reference
+            // (e.g. Health Connect was reinstalled/updated under us). Invalidate
+            // so the next sync attempt gets a fresh client rather than repeating
+            // the same failure on every retry until the process restarts.
+            invalidateClientCache()
             throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "write $label failed: ${e.message}", e)
@@ -386,7 +466,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     override suspend fun readDashboardSnapshot(daysBack: Int): GoogleDashboardSnapshot? {
-        val client = healthConnectClient ?: return null
+        val client = resolveClient() ?: return null
         return try {
             val startOfToday = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
             val now = Instant.now()
@@ -432,6 +512,10 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             )
         } catch (e: CancellationException) {
             throw e
+        } catch (e: SecurityException) {
+            AppLogger.e(TAG, "readDashboardSnapshot denied; invalidating client cache: ${e.message}", e)
+            invalidateClientCache()
+            null
         } catch (e: Exception) {
             AppLogger.e(TAG, "readDashboardSnapshot failed; preserving previous UI snapshot: ${e.message}", e)
             null
@@ -439,7 +523,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     suspend fun readStepsToday(): Long {
-        val client = healthConnectClient ?: return 0L
+        val client = resolveClient() ?: return 0L
         return try {
             val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
             val end = Instant.now()
@@ -449,6 +533,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                     timeRangeFilter = TimeRangeFilter.between(start, end)
                 )
             ).records.sumOf { it.count }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "readStepsToday failed: ${e.message}", e)
             0L
@@ -456,7 +542,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     suspend fun readStepsBars(daysBack: Int): List<MetricBar> {
-        val client = healthConnectClient ?: return emptyList()
+        val client = resolveClient() ?: return emptyList()
         val ranges = computeMetricBarRanges(daysBack)
         return ranges.map { (start, end) ->
             val rangeStart = start.atStartOfDay(ZoneId.systemDefault()).toInstant()
@@ -469,6 +555,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                     )
                 )
                 response[StepsRecord.COUNT_TOTAL] ?: 0L
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.e(TAG, "readStepsBars failed for $start..$end: ${e.message}", e)
                 0L
@@ -478,7 +566,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     suspend fun readDistanceToday(): Double {
-        val client = healthConnectClient ?: return 0.0
+        val client = resolveClient() ?: return 0.0
         return try {
             val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
             client.readRecords(
@@ -487,6 +575,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                     timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
                 )
             ).records.sumOf { it.distance.inMeters }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "readDistanceToday failed: ${e.message}", e)
             0.0
@@ -494,7 +584,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     suspend fun readCaloriesToday(): Double {
-        val client = healthConnectClient ?: return 0.0
+        val client = resolveClient() ?: return 0.0
         return try {
             val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
             client.readRecords(
@@ -503,6 +593,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                     timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
                 )
             ).records.sumOf { it.energy.inKilocalories }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "readCaloriesToday failed: ${e.message}", e)
             0.0
@@ -510,7 +602,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     suspend fun readRecentWorkouts(limit: Int = 5): List<ActivitySessionData> {
-        val client = healthConnectClient ?: return emptyList()
+        val client = resolveClient() ?: return emptyList()
         return try {
             val start = LocalDate.now().minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant()
             client.readRecords(
@@ -529,6 +621,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                         exerciseType = it.exerciseType
                     )
                 }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "readRecentWorkouts failed: ${e.message}", e)
             emptyList()
@@ -536,7 +630,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     suspend fun readWorkoutSummariesByType(daysBack: Int): List<WorkoutTypeSummary> {
-        val client = healthConnectClient ?: return emptyList()
+        val client = resolveClient() ?: return emptyList()
         return try {
             val start = LocalDate.now().minusDays(daysBack.toLong().coerceAtLeast(1L) - 1L)
                 .atStartOfDay(ZoneId.systemDefault()).toInstant()
@@ -571,6 +665,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                     )
                 }
                 .sortedByDescending { it.totalDurationMinutes }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "readWorkoutSummariesByType failed: ${e.message}", e)
             emptyList()
@@ -578,7 +674,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     suspend fun readWorkoutMinutesToday(): Long {
-        val client = healthConnectClient ?: return 0L
+        val client = resolveClient() ?: return 0L
         return try {
             val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
             client.readRecords(
@@ -589,6 +685,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             ).records.sumOf {
                 java.time.Duration.between(it.startTime, it.endTime).toMinutes().coerceAtLeast(0L)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "readWorkoutMinutesToday failed: ${e.message}", e)
             0L
@@ -596,7 +694,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     suspend fun readActiveHoursToday(): Int {
-        val client = healthConnectClient ?: return 0
+        val client = resolveClient() ?: return 0
         return try {
             val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
             client.readRecords(
@@ -609,6 +707,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                 .map { it.startTime.atZone(ZoneId.systemDefault()).hour }
                 .toSet()
                 .size
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "readActiveHoursToday failed: ${e.message}", e)
             0

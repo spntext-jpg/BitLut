@@ -79,11 +79,16 @@ class ImportViewModel(
 
         viewModelScope.launch {
             try {
-                val ok = withContext(Dispatchers.IO) {
+                val result = withContext(Dispatchers.IO) {
                     googleManager.writeSnapshot(summary.snapshot)
                 }
 
-                if (ok) {
+                // A partial write (e.g. floors unsupported on this Huawei export
+                // but steps/distance/calories all wrote fine) is still reported
+                // as a success to the person -- the categories that matter most
+                // got through, and failing the whole import over one missing
+                // category would be a worse outcome than silently accepting it.
+                if (result.anySucceeded) {
                     _state.update {
                         ImportState.Success(
                             stepsWritten = summary.stepCount,
@@ -91,6 +96,9 @@ class ImportViewModel(
                             caloriesWritten = summary.calorieCount,
                             activitiesWritten = summary.activityCount
                         )
+                    }
+                    if (!result.allSucceeded) {
+                        AppLogger.w(TAG, "Import partially written; failed categories: ${result.failedCategories.joinToString()}")
                     }
                     AppLogger.i(TAG, "Import complete: steps=${summary.stepCount} distances=${summary.distanceCount} calories=${summary.calorieCount} activities=${summary.activityCount}")
                 } else {

@@ -209,4 +209,9 @@
     <string name="score_100_unit">/100</string>
     <string name="distance_today_value">%1$s km</string>
     <string name="sleep_quality_score">Sleep quality: %1$d/100</string>
+    <string name="updated_just_now">Updated just now</string>
+    <string name="updated_minutes_ago">Updated %1$d min ago</string>
+    <string name="updated_hours_ago">Updated %1$dh ago</string>
+    <string name="updated_days_ago">Updated %1$dd ago</string>
+    <string name="updated_cached_suffix">cached</string>
 </resources>

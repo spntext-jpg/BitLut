@@ -55,15 +55,6 @@ class HuaweiHealthManager(
     private val context: Context,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : HuaweiHealthReader {
-private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
-        val normalized = descriptor.lowercase()
-        return normalized.contains("activity") ||
-            normalized.contains("exercise") ||
-            normalized.contains("session") ||
-            normalized.contains("sport") ||
-            normalized.contains("workout")
-    }
-
 
     private val prefs: SharedPreferences = context.getSharedPreferences(
         HuaweiConfig.PREFS_NAME,
@@ -184,27 +175,26 @@ private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
 
     override suspend fun readSnapshot(startTimeMs: Long, endTimeMs: Long): HuaweiHealthSnapshot {
         return withContext(ioDispatcher) {
-        require(startTimeMs < endTimeMs) { "startTimeMs must be before endTimeMs" }
-        ensureRuntimeReady()
+            require(startTimeMs < endTimeMs) { "startTimeMs must be before endTimeMs" }
+            ensureRuntimeReady()
 
-        AppLogger.i(TAG, "Reading real Huawei Health data from $startTimeMs to $endTimeMs")
+            AppLogger.i(TAG, "Reading real Huawei Health data from $startTimeMs to $endTimeMs")
 
-        val snapshot = HuaweiHealthSnapshot(
-            steps = readSteps(startTimeMs, endTimeMs),
-            distances = readDistance(startTimeMs, endTimeMs),
-            floors = readFloors(startTimeMs, endTimeMs),
-            elevations = readElevation(startTimeMs, endTimeMs),
-            activeCalories = readActiveCalories(startTimeMs, endTimeMs),
-            activities = readActivitySessions(startTimeMs, endTimeMs)
-        )
+            val snapshot = HuaweiHealthSnapshot(
+                steps = readSteps(startTimeMs, endTimeMs),
+                distances = readDistance(startTimeMs, endTimeMs),
+                floors = readFloors(startTimeMs, endTimeMs),
+                elevations = readElevation(startTimeMs, endTimeMs),
+                activeCalories = readActiveCalories(startTimeMs, endTimeMs),
+                activities = readActivitySessions(startTimeMs, endTimeMs)
+            )
 
-        AppLogger.i(
-            TAG,
-            "Huawei read complete: steps=${snapshot.steps.size}, distances=${snapshot.distances.size}, floors=${snapshot.floors.size}, elevations=${snapshot.elevations.size}, activeCalories=${snapshot.activeCalories.size}, activities=${snapshot.activities.size}"
-        )
+            AppLogger.i(
+                TAG,
+                "Huawei read complete: steps=${snapshot.steps.size}, distances=${snapshot.distances.size}, floors=${snapshot.floors.size}, elevations=${snapshot.elevations.size}, activeCalories=${snapshot.activeCalories.size}, activities=${snapshot.activities.size}"
+            )
 
-        snapshot
-    
+            snapshot
         }
     }
 
@@ -227,7 +217,7 @@ private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
     }
 
     private suspend fun readSteps(startTimeMs: Long, endTimeMs: Long): List<StepData> =
-        readPoints(DataType.DT_CONTINUOUS_STEPS_DELTA, startTimeMs, endTimeMs, "steps")
+        readPoints(DataType.DT_CONTINUOUS_STEPS_DELTA, startTimeMs, endTimeMs, "steps", dedupFields = listOf(Field.FIELD_STEPS))
             .mapNotNull { point ->
                 val value = point.firstNumericValue(listOf(Field.FIELD_STEPS))?.toLong() ?: return@mapNotNull null
                 val start = point.getStartTime(TimeUnit.MILLISECONDS)
@@ -394,7 +384,7 @@ private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
             return emptyList()
         }
 
-        return readPoints(type, startTimeMs, endTimeMs, label)
+        return readPoints(type, startTimeMs, endTimeMs, label, dedupFields = fields)
             .mapNotNull { point ->
                 val start = point.getStartTime(TimeUnit.MILLISECONDS)
                 val end = point.getEndTime(TimeUnit.MILLISECONDS)
@@ -413,7 +403,7 @@ private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
         startTimeMs: Long,
         endTimeMs: Long,
         label: String
-    ): List<SamplePoint>{
+    ): List<SamplePoint> {
         val options = ReadOptions.Builder()
             .read(type)
             .setTimeRange(startTimeMs, endTimeMs, TimeUnit.MILLISECONDS)
@@ -433,49 +423,87 @@ private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
         }
     }
 
-private suspend fun readPoints(
+    /**
+     * Reads [type] over [startTimeMs]..[endTimeMs], splitting the range into
+     * day-sized chunks for non-activity metrics (Huawei Health Kit can be
+     * unreliable or slow on very wide single-shot reads for continuous
+     * metrics like steps/distance/floors).
+     *
+     * Type-safety fix (v1.9.11): the previous implementation accumulated
+     * results into a `MutableList<Any?>`, deduplicated with
+     * `.distinctBy { it.toString() }`, and force-cast the result back to
+     * `List<SamplePoint>` with `@Suppress("UNCHECKED_CAST")`. Three problems
+     * with that: (1) `Any?` discards type safety for no reason -- the list
+     * only ever held `SamplePoint`s; (2) `toString()`-based dedup is
+     * incidental, not semantic -- two genuinely different samples that
+     * happen to render identical strings would be wrongly collapsed into
+     * one, silently dropping real health data, which is the single worst
+     * kind of bug for an app whose entire purpose is accurate data transfer;
+     * and (3) if a future HMS SDK version changes `SamplePoint.toString()`,
+     * dedup quietly breaks with no compiler warning. This version keeps the
+     * list properly typed throughout and deduplicates on the sample's actual
+     * identity (start time, end time, and value) instead.
+     */
+    private suspend fun readPoints(
         type: DataType,
         startTimeMs: Long,
         endTimeMs: Long,
-        label: String
+        label: String,
+        dedupFields: List<Field> = emptyList()
     ): List<SamplePoint> {
-    val descriptor = listOf(type.toString(), startTimeMs.toString(), endTimeMs.toString(), label.toString()).joinToString("|")
-    if (shouldBypassChunkingForHuaweiRead(descriptor) || endTimeMs <= startTimeMs) {
-        return readPointsRaw(type, startTimeMs, endTimeMs, label)
-    }
+        val descriptor = listOf(type.toString(), startTimeMs.toString(), endTimeMs.toString(), label).joinToString("|")
+        if (shouldBypassChunkingForHuaweiRead(descriptor) || endTimeMs <= startTimeMs) {
+            return readPointsRaw(type, startTimeMs, endTimeMs, label)
+        }
 
-    val windowMs = endTimeMs - startTimeMs
-    if (windowMs <= HUAWEI_READ_CHUNK_MS) {
-        return readPointsRaw(type, startTimeMs, endTimeMs, label)
-    }
+        val windowMs = endTimeMs - startTimeMs
+        if (windowMs <= HUAWEI_READ_CHUNK_MS) {
+            return readPointsRaw(type, startTimeMs, endTimeMs, label)
+        }
 
-    val merged = mutableListOf<Any?>()
-    var chunkStart = startTimeMs
-    var chunkIndex = 0
+        val merged = mutableListOf<SamplePoint>()
+        var chunkStart = startTimeMs
+        var chunkIndex = 0
 
-    while (chunkStart < endTimeMs) {
-        val chunkEnd = minOf(chunkStart + HUAWEI_READ_CHUNK_MS, endTimeMs)
-        AppLogger.d(
-            "HuaweiHealthManager",
-            "readPoints chunk #$chunkIndex: $chunkStart..$chunkEnd"
+        while (chunkStart < endTimeMs) {
+            val chunkEnd = minOf(chunkStart + HUAWEI_READ_CHUNK_MS, endTimeMs)
+            AppLogger.d(TAG, "readPoints chunk #$chunkIndex: $chunkStart..$chunkEnd")
+
+            // SecurityException / 50005 must propagate to SyncWorker.
+            merged.addAll(readPointsRaw(type, chunkStart, chunkEnd, label))
+
+            chunkStart = chunkEnd
+            chunkIndex += 1
+        }
+
+        // Adjacent chunk windows can each return the boundary sample (a point
+        // whose time range straddles or sits exactly on a chunk edge), so the
+        // merged list can contain genuine duplicates. Deduplicate on the
+        // sample's actual identity -- its time range plus its numeric value
+        // for the field(s) the caller actually reads -- rather than object
+        // identity or string rendering. [dedupFields] defaults to FIELD_STEPS
+        // when the caller doesn't pass anything more specific, since steps is
+        // the only direct (non-readMetric) caller of this chunked path today.
+        val fieldsForDedup = dedupFields.ifEmpty { listOf(Field.FIELD_STEPS) }
+        val deduped = LinkedHashMap<SamplePointKey, SamplePoint>()
+        for (point in merged) {
+            val key = SamplePointKey(
+                startTimeMs = point.getStartTime(TimeUnit.MILLISECONDS),
+                endTimeMs = point.getEndTime(TimeUnit.MILLISECONDS),
+                value = point.firstNumericValue(fieldsForDedup)
+            )
+            deduped.putIfAbsent(key, point)
+        }
+
+        AppLogger.i(
+            TAG,
+            "readPoints chunked result: chunks=$chunkIndex raw=${merged.size} deduped=${deduped.size}"
         )
 
-        // SecurityException / 50005 must propagate to SyncWorker.
-        merged.addAll(readPointsRaw(type, chunkStart, chunkEnd, label))
-
-        chunkStart = chunkEnd
-        chunkIndex += 1
+        return deduped.values.toList()
     }
 
-    val deduped = merged.distinctBy { it.toString() }
-    AppLogger.i(
-        "HuaweiHealthManager",
-        "readPoints chunked result: chunks=$chunkIndex raw=${merged.size} deduped=${deduped.size}"
-    )
-
-    @Suppress("UNCHECKED_CAST")
-    return deduped as List<SamplePoint>
-}
+    private data class SamplePointKey(val startTimeMs: Long, val endTimeMs: Long, val value: Double?)
 
     private fun SamplePoint.firstNumericValue(fields: List<Field>): Double? {
         for (field in fields) {
@@ -536,19 +564,30 @@ private suspend fun readPoints(
             addOnFailureListener { error -> cont.cancel(error) }
         }
 
+    /**
+     * Single source of truth for which reads bypass day-chunking (v1.9.11).
+     *
+     * The previous version of this file declared this exact function twice:
+     * once as a regular member of [HuaweiHealthManager] and once again inside
+     * its `private companion object`. Both compiled (Kotlin allows a member
+     * function and a same-named companion-object function to coexist), but
+     * one of the two was always dead code -- member function resolution wins
+     * over the companion object here, so the companion copy never actually
+     * ran. Keeping two near-identical implementations around is exactly the
+     * kind of drift that causes real bugs later (someone fixes one copy and
+     * not the other). There is now exactly one.
+     */
+    private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
+        val normalized = descriptor.lowercase()
+        return normalized.contains("activity") ||
+            normalized.contains("exercise") ||
+            normalized.contains("session") ||
+            normalized.contains("sport") ||
+            normalized.contains("workout")
+    }
+
     private companion object {
-
         private const val HUAWEI_READ_CHUNK_MS: Long = 24L * 60L * 60L * 1000L
-
-        private fun shouldBypassChunkingForHuaweiRead(descriptor: String): Boolean {
-            val normalized = descriptor.lowercase()
-            return normalized.contains("activity") ||
-                normalized.contains("exercise") ||
-                normalized.contains("session") ||
-                normalized.contains("sport") ||
-                normalized.contains("workout")
-        }
-
 
         const val KEY_HUAWEI_PENDING_APPROVAL = "huawei_pending_approval"
         const val KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED = "huawei_appgallery_verification_required"

@@ -6,6 +6,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.openhealth.sync.SyncApplication
 import com.openhealth.sync.data.DashboardSnapshotCache
+import com.openhealth.sync.data.HealthConnectManager
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.util.AppLogger
@@ -23,8 +24,13 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
     private val prefs by lazy {
         applicationContext.getSharedPreferences(HuaweiConfig.PREFS_NAME, Context.MODE_PRIVATE)
     }
-    private val lease by lazy { SyncRunLease(applicationContext) }
-    private val circuitBreaker by lazy { SyncCircuitBreaker(applicationContext) }
+
+    // Shared, process-wide lease -- see AppContainer.syncRunLease for why this
+    // must NOT be a fresh `SyncRunLease(...)` instance per worker.
+    private val lease get() = appContainer.syncRunLease
+
+    private val huaweiCircuitBreaker by lazy { SyncCircuitBreaker(applicationContext, SyncDependency.HUAWEI) }
+    private val googleCircuitBreaker by lazy { SyncCircuitBreaker(applicationContext, SyncDependency.GOOGLE) }
     private val snapshotCache by lazy { DashboardSnapshotCache(applicationContext) }
 
     override suspend fun doWork(): Result {
@@ -41,7 +47,14 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
             )
         }
 
-        if (circuitBreaker.isOpen(startedAt)) {
+        // Either breaker being open is enough to skip this cycle gracefully:
+        // there is no point attempting a Huawei read if Huawei itself is the
+        // thing that's been failing, nor a Health Connect write if Health
+        // Connect is the one that's been failing. Each breaker still tracks
+        // and recovers independently, so a Huawei-only outage does not
+        // penalize a healthy Health Connect dependency's failure count, and
+        // vice versa.
+        if (huaweiCircuitBreaker.isOpen(startedAt) || googleCircuitBreaker.isOpen(startedAt)) {
             lease.release(owner)
             return Result.success(
                 workDataOf("reason" to "circuit_breaker_open")
@@ -55,24 +68,28 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
 
             when (outcome) {
                 SyncAttemptOutcome.Success -> {
-                    circuitBreaker.recordSuccess()
+                    huaweiCircuitBreaker.recordSuccess()
+                    googleCircuitBreaker.recordSuccess()
                     Result.success(workDataOf("reason" to "sync_success"))
                 }
 
                 SyncAttemptOutcome.GracefulNoop -> {
                     // Missing dependency, missing permission, or Huawei approval pending.
                     // This should not poison WorkManager with permanent failures.
-                    circuitBreaker.recordSuccess()
+                    huaweiCircuitBreaker.recordSuccess()
+                    googleCircuitBreaker.recordSuccess()
                     Result.success(workDataOf("reason" to "graceful_noop"))
                 }
 
                 SyncAttemptOutcome.NonRetryableFailure -> {
-                    circuitBreaker.recordSuccess()
+                    huaweiCircuitBreaker.recordSuccess()
+                    googleCircuitBreaker.recordSuccess()
                     Result.success(workDataOf("reason" to "non_retryable_user_action_required"))
                 }
 
-                SyncAttemptOutcome.RetryableFailure -> {
-                    val opened = circuitBreaker.recordFailure(System.currentTimeMillis())
+                is SyncAttemptOutcome.RetryableFailure -> {
+                    val breaker = if (outcome.dependency == SyncDependency.HUAWEI) huaweiCircuitBreaker else googleCircuitBreaker
+                    val opened = breaker.recordFailure(System.currentTimeMillis())
                     if (opened) {
                         Result.success(workDataOf("reason" to "circuit_opened_after_failures"))
                     } else {
@@ -85,7 +102,11 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
             throw e
         } catch (t: Throwable) {
             AppLogger.e(TAG, "Unexpected sync panic recovered by worker boundary", t)
-            val opened = circuitBreaker.recordFailure(System.currentTimeMillis())
+            SyncDiagnosticLog.record(prefs, "panic", t.message ?: t::class.java.simpleName)
+            // An uncategorized panic could originate from either side; charge it
+            // to Huawei's breaker since a Huawei read is the first step of every
+            // attempt and therefore the most common source of unexpected throws.
+            val opened = huaweiCircuitBreaker.recordFailure(System.currentTimeMillis())
             if (opened) {
                 Result.success(workDataOf("reason" to "panic_circuit_opened"))
             } else {
@@ -97,7 +118,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
     }
 
     private suspend fun executeWithRetries(): SyncAttemptOutcome {
-        var lastOutcome: SyncAttemptOutcome = SyncAttemptOutcome.RetryableFailure
+        var lastOutcome: SyncAttemptOutcome = SyncAttemptOutcome.RetryableFailure(SyncDependency.HUAWEI)
 
         repeat(SyncRetryPolicy.MAX_ATTEMPTS) { attempt ->
             lastOutcome = runSingleAttempt()
@@ -107,7 +128,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 SyncAttemptOutcome.GracefulNoop,
                 SyncAttemptOutcome.NonRetryableFailure -> return lastOutcome
 
-                SyncAttemptOutcome.RetryableFailure -> {
+                is SyncAttemptOutcome.RetryableFailure -> {
                     if (attempt < SyncRetryPolicy.MAX_ATTEMPTS - 1) {
                         val delayMs = SyncRetryPolicy.nextDelayMs(attempt)
                         AppLogger.w(TAG, "Retryable sync failure; retrying in ${delayMs}ms attempt=${attempt + 2}/${SyncRetryPolicy.MAX_ATTEMPTS}")
@@ -189,11 +210,39 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 return SyncAttemptOutcome.Success
             }
 
-            val writeOk = googleManager.writeSnapshot(snapshot)
+            val writeResult = googleManager.writeSnapshot(snapshot)
 
-            if (!writeOk) {
-                AppLogger.e(TAG, "Health Connect write returned partial/failed result")
-                return SyncAttemptOutcome.RetryableFailure
+            if (writeResult.allFailed) {
+                AppLogger.e(TAG, "Health Connect write failed for every category: ${writeResult.failedCategories.joinToString()}")
+                SyncDiagnosticLog.record(prefs, "write_failed_all", writeResult.failedCategories.joinToString())
+                // A stale/poisoned client is a likely cause of an across-the-board
+                // failure. Invalidate so the next retry (this attempt's backoff,
+                // or the next periodic run) gets a fresh client instead of
+                // repeating the same failure forever.
+                googleManager.invalidateClientCache()
+                return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE)
+            }
+
+            if (!writeResult.allSucceeded) {
+                // Partial success: some categories wrote, others didn't. Advancing
+                // the cursor here is intentional -- the categories that failed will
+                // simply produce another (likely identical) attempt next cycle if
+                // they still have data, while the categories that succeeded must
+                // not be blocked from progressing by a sibling category that may
+                // be permanently unavailable on this device/firmware (e.g. floors
+                // on devices without a barometer). Writes are idempotent via
+                // clientRecordId, so retrying a successful category again later
+                // is always safe.
+                AppLogger.w(
+                    TAG,
+                    "Health Connect write partially succeeded: ok=${writeResult.succeededCategories.joinToString()} " +
+                        "failed=${writeResult.failedCategories.joinToString()}"
+                )
+                SyncDiagnosticLog.record(
+                    prefs,
+                    "write_partial",
+                    "ok=${writeResult.succeededCategories.joinToString()} failed=${writeResult.failedCategories.joinToString()}"
+                )
             }
 
             prefs.edit()
@@ -205,6 +254,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 TAG,
                 "Sync complete: steps=${snapshot.steps.size}, distances=${snapshot.distances.size}, floors=${snapshot.floors.size}, elevations=${snapshot.elevations.size}, activeCalories=${snapshot.activeCalories.size}, activities=${snapshot.activities.size}"
             )
+            SyncDiagnosticLog.record(prefs, "sync_success", "steps=${snapshot.steps.size} distances=${snapshot.distances.size}")
 
             refreshDashboardCacheAfterWrite(googleManager)
 
@@ -217,6 +267,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                     "Huawei Health Kit blocked import with 50005. AppGallery Health Kit approval/cache is still pending for this package/release SHA-256/scope set.",
                     e
                 )
+                SyncDiagnosticLog.record(prefs, "huawei_50005", "AppGallery Health Kit approval pending")
                 return SyncAttemptOutcome.NonRetryableFailure
             }
 
@@ -225,18 +276,21 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 "Security failure during sync. User action is required: re-check Health Connect/Huawei permissions.",
                 e
             )
+            SyncDiagnosticLog.record(prefs, "security_exception", e.message ?: "")
             SyncAttemptOutcome.NonRetryableFailure
         } catch (e: IllegalArgumentException) {
             AppLogger.e(TAG, "Invalid sync state; resetting last_sync_ms for self-healing", e)
+            SyncDiagnosticLog.record(prefs, "illegal_argument_reset_cursor", e.message ?: "")
             prefs.edit()
                 .putLong(HuaweiConfig.KEY_LAST_SYNC_MS, 0L)
                 .apply()
-            SyncAttemptOutcome.RetryableFailure
+            SyncAttemptOutcome.RetryableFailure(SyncDependency.HUAWEI)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "Transient Huawei/Health Connect sync failure", e)
-            SyncAttemptOutcome.RetryableFailure
+            SyncDiagnosticLog.record(prefs, "transient_failure", e.message ?: e::class.java.simpleName)
+            SyncAttemptOutcome.RetryableFailure(SyncDependency.HUAWEI)
         }
     }
 
@@ -252,7 +306,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
      * never turn a successful Health Connect write into a retried/failed
      * WorkManager run.
      */
-    private suspend fun refreshDashboardCacheAfterWrite(googleManager: com.openhealth.sync.data.HealthConnectManager) {
+    private suspend fun refreshDashboardCacheAfterWrite(googleManager: HealthConnectManager) {
         try {
             val freshSnapshot = googleManager.readDashboardSnapshot(daysBack = 7)
             if (freshSnapshot != null) {

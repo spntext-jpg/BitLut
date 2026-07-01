@@ -209,4 +209,9 @@
     <string name="score_100_unit">/100</string>
     <string name="distance_today_value">%1$s км</string>
     <string name="sleep_quality_score">Качество сна: %1$d/100</string>
+    <string name="updated_just_now">Обновлено только что</string>
+    <string name="updated_minutes_ago">Обновлено %1$d мин назад</string>
+    <string name="updated_hours_ago">Обновлено %1$d ч назад</string>
+    <string name="updated_days_ago">Обновлено %1$d дн назад</string>
+    <string name="updated_cached_suffix">кэш</string>
 </resources>
