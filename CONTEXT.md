@@ -318,3 +318,48 @@ Explicitly unchanged in this sprint:
 - Activity-only Health Connect scope and the no-fake-data policy.
 
 Verified by `scripts/verify_dashboard_persistence_sprint.py`.
+
+
+## v1.9.10 Dashboard persistence and force-refresh sprint
+
+Root cause of "Подключите Google Health" appearing on every cold start: BitLut
+had no local cache at all (no Room, no DataStore, not even a SharedPreferences
+snapshot). `DashboardViewModel` always started from
+`DashboardUiState(hasPermissions = false, isLoading = true)` and the UI showed
+the "Connect Google Health" lock screen for any state where
+`hasPermissions == false` -- including the brief window before the first async
+Health Connect permission check completed, and any transient failure of that
+check.
+
+Implemented:
+
+- `DashboardSnapshotCache` -- a SharedPreferences-backed (same `bitlut_prefs`
+  file BitLut already uses) JSON cache of the last successfully read
+  `GoogleDashboardSnapshot`. No new dependency (Room/DataStore) was introduced.
+- `DashboardViewModel` now builds its initial `DashboardUiState` synchronously
+  from this cache, so the dashboard shows real, last-known numbers immediately
+  on cold start instead of a loading spinner or the lock screen.
+- `DashboardUiState.showConnectLockScreen` replaces raw `!hasPermissions`
+  checks in the UI. It is only true once a permission check has actually run
+  and confirmed permissions are missing (`permissionsChecked == true`), never
+  purely because the app just started.
+- A transient `hasAllPermissions()` failure or a transient
+  `readDashboardSnapshot()` failure no longer resets `hasPermissions` to
+  `false`; the dashboard keeps showing the last good data instead.
+- `SyncWorker` now refreshes `DashboardSnapshotCache` after every successful
+  background Huawei -> Health Connect write, so the existing 30-minute
+  periodic sync (`BackgroundSyncScheduler`, unchanged) keeps the cold-start
+  cache warm even when the app isn't open.
+- The Google Health "Обновить статус" / "refresh status" button in Settings
+  now triggers the same `SyncOrchestrator.triggerImmediateSync` pipeline as
+  "Sync now" (Huawei read -> Health Connect write -> dashboard reload)
+  instead of only re-reading whatever Health Connect already reports locally.
+
+Explicitly unchanged in this sprint:
+
+- `BackgroundSyncScheduler` periodic cadence (still 30 minutes,
+  `ExistingPeriodicWorkPolicy.UPDATE`).
+- `SyncWorker` retry/circuit-breaker/lease reliability mechanics.
+- Activity-only Health Connect scope and the no-fake-data policy.
+
+Verified by `scripts/verify_dashboard_persistence_sprint.py`.

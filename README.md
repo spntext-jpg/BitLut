@@ -536,3 +536,21 @@ while the first Health Connect read is still in progress.
 * The existing 30-minute periodic background sync (WorkManager) now also
   refreshes this local cache after each successful sync, so data stays fresh
   even when the app isn't open.
+
+## v1.9.10 Dashboard persistence and force-refresh sprint
+
+BitLut now caches the last successfully read dashboard snapshot locally
+(`DashboardSnapshotCache`, SharedPreferences-backed), so the app shows real,
+last-known data immediately on launch instead of "Подключите Google Health"
+while the first Health Connect read is still in progress.
+
+* Cold start shows cached data instantly; live data replaces it once the
+  first Health Connect read completes.
+* A transient permission-check or read failure no longer downgrades the
+  dashboard back to the connect screen -- it keeps showing the last good data.
+* The "Обновить статус" button for Google Health in Settings now performs a
+  real sync (Huawei -> Health Connect -> dashboard reload), not just a status
+  re-check.
+* The existing 30-minute periodic background sync (WorkManager) now also
+  refreshes this local cache after each successful sync, so data stays fresh
+  even when the app isn't open.
