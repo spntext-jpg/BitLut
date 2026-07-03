@@ -3,30 +3,29 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    
-    <!-- Health Connect required sync scope: Huawei activity/basic sport -> Google Health. -->\n\n\n\n\n\n\n\n\n\n\n\n
-    <!-- Health Connect optional dashboard-only reads. Never required for sync. -->\n\n\n\n    
+    <!-- v1.9.12 (sprint 4): required on API 33+/Android 13+ to post the
+         evening goal-progress reminder and achievement notifications.
+         Requested at runtime in MainActivity; the app works fully without
+         it granted, notifications simply stay silent. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Health Connect required sync scope: Huawei activity/basic sport -> Google Health. -->
+
+    <!-- Health Connect optional dashboard-only reads. Never required for sync. -->
     <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
 
-    
     <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
 
-    
     <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
 
-    
     <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
 
-    
     <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
 
-    
     <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
 
-    
     <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
 
-    
     <!-- Health Connect strict Huawei-approved activity/basic sport sync scope. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.WRITE_STEPS" />

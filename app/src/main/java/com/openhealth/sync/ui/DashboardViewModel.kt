@@ -5,13 +5,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.openhealth.sync.config.DashboardWidget
+import com.openhealth.sync.config.GoalPrefs
 import com.openhealth.sync.config.WidgetVisibilityPrefs
+import com.openhealth.sync.data.AchievementsStore
 import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.DashboardSnapshotCache
 import com.openhealth.sync.data.GoogleDashboardSnapshot
 import com.openhealth.sync.data.MetricBar
+import com.openhealth.sync.data.PersonalRecord
+import com.openhealth.sync.data.StreakState
+import com.openhealth.sync.data.WeekComparison
 import com.openhealth.sync.data.WorkoutTypeSummary
 import com.openhealth.sync.util.AppLogger
+import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,7 +45,14 @@ data class DashboardUiState(
     val isFromCache: Boolean = false,
     val lastUpdatedAtMs: Long = 0L,
     val stepsToday: Long = 0L,
-    val stepsGoal: Long = 10_000L,
+    /** Sourced from [GoalPrefs] (v1.9.12), configurable in Settings. Defaults
+     *  to [GoalPrefs.DEFAULT_STEPS_GOAL], matching the value this field was
+     *  hardcoded to before goals became configurable, so existing installs
+     *  see no change until they explicitly set a custom goal. */
+    val stepsGoal: Long = GoalPrefs.DEFAULT_STEPS_GOAL,
+    val distanceGoalMeters: Double = GoalPrefs.DEFAULT_DISTANCE_GOAL_METERS,
+    val activeMinutesGoal: Int = GoalPrefs.DEFAULT_ACTIVE_MINUTES_GOAL,
+    val caloriesGoalKcal: Double = GoalPrefs.DEFAULT_CALORIES_GOAL,
     val distanceMeters: Double = 0.0,
     val caloriesKcal: Double = 0.0,
     val workoutMinutesToday: Long = 0L,
@@ -56,9 +69,17 @@ data class DashboardUiState(
     val recentWorkouts: List<ActivitySessionData> = emptyList(),
     val selectedHistoryRangeDays: Int = 7,
     val workoutSummaries: List<WorkoutTypeSummary> = emptyList(),
-    val visibleWidgets: Map<DashboardWidget, Boolean> = DashboardWidget.entries.associateWith { true }
+    val visibleWidgets: Map<DashboardWidget, Boolean> = DashboardWidget.entries.associateWith { true },
+    // ── Sprint 4: insights & trends (activity-only) ──────────────────────
+    val weekComparison: WeekComparison? = null,
+    val bestStepsDay: PersonalRecord? = null,
+    val bestDistanceDay: PersonalRecord? = null,
+    val streak: StreakState = StreakState(currentStreakDays = 0, longestStreakDays = 0, lastCountedDate = null)
 ) {
     val stepsProgress: Float get() = (stepsToday.toFloat() / stepsGoal.toFloat()).coerceIn(0f, 1f)
+    val distanceProgress: Float get() = (distanceMeters / distanceGoalMeters).toFloat().coerceIn(0f, 1f)
+    val activeMinutesProgress: Float get() = (workoutMinutesToday.toFloat() / activeMinutesGoal.toFloat()).coerceIn(0f, 1f)
+    val caloriesProgress: Float get() = (caloriesKcal / caloriesGoalKcal).toFloat().coerceIn(0f, 1f)
 
     /** True only when we've actually checked permissions and confirmed they're
      *  missing -- never true purely because we're still loading. The UI should
@@ -67,12 +88,20 @@ data class DashboardUiState(
     val showConnectLockScreen: Boolean get() = permissionsChecked && !hasPermissions
 
     fun isWidgetVisible(widget: DashboardWidget): Boolean = visibleWidgets[widget] ?: true
+
+    /** True if today's steps total is itself an all-time record in the making
+     *  (i.e. already at or beyond the previously stored best). Used to show a
+     *  small "new record" badge live, without waiting for the next sync to
+     *  persist it via [AchievementsStore.recordDailyTotals]. */
+    val isStepsRecordToday: Boolean get() = bestStepsDay != null && stepsToday >= bestStepsDay.value && stepsToday > 0L
 }
 
 class DashboardViewModel(
     private val googleManager: HealthConnectManager,
     private val widgetVisibilityPrefs: WidgetVisibilityPrefs,
-    private val snapshotCache: DashboardSnapshotCache
+    private val snapshotCache: DashboardSnapshotCache,
+    private val goalPrefs: GoalPrefs,
+    private val achievementsStore: AchievementsStore
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(buildInitialState())
@@ -101,6 +130,29 @@ class DashboardViewModel(
         _state.update { it.copy(visibleWidgets = it.visibleWidgets + (widget to visible)) }
     }
 
+    /** Called from the Settings goals editor (v1.9.12, sprint 7). Persists
+     *  immediately and updates in-memory state so progress rings/percentages
+     *  reflect the new goal right away, without a Health Connect round-trip. */
+    fun setStepsGoal(value: Long) {
+        goalPrefs.setStepsGoal(value)
+        _state.update { it.copy(stepsGoal = value) }
+    }
+
+    fun setDistanceGoalMeters(value: Double) {
+        goalPrefs.setDistanceGoalMeters(value)
+        _state.update { it.copy(distanceGoalMeters = value) }
+    }
+
+    fun setActiveMinutesGoal(value: Int) {
+        goalPrefs.setActiveMinutesGoal(value)
+        _state.update { it.copy(activeMinutesGoal = value) }
+    }
+
+    fun setCaloriesGoalKcal(value: Double) {
+        goalPrefs.setCaloriesGoalKcal(value)
+        _state.update { it.copy(caloriesGoalKcal = value) }
+    }
+
     /** Builds the very first state synchronously from whatever is on disk, so the
      *  first composition already shows the last known real data instead of a
      *  loading spinner or a "Connect Google Health" lock screen. This never
@@ -113,7 +165,8 @@ class DashboardViewModel(
             null
         }
 
-        val base = DashboardUiState(visibleWidgets = widgetVisibilityPrefs.snapshot())
+        val goalsBase = readGoalsIntoState(DashboardUiState(visibleWidgets = widgetVisibilityPrefs.snapshot()))
+        val base = readAchievementsIntoState(goalsBase)
         if (cached == null) return base
 
         return base.withSnapshot(cached.snapshot).copy(
@@ -129,6 +182,24 @@ class DashboardViewModel(
             isFromCache = true,
             lastUpdatedAtMs = cached.savedAtMs
         )
+    }
+
+    private fun readGoalsIntoState(state: DashboardUiState): DashboardUiState = state.copy(
+        stepsGoal = goalPrefs.stepsGoal(),
+        distanceGoalMeters = goalPrefs.distanceGoalMeters(),
+        activeMinutesGoal = goalPrefs.activeMinutesGoal(),
+        caloriesGoalKcal = goalPrefs.caloriesGoalKcal()
+    )
+
+    private fun readAchievementsIntoState(state: DashboardUiState): DashboardUiState = try {
+        state.copy(
+            bestStepsDay = achievementsStore.bestStepsDay(),
+            bestDistanceDay = achievementsStore.bestDistanceMetersDay(),
+            streak = achievementsStore.readStreak()
+        )
+    } catch (e: Exception) {
+        AppLogger.e(TAG, "Failed to read achievements: ${e.message}", e)
+        state
     }
 
     fun load() {
@@ -170,14 +241,50 @@ class DashboardViewModel(
                     current.copy(isLoading = false, hasPermissions = true, permissionsChecked = true)
                 } else {
                     snapshotCache.save(snapshot)
-                    current.withSnapshot(snapshot).copy(
-                        hasPermissions = true,
-                        permissionsChecked = true,
-                        isFromCache = false,
-                        lastUpdatedAtMs = System.currentTimeMillis()
+                    updateAchievementsFor(snapshot)
+                    readAchievementsIntoState(
+                        current.withSnapshot(snapshot).copy(
+                            hasPermissions = true,
+                            permissionsChecked = true,
+                            isFromCache = false,
+                            lastUpdatedAtMs = System.currentTimeMillis()
+                        )
                     )
                 }
             }
+
+            // Week-over-week comparison is a separate aggregate query (not part
+            // of GoogleDashboardSnapshot), so it's fetched independently and
+            // merged in once it resolves rather than blocking the rest of the
+            // dashboard on it.
+            val comparison = try {
+                googleManager.readWeekOverWeekComparison()
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "Week-over-week comparison failed: ${e.message}", e)
+                null
+            }
+            if (generation != loadGeneration) return@launch
+            if (comparison != null) {
+                _state.update { it.copy(weekComparison = comparison) }
+            }
+        }
+    }
+
+    /** Mirrors what SyncWorker does after a successful background sync, so
+     *  manual refreshes (tapping "Обновить"/pull-to-refresh) also keep
+     *  records/streaks current -- not just the periodic 30-minute sync. */
+    private fun updateAchievementsFor(snapshot: GoogleDashboardSnapshot) {
+        try {
+            val today = LocalDate.now()
+            achievementsStore.recordDailyTotals(
+                date = today,
+                stepsToday = snapshot.stepsToday,
+                distanceMetersToday = snapshot.distanceMeters
+            )
+            val goalMet = _state.value.stepsGoal > 0 && snapshot.stepsToday >= _state.value.stepsGoal
+            achievementsStore.updateStreak(today, goalMet)
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Failed to update achievements from manual refresh: ${e.message}", e)
         }
     }
 
@@ -207,12 +314,14 @@ class DashboardViewModel(
         fun provideFactory(
             googleManager: HealthConnectManager,
             widgetVisibilityPrefs: WidgetVisibilityPrefs,
-            snapshotCache: DashboardSnapshotCache
+            snapshotCache: DashboardSnapshotCache,
+            goalPrefs: GoalPrefs,
+            achievementsStore: AchievementsStore
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    DashboardViewModel(googleManager, widgetVisibilityPrefs, snapshotCache) as T
+                    DashboardViewModel(googleManager, widgetVisibilityPrefs, snapshotCache, goalPrefs, achievementsStore) as T
             }
     }
 }

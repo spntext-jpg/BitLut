@@ -1,6 +1,9 @@
 package com.openhealth.sync.di
 
 import android.content.Context
+import com.openhealth.sync.config.GoalPrefs
+import com.openhealth.sync.data.AchievementsStore
+import com.openhealth.sync.data.DashboardSnapshotCache
 import com.openhealth.sync.data.GoogleHealthManager
 import com.openhealth.sync.data.HealthConnectManager
 import com.openhealth.sync.data.HuaweiHealthManager
@@ -26,4 +29,22 @@ class AppContainer(private val context: Context) {
      * Hosting one shared instance here closes that gap.
      */
     val syncRunLease: SyncRunLease by lazy { SyncRunLease(context) }
+
+    /**
+     * Shared dashboard snapshot cache (v1.9.12). Both [com.openhealth.sync.data.worker.SyncWorker]
+     * (writes after every successful background sync) and
+     * [com.openhealth.sync.data.worker.EveningReminderWorker] (reads, to check
+     * goal progress without a second live Health Connect call) use the same
+     * instance -- there's no correctness requirement for a single shared
+     * object the way there was for the lease, but centralizing it here avoids
+     * three call sites each re-deriving "which SharedPreferences file does
+     * this live in".
+     */
+    val dashboardSnapshotCache: DashboardSnapshotCache by lazy { DashboardSnapshotCache(context) }
+
+    /** Shared activity-only personal records + streak store (v1.9.12). */
+    val achievementsStore: AchievementsStore by lazy { AchievementsStore(context) }
+
+    /** Shared user-configurable activity goals (v1.9.12). */
+    val goalPrefs: GoalPrefs by lazy { GoalPrefs(context) }
 }

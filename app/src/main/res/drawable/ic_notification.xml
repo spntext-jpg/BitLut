@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Status bar notification icon (v1.9.12). Must stay a flat, single-color
+  silhouette per Android notification icon guidelines -- unlike
+  ic_launcher_foreground.xml, which is a full-color multi-layer vector
+  unsuitable for the status bar (it would render as a solid grey blob).
+  android:fillColor is intentionally #FFFFFFFF: the system tints status bar
+  icons to match the current theme (usually white or black) regardless of
+  the color specified here, so any opaque fill works, but white keeps the
+  icon looking correct in any Vector Drawable preview tooling.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M13,2 L4.5,13.5 L11,13.5 L10,22 L19,10 L12.5,10 Z" />
+</vector>

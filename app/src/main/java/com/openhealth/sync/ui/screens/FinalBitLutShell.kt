@@ -70,7 +70,11 @@ import androidx.work.WorkManager
 import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.data.WorkoutTypeSummary
 import com.openhealth.sync.data.MetricBar
+import com.openhealth.sync.data.PersonalRecord
+import com.openhealth.sync.data.StreakState
+import com.openhealth.sync.data.WeekComparison
 import com.openhealth.sync.config.DashboardWidget
+import com.openhealth.sync.config.GoalPrefs
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardUiState
 import com.openhealth.sync.ui.DashboardViewModel
@@ -95,6 +99,8 @@ import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -129,13 +135,34 @@ fun FinalBitLutShell(
     onImportArchive: () -> Unit = {},
     onHistoryRangeSelected: (Int) -> Unit = {},
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit = { _, _ -> },
+    onStepsGoalChanged: (Long) -> Unit = {},
+    onDistanceGoalChanged: (Double) -> Unit = {},
+    onActiveMinutesGoalChanged: (Int) -> Unit = {},
+    onCaloriesGoalChanged: (Double) -> Unit = {},
+    hasSeenPermissionsOnboarding: Boolean = true,
+    onPermissionsOnboardingSeen: () -> Unit = {},
     importViewModel: ImportViewModel) {
     var selected by rememberSaveable { mutableStateOf(MainTab.Today) }
     var showArchiveImport by rememberSaveable { mutableStateOf(false) }
+    var showPermissionsOnboarding by rememberSaveable { mutableStateOf(false) }
     val dashboardState = dashboardStateProvider()
     val syncState = syncStateProvider()
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
     val palette = remember(isDark) { if (isDark) BitPalette.dark() else BitPalette.light() }
+
+    // Sprint 7: the first time someone would trigger the real Health Connect
+    // permission request, show a plain-language rationale screen instead --
+    // the system's own permission dialog is terse ("Allow BitLut to access
+    // Steps?") and gives no context for why. This wraps every onRequestGoogle
+    // call site (Summary lock screen, History lock screen, Settings) without
+    // changing any of them individually.
+    val wrappedOnRequestGoogle: () -> Unit = {
+        if (!hasSeenPermissionsOnboarding) {
+            showPermissionsOnboarding = true
+        } else {
+            onRequestGoogle()
+        }
+    }
 
     Scaffold(
         containerColor = palette.systemBackground,
@@ -160,13 +187,107 @@ fun FinalBitLutShell(
                     onBack = { showArchiveImport = false }
                 )
             } else when (selected) {
-                MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, onRequestGoogle)
-                MainTab.SevenDays -> HistoryScreen(palette, dashboardState, onRequestGoogle, onHistoryRangeSelected)
-                MainTab.Settings -> SettingsScreen(palette, syncState, dashboardState, onRefresh, onRequestGoogle, onRequestHuawei, onSyncNow,
+                MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, wrappedOnRequestGoogle)
+                MainTab.SevenDays -> HistoryScreen(palette, dashboardState, wrappedOnRequestGoogle, onHistoryRangeSelected)
+                MainTab.Settings -> SettingsScreen(palette, syncState, dashboardState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
-                    onWidgetVisibilityChanged = onWidgetVisibilityChanged)
+                    onWidgetVisibilityChanged = onWidgetVisibilityChanged,
+                    onStepsGoalChanged = onStepsGoalChanged,
+                    onDistanceGoalChanged = onDistanceGoalChanged,
+                    onActiveMinutesGoalChanged = onActiveMinutesGoalChanged,
+                    onCaloriesGoalChanged = onCaloriesGoalChanged)
             }
         }
+    }
+
+    if (showPermissionsOnboarding) {
+        PermissionsOnboardingScreen(
+            palette = palette,
+            onContinue = {
+                showPermissionsOnboarding = false
+                onPermissionsOnboardingSeen()
+                onRequestGoogle()
+            }
+        )
+    }
+}
+
+/**
+ * One-time permissions rationale screen (v1.9.12, sprint 7), shown as a
+ * full-screen overlay the first time "Connect Google Health" would be
+ * tapped -- before the system's own Health Connect permission dialog
+ * appears. Explains in plain language what BitLut actually reads/writes
+ * (activity-only: steps, distance, calories, floors, workouts) and why,
+ * since the system dialog itself only lists raw permission names with no
+ * context. Shown exactly once per install; OnboardingPrefs tracks that.
+ */
+@Composable
+private fun PermissionsOnboardingScreen(palette: BitPalette, onContinue: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(palette.backgroundBrush)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Icon(
+                    Icons.Rounded.Cloud,
+                    contentDescription = null,
+                    tint = HealthAccent.mind,
+                    modifier = Modifier.size(40.dp)
+                )
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    text = stringResource(R.string.onboarding_title),
+                    color = palette.text,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 26.sp
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = stringResource(R.string.onboarding_body),
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp
+                )
+                Spacer(Modifier.height(24.dp))
+                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.TrendingUp, text = stringResource(R.string.onboarding_scope_steps))
+                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.TrendingUp, text = stringResource(R.string.onboarding_scope_distance))
+                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.TrendingUp, text = stringResource(R.string.onboarding_scope_workouts))
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.onboarding_privacy_note),
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            }
+
+            PrimaryButton(
+                text = stringResource(R.string.onboarding_continue_button),
+                accent = HealthAccent.mind,
+                onClick = onContinue
+            )
+        }
+    }
+}
+
+@Composable
+private fun OnboardingScopeRow(palette: BitPalette, icon: ImageVector, text: String) {
+    Row(
+        modifier = Modifier.padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(text, color = palette.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
     }
 }
 
@@ -227,6 +348,28 @@ private fun SummaryScreen(
                     palette = palette,
                     state = state
                 )
+            }
+
+            // ── Sprint 4: Insights (activity-only) ────────────────────────
+            // A dedicated card block below the core metrics, not a separate
+            // tab: these are secondary, at-a-glance context (how this week
+            // compares, personal bests, streaks) rather than a primary
+            // destination someone navigates to on its own.
+            if (state.weekComparison != null) {
+                item { WeeklyComparisonCard(palette = palette, comparison = state.weekComparison) }
+            }
+            if (state.bestStepsDay != null || state.bestDistanceDay != null) {
+                item {
+                    PersonalRecordsCard(
+                        palette = palette,
+                        bestStepsDay = state.bestStepsDay,
+                        bestDistanceDay = state.bestDistanceDay,
+                        isStepsRecordToday = state.isStepsRecordToday
+                    )
+                }
+            }
+            if (state.streak.currentStreakDays > 0 || state.streak.longestStreakDays > 0) {
+                item { StreakCard(palette = palette, streak = state.streak, stepsGoal = state.stepsGoal) }
             }
         }
     }
@@ -485,6 +628,241 @@ private fun MiniSparkline(
     }
 }
 
+/**
+ * Week-over-week comparison card (v1.9.12, sprint 4). Shows steps/distance/
+ * calories change vs the previous 7 days as a signed percentage, or "first
+ * tracked week" copy when there's no previous-week baseline to compare
+ * against (WeekComparison.*PercentChange() returns null in that case).
+ */
+@Composable
+private fun WeeklyComparisonCard(palette: BitPalette, comparison: WeekComparison) {
+    SoftCard(palette = palette, accent = HealthAccent.mind, tintWithAccent = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.TrendingUp, contentDescription = null, tint = HealthAccent.mind, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.insights_week_comparison_title),
+                color = palette.text,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            WeekChangeStat(
+                modifier = Modifier.weight(1f),
+                palette = palette,
+                label = stringResource(R.string.steps_today),
+                percentChange = comparison.stepsPercentChange()
+            )
+            WeekChangeStat(
+                modifier = Modifier.weight(1f),
+                palette = palette,
+                label = stringResource(R.string.distance_short_title),
+                percentChange = comparison.distancePercentChange()
+            )
+            WeekChangeStat(
+                modifier = Modifier.weight(1f),
+                palette = palette,
+                label = stringResource(R.string.calories_active_title),
+                percentChange = comparison.caloriesPercentChange()
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeekChangeStat(
+    palette: BitPalette,
+    label: String,
+    percentChange: Int?,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(4.dp))
+        if (percentChange == null) {
+            Text(
+                stringResource(R.string.insights_first_week),
+                color = palette.secondaryText,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
+        } else {
+            val positive = percentChange >= 0
+            val displayColor = if (positive) HealthAccent.mind else palette.secondaryText
+            Text(
+                text = "${if (positive) "+" else ""}$percentChange%",
+                color = displayColor,
+                fontWeight = FontWeight.Black,
+                fontSize = 18.sp
+            )
+        }
+    }
+}
+
+/**
+ * All-time personal records card (v1.9.12, sprint 4). Only renders the
+ * metrics that actually have a record yet (a brand-new install has neither
+ * until the first full day of tracked data goes by, per
+ * AchievementsStore.recordDailyTotals). Shows a "new record today" badge
+ * when today's live number has already met or beaten the stored best, ahead
+ * of the next sync actually persisting it.
+ */
+@Composable
+private fun PersonalRecordsCard(
+    palette: BitPalette,
+    bestStepsDay: PersonalRecord?,
+    bestDistanceDay: PersonalRecord?,
+    isStepsRecordToday: Boolean
+) {
+    SoftCard(palette = palette, accent = HealthAccent.activity, tintWithAccent = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.EmojiEvents, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.insights_personal_records_title),
+                color = palette.text,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+            if (isStepsRecordToday) {
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .background(HealthAccent.activity.copy(alpha = 0.18f), shape = RoundedCornerShape(20.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.insights_new_record_badge),
+                        color = HealthAccent.activity,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (bestStepsDay != null) {
+                RecordStat(
+                    modifier = Modifier.weight(1f),
+                    palette = palette,
+                    label = stringResource(R.string.steps_today),
+                    value = formatNumber(bestStepsDay.value.toLong()),
+                    date = bestStepsDay.date
+                )
+            }
+            if (bestDistanceDay != null) {
+                RecordStat(
+                    modifier = Modifier.weight(1f),
+                    palette = palette,
+                    label = stringResource(R.string.distance_short_title),
+                    value = stringResource(R.string.distance_today_value, formatOneDecimal(bestDistanceDay.value / 1000.0)),
+                    date = bestDistanceDay.date
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordStat(
+    palette: BitPalette,
+    label: String,
+    value: String,
+    date: java.time.LocalDate,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(4.dp))
+        Text(value, color = palette.text, fontWeight = FontWeight.Black, fontSize = 18.sp)
+        Spacer(Modifier.height(2.dp))
+        Text(formatRecordDate(date), color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 10.sp)
+    }
+}
+
+/**
+ * Streak card (v1.9.12, sprint 4). Shows the current consecutive-day streak
+ * of hitting the steps goal, plus the longest streak ever if it differs from
+ * the current one (avoids showing a redundant "current: 5, longest: 5").
+ */
+@Composable
+private fun StreakCard(palette: BitPalette, streak: StreakState, stepsGoal: Long) {
+    SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.LocalFireDepartment, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = pluralDaysStreak(streak.currentStreakDays),
+                    color = palette.text,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 20.sp
+                )
+                Text(
+                    text = stringResource(R.string.insights_streak_subtitle, formatNumber(stepsGoal)),
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp
+                )
+            }
+            if (streak.longestStreakDays > streak.currentStreakDays) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "${streak.longestStreakDays}",
+                        color = palette.secondaryText,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 16.sp
+                    )
+                    Text(
+                        text = stringResource(R.string.insights_streak_best),
+                        color = palette.secondaryText,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun pluralDaysStreak(days: Int): String {
+    // Russian day-count pluralization has three forms (1 день / 2-4 дня /
+    // 5+ дней) that a single %d string template cannot express correctly.
+    // English (and the fallback for any other locale) only needs singular
+    // vs plural. This keeps the grammar correct in both shipped locales
+    // without pulling in Android <plurals> resource complexity for a single
+    // string.
+    val isRussian = java.util.Locale.getDefault().language == "ru"
+    if (!isRussian) {
+        return if (days == 1) stringResource(R.string.insights_streak_days_one, days)
+        else stringResource(R.string.insights_streak_days_other, days)
+    }
+
+    val mod100 = days % 100
+    val mod10 = days % 10
+    return when {
+        mod100 in 11..14 -> stringResource(R.string.insights_streak_days_ru_many, days)
+        mod10 == 1 -> stringResource(R.string.insights_streak_days_ru_one, days)
+        mod10 in 2..4 -> stringResource(R.string.insights_streak_days_ru_few, days)
+        else -> stringResource(R.string.insights_streak_days_ru_many, days)
+    }
+}
+
+private fun formatRecordDate(date: java.time.LocalDate): String {
+    val formatter = java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.getDefault())
+    return date.format(formatter)
+}
+
 @Composable
 private fun SettingsScreen(
     palette: BitPalette,
@@ -495,7 +873,11 @@ private fun SettingsScreen(
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
     onImportArchive: () -> Unit,
-    onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit
+    onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit,
+    onStepsGoalChanged: (Long) -> Unit,
+    onDistanceGoalChanged: (Double) -> Unit,
+    onActiveMinutesGoalChanged: (Int) -> Unit,
+    onCaloriesGoalChanged: (Double) -> Unit
 ) {
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -557,6 +939,55 @@ private fun SettingsScreen(
                 secondaryAction = stringResource(R.string.import_archive_title),
                 onSecondaryAction = onImportArchive
             )
+        }
+
+        // ── Sprint 7: configurable activity goals ─────────────────────────
+        item {
+            Text(
+                text = stringResource(R.string.goals_section_title),
+                color = palette.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 18.sp,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        item {
+            SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
+                GoalStepperRow(
+                    palette = palette,
+                    accent = HealthAccent.activity,
+                    label = stringResource(R.string.goal_steps_label),
+                    valueText = "${formatNumber(dashboardState.stepsGoal)} ${stringResource(R.string.steps_unit)}",
+                    onDecrease = { onStepsGoalChanged((dashboardState.stepsGoal - STEPS_GOAL_STEP).coerceAtLeast(GoalPrefs.STEPS_GOAL_RANGE.first)) },
+                    onIncrease = { onStepsGoalChanged((dashboardState.stepsGoal + STEPS_GOAL_STEP).coerceAtMost(GoalPrefs.STEPS_GOAL_RANGE.last)) }
+                )
+                GoalStepperRow(
+                    palette = palette,
+                    accent = HealthAccent.mind,
+                    label = stringResource(R.string.goal_distance_label),
+                    valueText = stringResource(R.string.distance_today_value, formatOneDecimal(dashboardState.distanceGoalMeters / 1000.0)),
+                    onDecrease = { onDistanceGoalChanged((dashboardState.distanceGoalMeters - DISTANCE_GOAL_STEP_METERS).coerceAtLeast(GoalPrefs.DISTANCE_GOAL_RANGE_METERS.start)) },
+                    onIncrease = { onDistanceGoalChanged((dashboardState.distanceGoalMeters + DISTANCE_GOAL_STEP_METERS).coerceAtMost(GoalPrefs.DISTANCE_GOAL_RANGE_METERS.endInclusive)) }
+                )
+                GoalStepperRow(
+                    palette = palette,
+                    accent = HealthAccent.activity,
+                    label = stringResource(R.string.goal_active_minutes_label),
+                    valueText = "${dashboardState.activeMinutesGoal} ${stringResource(R.string.minutes_short)}",
+                    onDecrease = { onActiveMinutesGoalChanged((dashboardState.activeMinutesGoal - ACTIVE_MINUTES_GOAL_STEP).coerceAtLeast(GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE.first)) },
+                    onIncrease = { onActiveMinutesGoalChanged((dashboardState.activeMinutesGoal + ACTIVE_MINUTES_GOAL_STEP).coerceAtMost(GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE.last)) }
+                )
+                GoalStepperRow(
+                    palette = palette,
+                    accent = HealthAccent.activity,
+                    label = stringResource(R.string.goal_calories_label),
+                    valueText = "${formatNumber(dashboardState.caloriesGoalKcal.toLong())} ${stringResource(R.string.kcal_unit)}",
+                    onDecrease = { onCaloriesGoalChanged((dashboardState.caloriesGoalKcal - CALORIES_GOAL_STEP).coerceAtLeast(GoalPrefs.CALORIES_GOAL_RANGE.start)) },
+                    onIncrease = { onCaloriesGoalChanged((dashboardState.caloriesGoalKcal + CALORIES_GOAL_STEP).coerceAtMost(GoalPrefs.CALORIES_GOAL_RANGE.endInclusive)) },
+                    isLast = true
+                )
+            }
         }
 
         item {
@@ -655,6 +1086,65 @@ private fun WidgetVisibilityRow(
     }
     if (!isLast) {
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+// ── Sprint 7: goal step sizes for the Settings steppers ──────────────────
+private const val STEPS_GOAL_STEP = 500L
+private const val DISTANCE_GOAL_STEP_METERS = 500.0
+private const val ACTIVE_MINUTES_GOAL_STEP = 5
+private const val CALORIES_GOAL_STEP = 50.0
+
+/**
+ * A single goal row in Settings: label, current value, and -/+ stepper
+ * buttons (v1.9.12, sprint 7). Deliberately a stepper rather than a free-text
+ * field: it makes an invalid/out-of-range value structurally impossible
+ * (every tap is pre-clamped by the caller against GoalPrefs' *_RANGE bounds),
+ * which is both simpler to implement correctly and more comfortable to use
+ * one-handed than opening a keyboard for a single number.
+ */
+@Composable
+private fun GoalStepperRow(
+    palette: BitPalette,
+    accent: Color,
+    label: String,
+    valueText: String,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+    isLast: Boolean = false
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, color = palette.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Spacer(Modifier.height(2.dp))
+            Text(valueText, color = palette.secondaryText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GoalStepperButton(palette = palette, accent = accent, symbol = "–", onClick = onDecrease)
+            Spacer(Modifier.width(8.dp))
+            GoalStepperButton(palette = palette, accent = accent, symbol = "+", onClick = onIncrease)
+        }
+    }
+    if (!isLast) {
+        Spacer(Modifier.height(14.dp))
+    }
+}
+
+@Composable
+private fun GoalStepperButton(palette: BitPalette, accent: Color, symbol: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .background(accent.copy(alpha = 0.16f), shape = RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(symbol, color = accent, fontWeight = FontWeight.Black, fontSize = 18.sp)
     }
 }
 

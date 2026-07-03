@@ -12,7 +12,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.openhealth.sync.config.WidgetVisibilityPrefs
-import com.openhealth.sync.data.DashboardSnapshotCache
 import com.openhealth.sync.domain.SyncOrchestrator
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardViewModel
@@ -23,6 +22,8 @@ import com.openhealth.sync.util.AppLogger
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
+    private val onboardingPrefs by lazy { com.openhealth.sync.config.OnboardingPrefs(applicationContext) }
 
     private val syncViewModel: SyncViewModel by viewModels {
         val app = application as SyncApplication
@@ -38,7 +39,9 @@ class MainActivity : ComponentActivity() {
         DashboardViewModel.provideFactory(
             app.container.googleHealthManager,
             WidgetVisibilityPrefs(applicationContext),
-            DashboardSnapshotCache(applicationContext)
+            app.container.dashboardSnapshotCache,
+            app.container.goalPrefs,
+            app.container.achievementsStore
         )
     }
 
@@ -67,6 +70,15 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this, getString(R.string.status_error), Toast.LENGTH_LONG).show()
                 }
             }
+        }
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            AppLogger.i("MainActivity", "POST_NOTIFICATIONS permission result: $granted")
+            // No toast either way: this permission is optional polish (goal
+            // reminders, streak/record celebrations), not something the core
+            // sync flow depends on, so a denial should not interrupt the
+            // person with an error-style message.
         }
 
     private val googlePermissionLauncher = registerForActivityResult(
@@ -105,6 +117,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BitLutExpressiveTheme {
+                var hasSeenOnboarding by androidx.compose.runtime.remember {
+                    androidx.compose.runtime.mutableStateOf(onboardingPrefs.hasSeenPermissionsRationale())
+                }
                 FinalBitLutShell(
                     dashboardStateProvider = {
                         dashboardViewModel.state.collectAsStateWithLifecycle().value
@@ -125,6 +140,15 @@ class MainActivity : ComponentActivity() {
                     },
                     onWidgetVisibilityChanged = { widget, visible ->
                         dashboardViewModel.setWidgetVisible(widget, visible)
+                    },
+                    onStepsGoalChanged = { value -> dashboardViewModel.setStepsGoal(value) },
+                    onDistanceGoalChanged = { value -> dashboardViewModel.setDistanceGoalMeters(value) },
+                    onActiveMinutesGoalChanged = { value -> dashboardViewModel.setActiveMinutesGoal(value) },
+                    onCaloriesGoalChanged = { value -> dashboardViewModel.setCaloriesGoalKcal(value) },
+                    hasSeenPermissionsOnboarding = hasSeenOnboarding,
+                    onPermissionsOnboardingSeen = {
+                        onboardingPrefs.markPermissionsRationaleSeen()
+                        hasSeenOnboarding = true
                     },
                     importViewModel = importViewModel
                 )
@@ -188,6 +212,30 @@ class MainActivity : ComponentActivity() {
 
     private fun setupPeriodicSync() {
         syncOrchestrator.schedulePeriodic()
+        com.openhealth.sync.data.worker.BackgroundSyncScheduler.scheduleEveningReminder(this)
+        requestNotificationPermissionIfNeeded()
+    }
+
+    /**
+     * POST_NOTIFICATIONS is a runtime permission on API 33+ (Android 13).
+     * Requested once, right after the sync schedule is set up, so the
+     * evening reminder (sprint 4) and any future notification content has a
+     * chance to actually be delivered. If denied, NotificationHelper simply
+     * no-ops on every post attempt -- there is no degraded/broken state, the
+     * app just stays silent, matching the same "notifications are optional
+     * polish" philosophy used throughout this feature.
+     */
+    private fun requestNotificationPermissionIfNeeded() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (!granted) {
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     private fun triggerImmediateSync() {

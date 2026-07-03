@@ -5,7 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.openhealth.sync.SyncApplication
-import com.openhealth.sync.data.DashboardSnapshotCache
+import com.openhealth.sync.data.GoogleDashboardSnapshot
 import com.openhealth.sync.data.HealthConnectManager
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.platform.HmsCoreHelper
@@ -31,7 +31,9 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
 
     private val huaweiCircuitBreaker by lazy { SyncCircuitBreaker(applicationContext, SyncDependency.HUAWEI) }
     private val googleCircuitBreaker by lazy { SyncCircuitBreaker(applicationContext, SyncDependency.GOOGLE) }
-    private val snapshotCache by lazy { DashboardSnapshotCache(applicationContext) }
+    private val snapshotCache get() = appContainer.dashboardSnapshotCache
+    private val achievementsStore get() = appContainer.achievementsStore
+    private val goalPrefs get() = appContainer.goalPrefs
 
     override suspend fun doWork(): Result {
         val owner = id.toString()
@@ -256,7 +258,8 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
             )
             SyncDiagnosticLog.record(prefs, "sync_success", "steps=${snapshot.steps.size} distances=${snapshot.distances.size}")
 
-            refreshDashboardCacheAfterWrite(googleManager)
+            val freshSnapshot = refreshDashboardCacheAfterWrite(googleManager)
+            updateAchievements(freshSnapshot)
 
             SyncAttemptOutcome.Success
         } catch (e: SecurityException) {
@@ -304,17 +307,51 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
      *
      * Best-effort only: any failure here is logged and swallowed so it can
      * never turn a successful Health Connect write into a retried/failed
-     * WorkManager run.
+     * WorkManager run. Returns the fresh snapshot (or null on failure) so the
+     * caller can reuse it for achievements tracking without a second read.
      */
-    private suspend fun refreshDashboardCacheAfterWrite(googleManager: HealthConnectManager) {
-        try {
+    private suspend fun refreshDashboardCacheAfterWrite(googleManager: HealthConnectManager): GoogleDashboardSnapshot? {
+        return try {
             val freshSnapshot = googleManager.readDashboardSnapshot(daysBack = 7)
             if (freshSnapshot != null) {
                 snapshotCache.save(freshSnapshot)
                 AppLogger.d(TAG, "Dashboard snapshot cache refreshed after background sync")
             }
+            freshSnapshot
         } catch (e: Exception) {
             AppLogger.e(TAG, "Failed to refresh dashboard cache after background sync: ${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * Updates activity-only personal records and the daily-goal streak from
+     * the freshly-synced snapshot (v1.9.12, sprint 4). Best-effort: any
+     * failure here is logged and swallowed for the same reason as the cache
+     * refresh above -- achievement bookkeeping must never turn a successful
+     * sync into a retried/failed WorkManager run.
+     */
+    private fun updateAchievements(freshSnapshot: GoogleDashboardSnapshot?) {
+        if (freshSnapshot == null) return
+
+        try {
+            val today = java.time.LocalDate.now()
+            val newRecords = achievementsStore.recordDailyTotals(
+                date = today,
+                stepsToday = freshSnapshot.stepsToday,
+                distanceMetersToday = freshSnapshot.distanceMeters
+            )
+            if (newRecords.isNotEmpty()) {
+                AppLogger.i(TAG, "New personal record(s) today: ${newRecords.joinToString()}")
+                SyncDiagnosticLog.record(prefs, "new_personal_record", newRecords.joinToString())
+            }
+
+            val stepsGoal = goalPrefs.stepsGoal()
+            val goalMet = stepsGoal > 0 && freshSnapshot.stepsToday >= stepsGoal
+            val streak = achievementsStore.updateStreak(today, goalMet)
+            AppLogger.d(TAG, "Streak after sync: current=${streak.currentStreakDays} longest=${streak.longestStreakDays}")
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Failed to update achievements after sync: ${e.message}", e)
         }
     }
 }

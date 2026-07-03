@@ -522,6 +522,65 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
         }
     }
 
+    /**
+     * Week-over-week comparison for the three activity-only metrics BitLut
+     * already has approved access to. "Current week" is the last 7 days
+     * including today (so it grows through the day rather than only
+     * comparing complete weeks); "previous week" is the 7 days before that.
+     * This intentionally does not require any new Huawei scope or Health
+     * Connect permission -- it's a different aggregation of data BitLut
+     * already reads for the dashboard and history screens.
+     */
+    override suspend fun readWeekOverWeekComparison(): WeekComparison? {
+        val client = resolveClient() ?: return null
+        return try {
+            val today = LocalDate.now()
+            val currentWeekStart = today.minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val currentWeekEnd = Instant.now()
+            val previousWeekStart = today.minusDays(13).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val previousWeekEnd = currentWeekStart
+
+            val currentAgg = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(
+                        StepsRecord.COUNT_TOTAL,
+                        DistanceRecord.DISTANCE_TOTAL,
+                        ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL
+                    ),
+                    timeRangeFilter = TimeRangeFilter.between(currentWeekStart, currentWeekEnd)
+                )
+            )
+            val previousAgg = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(
+                        StepsRecord.COUNT_TOTAL,
+                        DistanceRecord.DISTANCE_TOTAL,
+                        ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL
+                    ),
+                    timeRangeFilter = TimeRangeFilter.between(previousWeekStart, previousWeekEnd)
+                )
+            )
+
+            WeekComparison(
+                currentWeekSteps = currentAgg[StepsRecord.COUNT_TOTAL] ?: 0L,
+                previousWeekSteps = previousAgg[StepsRecord.COUNT_TOTAL] ?: 0L,
+                currentWeekDistanceMeters = currentAgg[DistanceRecord.DISTANCE_TOTAL]?.inMeters ?: 0.0,
+                previousWeekDistanceMeters = previousAgg[DistanceRecord.DISTANCE_TOTAL]?.inMeters ?: 0.0,
+                currentWeekCaloriesKcal = currentAgg[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories ?: 0.0,
+                previousWeekCaloriesKcal = previousAgg[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories ?: 0.0
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SecurityException) {
+            AppLogger.e(TAG, "readWeekOverWeekComparison denied; invalidating client cache: ${e.message}", e)
+            invalidateClientCache()
+            null
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readWeekOverWeekComparison failed: ${e.message}", e)
+            null
+        }
+    }
+
     suspend fun readStepsToday(): Long {
         val client = resolveClient() ?: return 0L
         return try {
