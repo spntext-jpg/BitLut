@@ -242,4 +242,7 @@
     <string name="onboarding_scope_workouts">Workouts and active calories</string>
     <string name="onboarding_privacy_note">BitLut never reads or shares sleep, heart rate, or any other health data. Only activity metrics move from Huawei Health into Google Health Connect, and stay on your device.</string>
     <string name="onboarding_continue_button">Continue</string>
+    <string name="insights_streak_days_ru_one">%1$d день подряд</string>
+    <string name="insights_streak_days_ru_few">%1$d дня подряд</string>
+    <string name="insights_streak_days_ru_many">%1$d дней подряд</string>
 </resources>

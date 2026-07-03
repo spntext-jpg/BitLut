@@ -1462,7 +1462,6 @@ private fun MinimalSquareTile(
  * Apple Health / Oura rings, where the ring itself communicates real
  * progress information rather than functioning as pure decoration.
  */
-@Composable
 private fun ProgressRingChip(
     progress: Float,
     accent: Color,
