@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Status bar notification icon (v1.9.12). Must stay a flat, single-color
-  silhouette per Android notification icon guidelines -- unlike
+  silhouette per Android notification icon guidelines — unlike
   ic_launcher_foreground.xml, which is a full-color multi-layer vector
   unsuitable for the status bar (it would render as a solid grey blob).
   android:fillColor is intentionally #FFFFFFFF: the system tints status bar
