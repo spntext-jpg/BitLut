@@ -3,6 +3,7 @@ package com.openhealth.sync
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,7 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,11 +35,26 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 
+/**
+ * Hidden diagnostic log viewer trigger: 5 taps on the Settings nav icon
+ * within [SECRET_TAP_WINDOW_MS] of each other open the log viewer. The
+ * window resets on any tap slower than that, so 5 *ordinary*, spaced-out
+ * Settings visits over a day never accidentally trigger it -- only a
+ * deliberate rapid-tap gesture does.
+ *
+ * Lives at the [Glass20BottomNavigation] level (not inside
+ * [Glass20NavButton]) so it can distinguish which tab was tapped without
+ * needing every nav button to know about this feature.
+ */
+private const val SECRET_TAP_COUNT = 5
+private const val SECRET_TAP_WINDOW_MS = 2000L
+
 @Composable
 internal fun Glass20BottomNavigation(
     selected: MainTab,
     palette: BitPalette,
-    onSelected: (MainTab) -> Unit
+    onSelected: (MainTab) -> Unit,
+    onSecretLogViewerTriggered: () -> Unit = {}
 ) {
     val shellShape = remember { RoundedCornerShape(34.dp) }
     val shellBackground = remember(palette.card, palette.systemBackground, palette.dark) {
@@ -52,6 +71,19 @@ internal fun Glass20BottomNavigation(
     }
     val mindGlowColors = remember(palette.mind) {
         listOf(palette.mind.copy(alpha = 0.18f), Color.Transparent)
+    }
+
+    var secretTapCount by remember { mutableIntStateOf(0) }
+    var lastSecretTapAtMs by remember { mutableLongStateOf(0L) }
+
+    fun onSettingsTabTapped() {
+        val now = System.currentTimeMillis()
+        secretTapCount = if (now - lastSecretTapAtMs <= SECRET_TAP_WINDOW_MS) secretTapCount + 1 else 1
+        lastSecretTapAtMs = now
+        if (secretTapCount >= SECRET_TAP_COUNT) {
+            secretTapCount = 0
+            onSecretLogViewerTriggered()
+        }
     }
 
     Box(
@@ -109,7 +141,12 @@ internal fun Glass20BottomNavigation(
                         tab = tab,
                         selected = selected == tab,
                         palette = palette,
-                        onClick = { onSelected(tab) }
+                        onClick = {
+                            if (tab == MainTab.Settings) {
+                                onSettingsTabTapped()
+                            }
+                            onSelected(tab)
+                        }
                     )
                 }
             }
@@ -130,6 +167,20 @@ private fun Glass20NavButton(
     val iconTint by animateColorAsState(
         targetValue = if (selected) Color.White else palette.secondaryText.copy(alpha = 0.84f),
         label = "glass20NavIconTint"
+    )
+    // Animated: was a hard `if (selected) 27.dp else 24.dp` snap with no
+    // transition -- every other state change in this button (tint, scale,
+    // glow) animates smoothly, so the icon instantly jumping 3dp on tab
+    // switch was the one visibly "cheap" moment. Same spring profile as the
+    // button's own selection [scale] below, so both animations read as one
+    // coordinated motion.
+    val iconSize by animateDpAsState(
+        targetValue = if (selected) 27.dp else 24.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "glass20NavIconSize"
     )
     val scale by animateFloatAsState(
         targetValue = if (selected) 1.0f else 0.94f,
@@ -159,7 +210,6 @@ private fun Glass20NavButton(
     val selectedGlowColors = remember {
         listOf(Color.White.copy(alpha = 0.34f), Color.Transparent)
     }
-
     Box(
         modifier = Modifier
             .size(54.dp)
@@ -201,9 +251,8 @@ private fun Glass20NavButton(
             imageVector = tab.icon,
             contentDescription = null,
             tint = iconTint,
-            modifier = Modifier.size(if (selected) 27.dp else 24.dp)
+            modifier = Modifier.size(iconSize)
         )
-
         if (selected) {
             Box(
                 modifier = Modifier

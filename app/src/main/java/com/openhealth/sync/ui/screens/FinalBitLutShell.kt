@@ -145,6 +145,7 @@ fun FinalBitLutShell(
     var selected by rememberSaveable { mutableStateOf(MainTab.Today) }
     var showArchiveImport by rememberSaveable { mutableStateOf(false) }
     var showPermissionsOnboarding by rememberSaveable { mutableStateOf(false) }
+    var showLogViewer by rememberSaveable { mutableStateOf(false) }
     val dashboardState = dashboardStateProvider()
     val syncState = syncStateProvider()
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -170,7 +171,8 @@ fun FinalBitLutShell(
             Glass20BottomNavigation(
                 selected = selected,
                 palette = palette,
-                onSelected = { selected = it }
+                onSelected = { selected = it },
+                onSecretLogViewerTriggered = { showLogViewer = true }
             )
         }
     ) { padding ->
@@ -210,6 +212,13 @@ fun FinalBitLutShell(
             }
         )
     }
+
+    if (showLogViewer) {
+        LogViewerScreen(
+            palette = palette,
+            onClose = { showLogViewer = false }
+        )
+    }
 }
 
 /**
@@ -221,6 +230,79 @@ fun FinalBitLutShell(
  * since the system dialog itself only lists raw permission names with no
  * context. Shown exactly once per install; OnboardingPrefs tracks that.
  */
+@Composable
+private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val logs by com.openhealth.sync.util.AppLogger.logs.collectAsStateWithLifecycle()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(palette.backgroundBrush)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Diagnostic log",
+                    color = palette.text,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 22.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PrimaryButton(
+                        text = "Copy",
+                        accent = HealthAccent.mind,
+                        modifier = Modifier,
+                        onClick = {
+                            val dump = com.openhealth.sync.util.AppLogger.exportFullDump(context)
+                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(dump))
+                        }
+                    )
+                    PrimaryButton(
+                        text = "Close",
+                        accent = HealthAccent.activity,
+                        modifier = Modifier,
+                        onClick = onClose
+                    )
+                }
+            }
+
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (logs.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No log entries yet.",
+                            color = palette.secondaryText,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+                items(logs) { entry ->
+                    Text(
+                        text = entry,
+                        color = palette.text,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 11.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun PermissionsOnboardingScreen(palette: BitPalette, onContinue: () -> Unit) {
     Box(
