@@ -26,12 +26,16 @@ import java.time.ZoneOffset
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.reflect.KClass
 
 private const val TAG = "GoogleHealthManager"
 private const val WRITE_BATCH_SIZE = 400
+/** Sprint 2026-07-08: single quick retry delay for a transient permission-
+ *  check failure -- see [GoogleHealthManager.grantedPermissionsOrEmpty]. */
+private const val TRANSIENT_PERMISSION_RETRY_DELAY_MS = 400L
 
 private val HC_PACKAGES = listOf(
     "com.google.android.apps.healthdata",
@@ -250,8 +254,26 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             invalidateClientCache()
             emptySet()
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Permission snapshot failed: ${e.message}", e)
-            emptySet()
+            // Sprint 2026-07-08: at cold launch, up to five near-simultaneous
+            // callers (SyncViewModel, DashboardViewModel, the launch auto-sync
+            // preflight, and SyncWorker's own preflight) can all hit this same
+            // shared client at once, right when the Health Connect provider
+            // process itself may still be warming up. A single transient IPC
+            // hiccup here must not be conflated with "permissions really are
+            // missing" -- that false negative is exactly what flashes the
+            // "Connect Google Health Connect" widget over data that is fine.
+            // One quick retry absorbs the common transient case; only a
+            // second consecutive failure is treated as a real denial.
+            AppLogger.w(TAG, "Permission snapshot failed once, retrying: ${e.message}")
+            try {
+                delay(TRANSIENT_PERMISSION_RETRY_DELAY_MS)
+                client.permissionController.getGrantedPermissions()
+            } catch (e2: CancellationException) {
+                throw e2
+            } catch (e2: Exception) {
+                AppLogger.e(TAG, "Permission snapshot failed twice; treating as denied: ${e2.message}", e2)
+                emptySet()
+            }
         }
     }
 

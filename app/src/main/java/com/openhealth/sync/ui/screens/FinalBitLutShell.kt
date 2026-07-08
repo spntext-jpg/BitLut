@@ -186,7 +186,7 @@ fun FinalBitLutShell(
             if (showArchiveImport) {
                 ImportScreen(
                     viewModel = importViewModel,
-                    onBack = { showArchiveImport = false }
+                    onBack = { showArchiveImport = false; onRefresh() }
                 )
             } else when (selected) {
                 MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, wrappedOnRequestGoogle)
