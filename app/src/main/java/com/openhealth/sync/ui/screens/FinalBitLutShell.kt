@@ -69,6 +69,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.openhealth.sync.data.worker.SyncWorker
+import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.WorkoutTypeSummary
 import com.openhealth.sync.data.MetricBar
 import com.openhealth.sync.data.PersonalRecord
@@ -100,6 +101,7 @@ import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material.icons.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material3.Icon
@@ -379,78 +381,72 @@ private fun SummaryScreen(
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit
 ) {
-    androidx.compose.foundation.lazy.LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+    // Sprint (2026-07-08): fixed, non-scrolling layout with exactly the 5
+    // widgets that map to our current Huawei Health Kit scope: steps today,
+    // workout time today, personal records, streak, and the last imported
+    // workout. The calories/workout-minutes/active-hours mini-grid and the
+    // week-over-week comparison card moved off this screen so it fits one
+    // viewport without scrolling.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        item {
-            MinimalHeader(
-                palette = palette,
-                title = stringResource(R.string.summary_short_title),
-                subtitle = formatUpdatedAgo(state.lastUpdatedAtMs, state.isFromCache)
-            )
-        }
+        MinimalHeader(
+            palette = palette,
+            title = stringResource(R.string.summary_short_title),
+            subtitle = formatUpdatedAgo(state.lastUpdatedAtMs, state.isFromCache)
+        )
 
         if (state.showConnectLockScreen) {
-            item {
-                MinimalMetricCard(
-                    palette = palette,
-                    title = stringResource(R.string.connect_google_title),
-                    value = stringResource(R.string.no_data_short),
-                    unit = stringResource(R.string.connect_google_button),
-                    accent = HealthAccent.mind,
-                    icon = Icons.Rounded.Cloud,
-                    onClick = onRequestGoogle
-                )
-            }
+            MinimalMetricCard(
+                palette = palette,
+                title = stringResource(R.string.connect_google_title),
+                value = stringResource(R.string.no_data_short),
+                unit = stringResource(R.string.connect_google_button),
+                accent = HealthAccent.mind,
+                icon = Icons.Rounded.Cloud,
+                onClick = onRequestGoogle
+            )
         } else if (state.isLoading && state.stepsToday == 0L && state.recentWorkouts.isEmpty()) {
             // First-ever launch on this device, with no cached snapshot yet and no
             // confirmed permission result either way. Show a neutral loading state
             // instead of either real (zero) numbers or the "Connect Google Health"
             // lock screen, which would be misleading this early.
-            item { DashboardLoadingCard(palette = palette) }
+            DashboardLoadingCard(palette = palette)
         } else {
-            if (state.isWidgetVisible(DashboardWidget.STEPS)) {
-                item {
-                    MinimalMetricCard(
-                        palette = palette,
-                        title = stringResource(R.string.steps_today),
-                        value = formatNumber(state.stepsToday),
-                        unit = "${stringResource(R.string.steps_unit)} · ${stringResource(R.string.distance_today_value, formatOneDecimal(state.distanceMeters / 1000.0))} · ${stringResource(R.string.dashboard_pct_goal, (state.stepsProgress * 100).toInt())}",
-                        accent = HealthAccent.activity,
-                        progress = state.stepsProgress
-                    )
-                }
-            }
+            MinimalMetricCard(
+                palette = palette,
+                title = stringResource(R.string.steps_today),
+                value = formatNumber(state.stepsToday),
+                unit = "${stringResource(R.string.steps_unit)} · ${stringResource(R.string.distance_today_value, formatOneDecimal(state.distanceMeters / 1000.0))} · ${stringResource(R.string.dashboard_pct_goal, (state.stepsProgress * 100).toInt())}",
+                accent = HealthAccent.activity,
+                progress = state.stepsProgress
+            )
 
-            item {
-                DashboardWidgetGrid(
+            MiniMetricWidget(
+                palette = palette,
+                title = stringResource(R.string.workout_minutes_title),
+                value = "${state.workoutMinutesToday}",
+                unit = stringResource(R.string.minutes_short),
+                accent = HealthAccent.activity,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (state.bestStepsDay != null || state.bestDistanceDay != null) {
+                PersonalRecordsCard(
                     palette = palette,
-                    state = state
+                    bestStepsDay = state.bestStepsDay,
+                    bestDistanceDay = state.bestDistanceDay,
+                    isStepsRecordToday = state.isStepsRecordToday
                 )
             }
-
-            // ── Sprint 4: Insights (activity-only) ────────────────────────
-            // A dedicated card block below the core metrics, not a separate
-            // tab: these are secondary, at-a-glance context (how this week
-            // compares, personal bests, streaks) rather than a primary
-            // destination someone navigates to on its own.
-            if (state.weekComparison != null) {
-                item { WeeklyComparisonCard(palette = palette, comparison = state.weekComparison) }
-            }
-            if (state.bestStepsDay != null || state.bestDistanceDay != null) {
-                item {
-                    PersonalRecordsCard(
-                        palette = palette,
-                        bestStepsDay = state.bestStepsDay,
-                        bestDistanceDay = state.bestDistanceDay,
-                        isStepsRecordToday = state.isStepsRecordToday
-                    )
-                }
-            }
             if (state.streak.currentStreakDays > 0 || state.streak.longestStreakDays > 0) {
-                item { StreakCard(palette = palette, streak = state.streak, stepsGoal = state.stepsGoal) }
+                StreakCard(palette = palette, streak = state.streak, stepsGoal = state.stepsGoal)
+            }
+            state.recentWorkouts.firstOrNull()?.let { lastWorkout ->
+                LastWorkoutCard(palette = palette, session = lastWorkout)
             }
         }
     }
@@ -621,6 +617,50 @@ private fun WorkoutTypeCard(
                 fontSize = 15.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/**
+ * Last imported workout (sprint 2026-07-08). state.recentWorkouts is already
+ * sorted most-recent-first by GoogleHealthManager.readRecentWorkouts, so the
+ * first entry is exactly "the last imported workout".
+ */
+@Composable
+private fun LastWorkoutCard(palette: BitPalette, session: ActivitySessionData) {
+    val durationMinutes = ((session.endTimeMs - session.startTimeMs) / 60_000L).coerceAtLeast(0L)
+    SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Rounded.DirectionsRun, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = session.title,
+                    color = palette.text,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                formatUpdatedAgo(session.startTimeMs, isFromCache = false)?.let { agoText ->
+                    Text(
+                        text = agoText,
+                        color = palette.secondaryText,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+            Text(
+                text = stringResource(R.string.workout_total_minutes, durationMinutes),
+                color = HealthAccent.activity,
+                fontWeight = FontWeight.Black,
+                fontSize = 14.sp,
+                maxLines = 1
             )
         }
     }
@@ -960,175 +1000,89 @@ private fun SettingsScreen(
     onActiveMinutesGoalChanged: (Int) -> Unit,
     onCaloriesGoalChanged: (Double) -> Unit
 ) {
-    androidx.compose.foundation.lazy.LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+    // Sprint (2026-07-08): Daily goals moved to the top (right under the
+    // header), calories dropped from it. The three connection cards below
+    // lost their explanatory body text and status line (title + icon only
+    // now) and their two actions are a single compact row instead of a
+    // wrapping FlowRow. The widget-visibility toggle section was removed
+    // entirely -- Summary's widget set is fixed now, not user-configurable.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        item {
-            MinimalHeader(
-                palette = palette,
-                title = stringResource(R.string.tab_settings)
-            )
-        }
+        MinimalHeader(
+            palette = palette,
+            title = stringResource(R.string.tab_settings)
+        )
 
-        item {
-            SettingsConnectionCard(
+        Text(
+            text = stringResource(R.string.goals_section_title),
+            color = palette.text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 18.sp
+        )
+        SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
+            GoalStepperRow(
                 palette = palette,
-                title = stringResource(R.string.google_health_connect),
-                body = stringResource(R.string.google_connection_body),
-                status = stringResource(R.string.refresh_status),
-                accent = HealthAccent.mind,
-                icon = Icons.Rounded.Cloud,
-                primaryAction = stringResource(R.string.connect_google_button),
-                onPrimaryAction = onRequestGoogle,
-                // "Обновить статус" here must pull fresh data, not just re-read
-                // whatever Health Connect already has cached locally. Wiring this
-                // to onSyncNow runs the same Huawei -> Health Connect -> dashboard
-                // pipeline as the manual "Sync now" card below, then reloads the
-                // dashboard from the freshly written data.
-                secondaryAction = stringResource(R.string.refresh_status),
-                onSecondaryAction = onSyncNow
-            )
-        }
-
-        item {
-            SettingsConnectionCard(
-                palette = palette,
-                title = stringResource(R.string.huawei_health_title),
-                body = stringResource(R.string.huawei_connection_body),
-                status = stringResource(R.string.refresh_status),
                 accent = HealthAccent.activity,
-                icon = Icons.Rounded.Watch,
-                primaryAction = stringResource(R.string.connect_huawei_button),
-                onPrimaryAction = onRequestHuawei,
-                secondaryAction = stringResource(R.string.refresh_status),
-                onSecondaryAction = onRefresh
+                label = stringResource(R.string.goal_steps_label),
+                valueText = "${formatNumber(dashboardState.stepsGoal)} ${stringResource(R.string.steps_unit)}",
+                onDecrease = { onStepsGoalChanged((dashboardState.stepsGoal - STEPS_GOAL_STEP).coerceAtLeast(GoalPrefs.STEPS_GOAL_RANGE.first)) },
+                onIncrease = { onStepsGoalChanged((dashboardState.stepsGoal + STEPS_GOAL_STEP).coerceAtMost(GoalPrefs.STEPS_GOAL_RANGE.last)) }
             )
-        }
-
-        item {
-            SettingsConnectionCard(
+            GoalStepperRow(
                 palette = palette,
-                title = stringResource(R.string.manual_sync_title),
-                body = stringResource(R.string.manual_sync_body),
-                status = stringResource(R.string.manual_sync_title),
-                accent = HealthAccent.sleep,
-                icon = Icons.Rounded.CloudSync,
-                primaryAction = stringResource(R.string.sync_now),
-                onPrimaryAction = onSyncNow,
-                secondaryAction = stringResource(R.string.import_archive_title),
-                onSecondaryAction = onImportArchive
+                accent = HealthAccent.mind,
+                label = stringResource(R.string.goal_distance_label),
+                valueText = stringResource(R.string.distance_today_value, formatOneDecimal(dashboardState.distanceGoalMeters / 1000.0)),
+                onDecrease = { onDistanceGoalChanged((dashboardState.distanceGoalMeters - DISTANCE_GOAL_STEP_METERS).coerceAtLeast(GoalPrefs.DISTANCE_GOAL_RANGE_METERS.start)) },
+                onIncrease = { onDistanceGoalChanged((dashboardState.distanceGoalMeters + DISTANCE_GOAL_STEP_METERS).coerceAtMost(GoalPrefs.DISTANCE_GOAL_RANGE_METERS.endInclusive)) }
+            )
+            GoalStepperRow(
+                palette = palette,
+                accent = HealthAccent.activity,
+                label = stringResource(R.string.goal_active_minutes_label),
+                valueText = "${dashboardState.activeMinutesGoal} ${stringResource(R.string.minutes_short)}",
+                onDecrease = { onActiveMinutesGoalChanged((dashboardState.activeMinutesGoal - ACTIVE_MINUTES_GOAL_STEP).coerceAtLeast(GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE.first)) },
+                onIncrease = { onActiveMinutesGoalChanged((dashboardState.activeMinutesGoal + ACTIVE_MINUTES_GOAL_STEP).coerceAtMost(GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE.last)) },
+                isLast = true
             )
         }
 
-        // ── Sprint 7: configurable activity goals ─────────────────────────
-        item {
-            Text(
-                text = stringResource(R.string.goals_section_title),
-                color = palette.text,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 18.sp,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
+        SettingsConnectionCard(
+            palette = palette,
+            title = stringResource(R.string.google_health_connect),
+            accent = HealthAccent.mind,
+            icon = Icons.Rounded.Cloud,
+            primaryAction = stringResource(R.string.connect_google_button),
+            onPrimaryAction = onRequestGoogle,
+            secondaryAction = stringResource(R.string.refresh_status),
+            onSecondaryAction = onSyncNow
+        )
 
-        item {
-            SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
-                GoalStepperRow(
-                    palette = palette,
-                    accent = HealthAccent.activity,
-                    label = stringResource(R.string.goal_steps_label),
-                    valueText = "${formatNumber(dashboardState.stepsGoal)} ${stringResource(R.string.steps_unit)}",
-                    onDecrease = { onStepsGoalChanged((dashboardState.stepsGoal - STEPS_GOAL_STEP).coerceAtLeast(GoalPrefs.STEPS_GOAL_RANGE.first)) },
-                    onIncrease = { onStepsGoalChanged((dashboardState.stepsGoal + STEPS_GOAL_STEP).coerceAtMost(GoalPrefs.STEPS_GOAL_RANGE.last)) }
-                )
-                GoalStepperRow(
-                    palette = palette,
-                    accent = HealthAccent.mind,
-                    label = stringResource(R.string.goal_distance_label),
-                    valueText = stringResource(R.string.distance_today_value, formatOneDecimal(dashboardState.distanceGoalMeters / 1000.0)),
-                    onDecrease = { onDistanceGoalChanged((dashboardState.distanceGoalMeters - DISTANCE_GOAL_STEP_METERS).coerceAtLeast(GoalPrefs.DISTANCE_GOAL_RANGE_METERS.start)) },
-                    onIncrease = { onDistanceGoalChanged((dashboardState.distanceGoalMeters + DISTANCE_GOAL_STEP_METERS).coerceAtMost(GoalPrefs.DISTANCE_GOAL_RANGE_METERS.endInclusive)) }
-                )
-                GoalStepperRow(
-                    palette = palette,
-                    accent = HealthAccent.activity,
-                    label = stringResource(R.string.goal_active_minutes_label),
-                    valueText = "${dashboardState.activeMinutesGoal} ${stringResource(R.string.minutes_short)}",
-                    onDecrease = { onActiveMinutesGoalChanged((dashboardState.activeMinutesGoal - ACTIVE_MINUTES_GOAL_STEP).coerceAtLeast(GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE.first)) },
-                    onIncrease = { onActiveMinutesGoalChanged((dashboardState.activeMinutesGoal + ACTIVE_MINUTES_GOAL_STEP).coerceAtMost(GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE.last)) }
-                )
-                GoalStepperRow(
-                    palette = palette,
-                    accent = HealthAccent.activity,
-                    label = stringResource(R.string.goal_calories_label),
-                    valueText = "${formatNumber(dashboardState.caloriesGoalKcal.toLong())} ${stringResource(R.string.kcal_unit)}",
-                    onDecrease = { onCaloriesGoalChanged((dashboardState.caloriesGoalKcal - CALORIES_GOAL_STEP).coerceAtLeast(GoalPrefs.CALORIES_GOAL_RANGE.start)) },
-                    onIncrease = { onCaloriesGoalChanged((dashboardState.caloriesGoalKcal + CALORIES_GOAL_STEP).coerceAtMost(GoalPrefs.CALORIES_GOAL_RANGE.endInclusive)) },
-                    isLast = true
-                )
-            }
-        }
+        SettingsConnectionCard(
+            palette = palette,
+            title = stringResource(R.string.huawei_health_title),
+            accent = HealthAccent.activity,
+            icon = Icons.Rounded.Watch,
+            primaryAction = stringResource(R.string.connect_huawei_button),
+            onPrimaryAction = onRequestHuawei,
+            secondaryAction = stringResource(R.string.refresh_status),
+            onSecondaryAction = onRefresh
+        )
 
-        item {
-            Text(
-                text = stringResource(R.string.widget_visibility_section_title),
-                color = palette.text,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 18.sp,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
-
-        item {
-            SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
-                Text(
-                    text = stringResource(R.string.widget_visibility_section_body),
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp
-                )
-                Spacer(Modifier.height(12.dp))
-                WidgetVisibilityRow(
-                    palette = palette,
-                    label = stringResource(R.string.widget_toggle_steps),
-                    accent = HealthAccent.activity,
-                    checked = dashboardState.isWidgetVisible(DashboardWidget.STEPS),
-                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.STEPS, it) }
-                )
-                WidgetVisibilityRow(
-                    palette = palette,
-                    label = stringResource(R.string.widget_toggle_calories),
-                    accent = HealthAccent.activity,
-                    checked = dashboardState.isWidgetVisible(DashboardWidget.CALORIES),
-                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.CALORIES, it) }
-                )
-                WidgetVisibilityRow(
-                    palette = palette,
-                    label = stringResource(R.string.widget_toggle_workout_minutes),
-                    accent = HealthAccent.activity,
-                    checked = dashboardState.isWidgetVisible(DashboardWidget.WORKOUT_MINUTES),
-                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.WORKOUT_MINUTES, it) }
-                )
-                WidgetVisibilityRow(
-                    palette = palette,
-                    label = stringResource(R.string.widget_toggle_active_hours),
-                    accent = HealthAccent.mind,
-                    checked = dashboardState.isWidgetVisible(DashboardWidget.ACTIVE_HOURS),
-                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.ACTIVE_HOURS, it) }
-                )
-                WidgetVisibilityRow(
-                    palette = palette,
-                    label = stringResource(R.string.widget_toggle_workouts),
-                    accent = HealthAccent.activity,
-                    checked = dashboardState.isWidgetVisible(DashboardWidget.WORKOUTS),
-                    onCheckedChange = { onWidgetVisibilityChanged(DashboardWidget.WORKOUTS, it) },
-                    isLast = true
-                )
-            }
-        }
+        SettingsConnectionCard(
+            palette = palette,
+            title = stringResource(R.string.manual_sync_title),
+            accent = HealthAccent.sleep,
+            icon = Icons.Rounded.CloudSync,
+            primaryAction = stringResource(R.string.sync_now),
+            onPrimaryAction = onSyncNow,
+            secondaryAction = stringResource(R.string.import_archive_title),
+            onSecondaryAction = onImportArchive
+        )
     }
 }
 
@@ -1274,6 +1228,7 @@ private fun PrimaryButton(
     text: String,
     accent: Color,
     enabled: Boolean = true,
+    compact: Boolean = false,
     modifier: Modifier = Modifier.fillMaxWidth(),
     onClick: () -> Unit
 ) {
@@ -1281,9 +1236,10 @@ private fun PrimaryButton(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White)
-    ) { Text(text, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        shape = RoundedCornerShape(if (compact) 16.dp else 22.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White),
+        contentPadding = if (compact) PaddingValues(horizontal = 12.dp, vertical = 6.dp) else ButtonDefaults.ContentPadding
+    ) { Text(text, fontWeight = FontWeight.ExtraBold, fontSize = if (compact) 12.sp else 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
 }
 
 @Composable
@@ -1637,8 +1593,6 @@ private fun formatOneDecimal(value: Double): String =
 private fun SettingsConnectionCard(
     palette: BitPalette,
     title: String,
-    body: String,
-    status: String,
     accent: Color,
     icon: ImageVector,
     primaryAction: String,
@@ -1646,71 +1600,52 @@ private fun SettingsConnectionCard(
     secondaryAction: String? = null,
     onSecondaryAction: (() -> Unit)? = null
 ) {
+    // Sprint (2026-07-08): dropped the body/status text entirely (title +
+    // icon only per request) and replaced the wrapping FlowRow with a plain
+    // Row so the two actions are always on one line, each taking half the
+    // width, instead of sometimes wrapping to a second line.
     SoftCard(palette = palette, accent = accent, hero = false, tintWithAccent = true) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(accent.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        color = palette.text,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 16.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = status,
-                        color = accent,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
-            Text(
-                text = body,
-                color = palette.secondaryText,
-                fontWeight = FontWeight.Medium,
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(accent.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
             ) {
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = title,
+                color = palette.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PrimaryButton(
+                text = primaryAction,
+                accent = accent,
+                compact = true,
+                modifier = Modifier.weight(1f),
+                onClick = onPrimaryAction
+            )
+            if (secondaryAction != null && onSecondaryAction != null) {
                 PrimaryButton(
-                    text = primaryAction,
+                    text = secondaryAction,
                     accent = accent,
-                    modifier = Modifier.wrapContentWidth(),
-                    onClick = onPrimaryAction
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = onSecondaryAction
                 )
-                if (secondaryAction != null && onSecondaryAction != null) {
-                    PrimaryButton(
-                        text = secondaryAction,
-                        accent = accent,
-                        modifier = Modifier.wrapContentWidth(),
-                        onClick = onSecondaryAction
-                    )
-                }
             }
         }
     }
