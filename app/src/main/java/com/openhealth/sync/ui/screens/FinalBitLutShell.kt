@@ -121,7 +121,6 @@ import androidx.compose.ui.geometry.Offset
 
 internal enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
-    SevenDays("tab_7days", Icons.Rounded.TrendingUp),
     Settings("tab_settings", Icons.Rounded.Settings)
 }
 
@@ -191,7 +190,6 @@ fun FinalBitLutShell(
                 )
             } else when (selected) {
                 MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, wrappedOnRequestGoogle)
-                MainTab.SevenDays -> HistoryScreen(palette, dashboardState, wrappedOnRequestGoogle, onHistoryRangeSelected)
                 MainTab.Settings -> SettingsScreen(palette, syncState, dashboardState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
                     onWidgetVisibilityChanged = onWidgetVisibilityChanged,

@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
 
         setupPeriodicSync()
         refreshUiStatusOnLaunch()
+        triggerAutomaticSyncOnLaunch()
 
         setContent {
             BitLutExpressiveTheme {
@@ -237,6 +238,30 @@ class MainActivity : ComponentActivity() {
 
         if (!granted) {
             notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    /**
+     * Sprint (2026-07-07): expedite a Huawei -> Health Connect sync
+     * automatically on every cold launch, using the exact same orchestration
+     * path as the manual "Sync now" button, so the dashboard no longer
+     * depends on the next periodic tick (or the person manually opening
+     * Google Fit / Health Connect) to show fresh data. Silent no-op if
+     * Health Connect permissions aren't granted yet -- onboarding/the lock
+     * screen is the right place to ask for that, not an unsolicited prompt
+     * on every app open.
+     */
+    private fun triggerAutomaticSyncOnLaunch() {
+        lifecycleScope.launch {
+            syncOrchestrator.triggerImmediateSync(
+                lifecycleOwner = this@MainActivity,
+                onStarted = { syncViewModel.markSyncStarted() },
+                onMissingPermissions = {
+                    AppLogger.i("MainActivity", "Skipping automatic launch sync: Health Connect permissions not granted yet")
+                },
+                onCompleted = { success -> syncViewModel.markSyncCompleted(success) },
+                onDashboardRefresh = { dashboardViewModel.refresh() }
+            )
         }
     }
 
