@@ -115,8 +115,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setupPeriodicSync()
-        refreshUiStatusOnLaunch()
-        triggerAutomaticSyncOnLaunch()
 
         setContent {
             BitLutExpressiveTheme {
@@ -157,6 +155,27 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * Sprint (2026-07-09): the 2026-07-07 cold-launch fix only ran once, in
+     * onCreate() -- which fires exactly once per Activity instance. Every
+     * later return to the app (after being backgrounded, after a permission
+     * dialog, after switching apps) used to rely on stale state until the
+     * next 30-minute periodic tick. That is exactly why data only ever
+     * looked fresh after a background/foreground cycle: by the time the
+     * person returned, the *original* cold-launch sync had usually already
+     * finished, but nothing re-read Health Connect until some other,
+     * unrelated event happened to trigger a refresh. Moving the trigger to
+     * onResume() -- which also fires once right after onCreate on a genuine
+     * cold launch, so nothing needs to stay duplicated in onCreate too --
+     * makes every single return to the app kick off a fresh sync + refresh
+     * immediately, not just the very first one.
+     */
+    override fun onResume() {
+        super.onResume()
+        refreshUiStatusOnLaunch()
+        triggerAutomaticSyncOnLaunch()
     }
 
     private fun refreshUiStatusOnLaunch() {

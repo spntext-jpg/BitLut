@@ -174,7 +174,8 @@ fun FinalBitLutShell(
                 selected = selected,
                 palette = palette,
                 onSelected = { selected = it },
-                onSecretLogViewerTriggered = { showLogViewer = true }
+                onSecretLogViewerTriggered = { showLogViewer = true },
+                onRefreshClick = onSyncNow
             )
         }
     ) { padding ->
@@ -1335,13 +1336,22 @@ private fun MinimalMetricCard(
                     fontSize = 12.sp
                 )
                 Spacer(Modifier.height(4.dp))
+                // Sprint (2026-07-09): fixed 56.sp overflowed once steps
+                // crossed 10,000 (e.g. "12 345" is wider than "9 999").
+                // Step the font size down for longer formatted values
+                // instead of letting it clip/ellipsize.
+                val valueFontSize = when {
+                    value.length > 7 -> 36.sp
+                    value.length > 5 -> 44.sp
+                    else -> 56.sp
+                }
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = value,
                         color = palette.text,
                         fontWeight = FontWeight.Black,
-                        fontSize = 56.sp,
-                        lineHeight = 56.sp,
+                        fontSize = valueFontSize,
+                        lineHeight = valueFontSize,
                         letterSpacing = (-1.5).sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

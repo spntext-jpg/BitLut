@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -54,7 +56,8 @@ internal fun Glass20BottomNavigation(
     selected: MainTab,
     palette: BitPalette,
     onSelected: (MainTab) -> Unit,
-    onSecretLogViewerTriggered: () -> Unit = {}
+    onSecretLogViewerTriggered: () -> Unit = {},
+    onRefreshClick: () -> Unit = {}
 ) {
     val shellShape = remember { RoundedCornerShape(34.dp) }
     val shellBackground = remember(palette.card, palette.systemBackground, palette.dark) {
@@ -136,21 +139,90 @@ internal fun Glass20BottomNavigation(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                MainTab.values().forEach { tab ->
-                    Glass20NavButton(
-                        tab = tab,
-                        selected = selected == tab,
-                        palette = palette,
-                        onClick = {
-                            if (tab == MainTab.Settings) {
-                                onSettingsTabTapped()
-                            }
-                            onSelected(tab)
-                        }
-                    )
-                }
+                // Sprint (2026-07-09): only 2 tabs remain (Today, Settings)
+                // since History was removed, so this is now an explicit
+                // 3-slot row -- tab, big centered refresh button, tab --
+                // instead of a generic MainTab.values() loop.
+                Glass20NavButton(
+                    tab = MainTab.Today,
+                    selected = selected == MainTab.Today,
+                    palette = palette,
+                    onClick = { onSelected(MainTab.Today) }
+                )
+                Glass20RefreshButton(onClick = onRefreshClick)
+                Glass20NavButton(
+                    tab = MainTab.Settings,
+                    selected = selected == MainTab.Settings,
+                    palette = palette,
+                    onClick = {
+                        onSettingsTabTapped()
+                        onSelected(MainTab.Settings)
+                    }
+                )
             }
         }
+    }
+}
+
+/**
+ * Warm orange, sprint 2026-07-09: distinct from every existing accent
+ * (activity/mind/sleep/heart) on purpose, so the refresh button reads as its
+ * own clearly-tappable action rather than belonging to either tab.
+ */
+private val WarmRefreshOrange = Color(0xFFFF8A34)
+
+/**
+ * Centered, larger, warm-orange manual refresh button (sprint 2026-07-09),
+ * sitting between the two tab buttons in the bottom nav. Reuses the same
+ * "sync now" action as the Settings screen's manual sync button.
+ */
+@Composable
+private fun Glass20RefreshButton(onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val shape = remember { RoundedCornerShape(30.dp) }
+    val brush = remember {
+        Brush.linearGradient(
+            listOf(WarmRefreshOrange, WarmRefreshOrange.copy(alpha = 0.84f))
+        )
+    }
+    val glowColors = remember {
+        listOf(Color.White.copy(alpha = 0.30f), Color.Transparent)
+    }
+    Box(
+        modifier = Modifier
+            .size(66.dp)
+            .shadow(
+                elevation = 16.dp,
+                shape = shape,
+                ambientColor = WarmRefreshOrange.copy(alpha = 0.40f),
+                spotColor = WarmRefreshOrange.copy(alpha = 0.55f)
+            )
+            .pressScale(interactionSource)
+            .clip(shape)
+            .background(brush)
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = glowColors,
+                        center = Offset(size.width * 0.32f, size.height * 0.14f),
+                        radius = size.maxDimension * 0.66f
+                    )
+                )
+            }
+            .border(width = 1.dp, color = Color.White.copy(alpha = 0.30f), shape = shape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Refresh,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(30.dp)
+        )
     }
 }
 
