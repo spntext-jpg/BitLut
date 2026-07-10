@@ -522,26 +522,39 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             val startOfToday = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
             val now = Instant.now()
 
-            val stepsToday = client.aggregate(
-                AggregateRequest(
-                    metrics = setOf(StepsRecord.COUNT_TOTAL),
+            // Sprint (2026-07-10): stepsToday/distanceMeters/caloriesKcal used
+            // Health Connect's aggregate() API, which is a provider-side cache
+            // that is only eventually consistent with recent writes -- it is
+            // not guaranteed to reflect a just-inserted record immediately.
+            // That is exactly why the dashboard looked stale until some
+            // *other* app (e.g. Google Fit) happened to touch Health Connect
+            // and force that cache to catch up: BitLut's own write was
+            // landing correctly the whole time, but this read was trusting a
+            // cache that hadn't caught up to it yet. readWorkoutMinutesToday()
+            // / readActiveHoursToday() never had this problem because they
+            // already read raw records and sum in-app instead of trusting the
+            // aggregate cache -- these three now follow that exact same,
+            // already-proven pattern.
+            val stepsToday = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = StepsRecord::class,
                     timeRangeFilter = TimeRangeFilter.between(startOfToday, now)
                 )
-            )[StepsRecord.COUNT_TOTAL] ?: 0L
+            ).records.sumOf { it.count }
 
-            val distanceMeters = client.aggregate(
-                AggregateRequest(
-                    metrics = setOf(DistanceRecord.DISTANCE_TOTAL),
+            val distanceMeters = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = DistanceRecord::class,
                     timeRangeFilter = TimeRangeFilter.between(startOfToday, now)
                 )
-            )[DistanceRecord.DISTANCE_TOTAL]?.inMeters ?: 0.0
+            ).records.sumOf { it.distance.inMeters }
 
-            val caloriesKcal = client.aggregate(
-                AggregateRequest(
-                    metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL),
+            val caloriesKcal = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = ActiveCaloriesBurnedRecord::class,
                     timeRangeFilter = TimeRangeFilter.between(startOfToday, now)
                 )
-            )[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories ?: 0.0
+            ).records.sumOf { it.energy.inKilocalories }
 
             GoogleDashboardSnapshot(
                 stepsToday = stepsToday,
