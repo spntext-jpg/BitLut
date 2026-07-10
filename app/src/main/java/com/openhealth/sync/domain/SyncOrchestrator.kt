@@ -9,10 +9,20 @@ import com.openhealth.sync.data.worker.BackgroundSyncScheduler
 import com.openhealth.sync.util.AppLogger
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val TAG = "SyncOrchestrator"
+
+/** Sprint (2026-07-10): a real device log showed 11+ manual/resume sync
+ *  triggers inside 60 seconds, some just 1 second apart -- each one a full
+ *  WorkManager enqueue plus a dashboard reload, which is exactly what blew
+ *  through Health Connect's own rate limit and turned every subsequent read
+ *  into a failure. Debouncing repeat triggers this close together is a
+ *  direct, targeted fix for that -- it does not affect the 30-minute
+ *  periodic worker, which is scheduled independently of this path. */
+private const val MIN_INTERVAL_BETWEEN_TRIGGERS_MS = 5_000L
 
 /** Grace periods for the lease-collision fix (sprint 2026-07-08): if this
  *  request's own sync was a no-op because a different worker already held
@@ -33,6 +43,7 @@ class SyncOrchestrator(
 ) {
     private val appContext = context.applicationContext
     private val workManager: WorkManager = WorkManager.getInstance(appContext)
+    private val lastTriggeredAtMs = AtomicLong(0L)
 
     fun schedulePeriodic() {
         BackgroundSyncScheduler.schedulePeriodic(appContext)
@@ -45,6 +56,14 @@ class SyncOrchestrator(
         onCompleted: (Boolean) -> Unit,
         onDashboardRefresh: () -> Unit
     ) {
+        val now = System.currentTimeMillis()
+        val elapsedSinceLast = now - lastTriggeredAtMs.get()
+        if (elapsedSinceLast < MIN_INTERVAL_BETWEEN_TRIGGERS_MS) {
+            AppLogger.i(TAG, "Sync trigger debounced (last one ${elapsedSinceLast}ms ago)")
+            return
+        }
+        lastTriggeredAtMs.set(now)
+
         onStarted()
 
         try {

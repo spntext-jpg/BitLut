@@ -253,20 +253,13 @@ class DashboardViewModel(
                 }
             }
 
-            // Week-over-week comparison is a separate aggregate query (not part
-            // of GoogleDashboardSnapshot), so it's fetched independently and
-            // merged in once it resolves rather than blocking the rest of the
-            // dashboard on it.
-            val comparison = try {
-                googleManager.readWeekOverWeekComparison()
-            } catch (e: Exception) {
-                AppLogger.e(TAG, "Week-over-week comparison failed: ${e.message}", e)
-                null
-            }
-            if (generation != loadGeneration) return@launch
-            if (comparison != null) {
-                _state.update { it.copy(weekComparison = comparison) }
-            }
+            // Sprint (2026-07-10): week-over-week comparison fed a card that
+            // was removed from the Today screen in an earlier sprint, but
+            // this call kept firing on every single load() anyway -- 2 more
+            // wasted Health Connect calls (current + previous week
+            // aggregates) contributing to the rate-limit cascade seen in a
+            // real device log once sync-on-resume made load() run far more
+            // often than before.
         }
     }
 

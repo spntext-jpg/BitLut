@@ -568,11 +568,21 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                 heartRateTodayBars = emptyList(),
                 stressScore = null,
                 spo2Percent = null,
-                stepsBars = readStepsBars(daysBack),
+                // Sprint (2026-07-10): stepsBars and workoutSummaries fed the
+                // History screen's bar chart and per-type workout list --
+                // unreachable UI for several sprints now (History was removed
+                // from the bottom nav entirely). readStepsBars alone was one
+                // Health Connect call PER DAY in range (7 separate calls for
+                // the default 7-day range), so this cuts ~9 wasted API calls
+                // out of every single load(). Confirmed from a real device
+                // log: those wasted calls were a direct contributor to
+                // "Rate limited request quota has been exceeded" once
+                // sync-on-resume made load() fire far more often than before.
+                stepsBars = emptyList(),
                 sleepBars = emptyList(),
                 heartRateBars = emptyList(),
                 recentWorkouts = readRecentWorkouts(5),
-                workoutSummaries = readWorkoutSummariesByType(daysBack)
+                workoutSummaries = emptyList()
             )
         } catch (e: CancellationException) {
             throw e
