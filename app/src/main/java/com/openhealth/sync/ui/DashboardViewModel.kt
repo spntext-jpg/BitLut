@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -208,6 +209,21 @@ class DashboardViewModel(
         loadJob = viewModelScope.launch {
             val hasPerms = try {
                 googleManager.hasAllPermissions()
+            } catch (e: CancellationException) {
+                // Sprint (2026-07-10): load() cancels its own previous job
+                // (loadJob?.cancel()) whenever it's called again before the
+                // prior call finished -- now a routine, frequent occurrence
+                // thanks to sync-on-resume, the refresh button, and
+                // sync-completion callbacks all calling load() in quick
+                // succession. Without this guard, that expected cancellation
+                // was being caught by the generic Exception branch below,
+                // logged as "Permission check threw" (log noise, seen on a
+                // real device log right after a routine resume), and -- worse
+                // -- forcing isLoading=false on a job that was only ever
+                // superseded, not actually failed. CancellationException must
+                // always propagate for structured concurrency to work
+                // correctly; re-throwing it here is required, not optional.
+                throw e
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Permission check threw; keeping last known dashboard state: ${e.message}", e)
                 // A transient failure here must not yank a working dashboard back
