@@ -36,6 +36,9 @@ private const val WRITE_BATCH_SIZE = 400
 /** Sprint 2026-07-08: single quick retry delay for a transient permission-
  *  check failure -- see [GoogleHealthManager.grantedPermissionsOrEmpty]. */
 private const val TRANSIENT_PERMISSION_RETRY_DELAY_MS = 400L
+/** Sprint 2026-07-10: how long a permission-check result is trusted before
+ *  a fresh one is required -- see [GoogleHealthManager.grantedPermissionsOrEmpty]. */
+private const val PERMISSION_CACHE_TTL_MS = 3_000L
 
 private val HC_PACKAGES = listOf(
     "com.google.android.apps.healthdata",
@@ -168,6 +171,23 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     private val cachedClient = AtomicReference<HealthConnectClient?>(null)
     private val clientLock = Mutex()
 
+    /**
+     * Sprint (2026-07-10): coalesce concurrent permission checks. Multiple
+     * near-simultaneous callers (dashboard load, the resume-triggered
+     * auto-sync preflight, a manual sync button's own preflight, and
+     * SyncWorker's independent preflight inside the job it enqueues) used to
+     * each hit the Health Connect provider separately. Under that load, a
+     * transient IPC hiccup became more likely to happen twice in a row
+     * (exhausting the previous single-retry safety net) -- exactly what
+     * flashed "Connect Health Connect" over data that was actually fine, and
+     * it got more frequent, not less, once sync-on-resume made these bursts
+     * happen on every return to the app and every manual sync tap. A short
+     * cache behind a mutex means a whole burst of calls within the TTL
+     * shares one real result instead of each hitting the provider.
+     */
+    private val permissionCheckMutex = Mutex()
+    private val cachedPermissions = AtomicReference<Pair<Set<String>, Long>?>(null)
+
     val healthConnectClient: HealthConnectClient?
         get() = cachedClient.get()
 
@@ -201,6 +221,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
 
     override fun invalidateClientCache() {
         val hadClient = cachedClient.getAndSet(null) != null
+        cachedPermissions.set(null)
         if (hadClient) {
             AppLogger.w(TAG, "Health Connect client cache invalidated; will recreate on next access")
         }
@@ -240,40 +261,48 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
     }
 
     private suspend fun grantedPermissionsOrEmpty(): Set<String> {
-        val client = resolveClient() ?: return emptySet()
-        return try {
-            client.permissionController.getGrantedPermissions()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: SecurityException) {
-            // A SecurityException here can mean the cached client reference is
-            // stale (e.g. Health Connect was reinstalled/updated under us).
-            // Invalidate so the next call gets a fresh client instead of
-            // repeating the same failure forever.
-            AppLogger.e(TAG, "Permission snapshot denied; invalidating client cache: ${e.message}", e)
-            invalidateClientCache()
-            emptySet()
-        } catch (e: Exception) {
-            // Sprint 2026-07-08: at cold launch, up to five near-simultaneous
-            // callers (SyncViewModel, DashboardViewModel, the launch auto-sync
-            // preflight, and SyncWorker's own preflight) can all hit this same
-            // shared client at once, right when the Health Connect provider
-            // process itself may still be warming up. A single transient IPC
-            // hiccup here must not be conflated with "permissions really are
-            // missing" -- that false negative is exactly what flashes the
-            // "Connect Google Health Connect" widget over data that is fine.
-            // One quick retry absorbs the common transient case; only a
-            // second consecutive failure is treated as a real denial.
-            AppLogger.w(TAG, "Permission snapshot failed once, retrying: ${e.message}")
-            try {
-                delay(TRANSIENT_PERMISSION_RETRY_DELAY_MS)
-                client.permissionController.getGrantedPermissions()
-            } catch (e2: CancellationException) {
-                throw e2
-            } catch (e2: Exception) {
-                AppLogger.e(TAG, "Permission snapshot failed twice; treating as denied: ${e2.message}", e2)
-                emptySet()
+        cachedPermissions.get()?.let { (granted, atMs) ->
+            if (System.currentTimeMillis() - atMs < PERMISSION_CACHE_TTL_MS) return granted
+        }
+        return permissionCheckMutex.withLock {
+            // Re-check after acquiring the lock: another caller may have just
+            // refreshed this while we were waiting our turn -- most calls in
+            // a burst will hit this and never touch the provider at all.
+            cachedPermissions.get()?.let { (granted, atMs) ->
+                if (System.currentTimeMillis() - atMs < PERMISSION_CACHE_TTL_MS) return@withLock granted
             }
+
+            val client = resolveClient() ?: return@withLock emptySet()
+            val granted = try {
+                client.permissionController.getGrantedPermissions()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SecurityException) {
+                // A SecurityException here can mean the cached client reference is
+                // stale (e.g. Health Connect was reinstalled/updated under us).
+                // Invalidate so the next call gets a fresh client instead of
+                // repeating the same failure forever.
+                AppLogger.e(TAG, "Permission snapshot denied; invalidating client cache: ${e.message}", e)
+                invalidateClientCache()
+                emptySet()
+            } catch (e: Exception) {
+                // Sprint 2026-07-08: a single transient IPC hiccup here must not
+                // be conflated with "permissions really are missing". One quick
+                // retry absorbs the common transient case; only a second
+                // consecutive failure is treated as a real denial.
+                AppLogger.w(TAG, "Permission snapshot failed once, retrying: ${e.message}")
+                try {
+                    delay(TRANSIENT_PERMISSION_RETRY_DELAY_MS)
+                    client.permissionController.getGrantedPermissions()
+                } catch (e2: CancellationException) {
+                    throw e2
+                } catch (e2: Exception) {
+                    AppLogger.e(TAG, "Permission snapshot failed twice; treating as denied: ${e2.message}", e2)
+                    emptySet()
+                }
+            }
+            cachedPermissions.set(granted to System.currentTimeMillis())
+            granted
         }
     }
 
