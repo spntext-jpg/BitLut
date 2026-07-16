@@ -101,7 +101,6 @@ import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.LocalFireDepartment
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -132,7 +131,6 @@ fun FinalBitLutShell(
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
     onImportArchive: () -> Unit = {},
-    onExportCsv: () -> Unit = {},
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit = { _, _ -> },
     onStepsGoalChanged: (Long) -> Unit = {},
     onDistanceGoalChanged: (Double) -> Unit = {},
@@ -192,7 +190,6 @@ fun FinalBitLutShell(
                 MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, wrappedOnRequestGoogle)
                 MainTab.Settings -> SettingsScreen(palette, syncState, dashboardState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
-                    onExportCsv = onExportCsv,
                     onWidgetVisibilityChanged = onWidgetVisibilityChanged,
                     onStepsGoalChanged = onStepsGoalChanged,
                     onDistanceGoalChanged = onDistanceGoalChanged,
@@ -370,76 +367,6 @@ private fun OnboardingScopeRow(palette: BitPalette, icon: ImageVector, text: Str
         Icon(icon, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
         Text(text, color = palette.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-    }
-}
-
-/**
- * Trust screen (sprint 2026-07-14): a plain-language, complete list of the
- * exact 5 Huawei Health Kit scopes BitLut requests -- not a marketing
- * summary, the actual list, matching requestedScopeNames() in
- * HuaweiHealthManager verbatim in substance (5 items, same order). Answers
- * the single most common complaint pattern seen in reviews of similar sync
- * apps: "I don't understand what's being synced where." No dismiss-and-never
- * shown-again state -- this is meant to be checked back in on, so it's
- * reachable any time from Settings rather than a one-time onboarding step.
- */
-@Composable
-private fun DataScopesScreen(palette: BitPalette, onClose: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(palette.backgroundBrush)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Icon(
-                    Icons.Rounded.Cloud,
-                    contentDescription = null,
-                    tint = HealthAccent.mind,
-                    modifier = Modifier.size(40.dp)
-                )
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    text = stringResource(R.string.data_scopes_title),
-                    color = palette.text,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 26.sp
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = stringResource(R.string.data_scopes_body),
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 15.sp,
-                    lineHeight = 21.sp
-                )
-                Spacer(Modifier.height(24.dp))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.DirectionsRun, text = stringResource(R.string.data_scopes_step))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.TrendingUp, text = stringResource(R.string.data_scopes_distance))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.Watch, text = stringResource(R.string.data_scopes_activity))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.LocalFireDepartment, text = stringResource(R.string.data_scopes_activity_record))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.Schedule, text = stringResource(R.string.data_scopes_history_week))
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.data_scopes_destination),
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp
-                )
-            }
-
-            PrimaryButton(
-                text = stringResource(R.string.data_scopes_close),
-                accent = HealthAccent.mind,
-                onClick = onClose
-            )
-        }
     }
 }
 
@@ -869,22 +796,18 @@ private fun SettingsScreen(
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
     onImportArchive: () -> Unit,
-    onExportCsv: () -> Unit,
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit,
     onStepsGoalChanged: (Long) -> Unit,
     onDistanceGoalChanged: (Double) -> Unit,
     onActiveMinutesGoalChanged: (Int) -> Unit,
     onCaloriesGoalChanged: (Double) -> Unit
 ) {
-    var showDataScopes by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-
     // Sprint (2026-07-08): Daily goals moved to the top (right under the
     // header), calories dropped from it. The three connection cards below
     // lost their explanatory body text and status line (title + icon only
     // now) and their two actions are a single compact row instead of a
     // wrapping FlowRow. The widget-visibility toggle section was removed
     // entirely -- Summary's widget set is fixed now, not user-configurable.
-    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -952,16 +875,6 @@ private fun SettingsScreen(
             onSecondaryAction = onRefresh
         )
 
-        // Sprint (2026-07-14): a calm, specific explanation instead of a
-        // silent no-op degrade. Huawei's server-side scope review can take
-        // days; without this, a new install just sees zero data flowing
-        // with no indication of why, which reads as "broken" rather than
-        // "waiting." Only shown while genuinely pending (confirmed via a
-        // real 50005 response, not guessed) and not yet authorized.
-        if (syncState.isHuaweiPendingApproval && !syncState.isHuaweiAuthorized) {
-            HuaweiPendingApprovalCard(palette = palette)
-        }
-
         SettingsConnectionCard(
             palette = palette,
             title = stringResource(R.string.manual_sync_title),
@@ -972,71 +885,6 @@ private fun SettingsScreen(
             secondaryAction = stringResource(R.string.import_archive_title),
             onSecondaryAction = onImportArchive
         )
-
-        Text(
-            text = stringResource(R.string.data_scopes_link),
-            color = palette.secondaryText,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 13.sp,
-            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .clickable { showDataScopes = true }
-        )
-
-        Text(
-            text = stringResource(R.string.export_csv_link),
-            color = palette.secondaryText,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 13.sp,
-            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-            modifier = Modifier
-                .padding(top = 2.dp, bottom = 8.dp)
-                .clickable { onExportCsv() }
-        )
-    }
-
-    if (showDataScopes) {
-        DataScopesScreen(palette = palette, onClose = { showDataScopes = false })
-    }
-    }
-}
-
-/**
- * Explains the 50005 / "scope not authorized" wait state in plain language
- * instead of leaving a new install to wonder why no Huawei data is showing
- * up. This is a review-queue wait, not a permission the person needs to
- * grant again -- re-tapping Connect won't skip the queue, so this card
- * intentionally has no primary action, only the explanation.
- */
-@Composable
-private fun HuaweiPendingApprovalCard(palette: BitPalette) {
-    SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
-        Row(verticalAlignment = Alignment.Top) {
-            Icon(
-                Icons.Rounded.Schedule,
-                contentDescription = null,
-                tint = HealthAccent.activity,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = stringResource(R.string.huawei_pending_approval_title),
-                    color = palette.text,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 15.sp
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.huawei_pending_approval_body),
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
-                )
-            }
-        }
     }
 }
 

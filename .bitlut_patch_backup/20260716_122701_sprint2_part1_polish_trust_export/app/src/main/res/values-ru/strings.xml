@@ -156,8 +156,6 @@
     <string name="summary_short_title">Сводка</string>
     <string name="google_health_connect">Google Health Connect</string>
     <string name="huawei_health_title">Huawei Health</string>
-    <string name="huawei_pending_approval_title">Ждём подтверждения от Huawei</string>
-    <string name="huawei_pending_approval_body">Это не ошибка. Huawei проверяет запрос на доступ к данным у каждого приложения, прежде чем синхронизация сможет заработать — это может занять несколько дней. BitLut заработает автоматически, как только заявка будет одобрена, делать ничего не нужно.</string>
     <string name="manual_sync_title">Ручная синхронизация</string>
     <string name="import_archive_title">Импорт архива</string>
     <string name="import_archive_selected">Архив Huawei Health выбран</string>
@@ -203,16 +201,5 @@
     <string name="onboarding_scope_distance">Дистанция и этажи</string>
     <string name="onboarding_scope_workouts">Тренировки и активные калории</string>
     <string name="onboarding_privacy_note">BitLut никогда не читает и не передаёт данные о сне, пульсе или другие показатели здоровья. Из Huawei Health в Google Health Connect передаются только данные активности, и они остаются на вашем устройстве.</string>
-    <string name="data_scopes_link">Что именно передаётся?</string>
-    <string name="data_scopes_title">Что и куда уходит</string>
-    <string name="data_scopes_body">BitLut запрашивает у Huawei Health Kit ровно 5 разрешений. Больше ничего не запрашивается, не читается и не хранится.</string>
-    <string name="data_scopes_step">Количество шагов за день</string>
-    <string name="data_scopes_distance">Пройденное или пробежанное расстояние</string>
-    <string name="data_scopes_activity">Тип и время тренировки (бег, велосипед и т.д.)</string>
-    <string name="data_scopes_activity_record">Детали тренировки в реальном времени — длительность, активные калории</string>
-    <string name="data_scopes_history_week">Последние 7 дней истории — нужно для первой синхронизации</string>
-    <string name="data_scopes_destination">Всё это уходит в одно место: Google Health Connect на этом же устройстве. Нет сервера BitLut, нет аккаунта BitLut, нет рекламы, никуда больше ничего не отправляется.</string>
-    <string name="data_scopes_close">Понятно</string>
-    <string name="export_csv_link">Экспортировать мои данные в CSV</string>
     <string name="onboarding_continue_button">Продолжить</string>
 </resources>

@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.health.connect.client.PermissionController
@@ -115,21 +114,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Sprint (2026-07-14): targetSdk 35 already forces edge-to-edge on
-        // real Android 15+ devices with or without this call (that's the
-        // whole point of the platform enforcement) -- what enableEdgeToEdge()
-        // actually buys us is (a) the same look on Android 8-14 devices,
-        // which would otherwise render with old-style opaque system bars,
-        // and (b) correct light/dark status- and navigation-bar icon
-        // contrast that auto-follows system dark mode, matching how
-        // isDark is computed in FinalBitLutShell (isSystemInDarkTheme()) --
-        // no manual SystemBarStyle wiring needed since both use the same
-        // system signal. The root Scaffold in FinalBitLutShell already
-        // applies M3's default contentWindowInsets, and the bottom nav bar
-        // already calls navigationBarsPadding() itself, so no other insets
-        // work was needed for this.
-        enableEdgeToEdge()
-
         setupPeriodicSync()
 
         setContent {
@@ -152,7 +136,6 @@ class MainActivity : ComponentActivity() {
                     onRequestHuawei = { startHuaweiAuthorization() },
                     onSyncNow = { triggerImmediateSync() },
                     onImportArchive = { openHuaweiArchiveImport() },
-                    onExportCsv = { exportCsv() },
                     onWidgetVisibilityChanged = { widget, visible ->
                         dashboardViewModel.setWidgetVisible(widget, visible)
                     },
@@ -243,34 +226,6 @@ class MainActivity : ComponentActivity() {
         } catch (t: Throwable) {
             AppLogger.e("MainActivity", "Archive picker failed: ${t.message}", t)
             Toast.makeText(this, getString(R.string.status_error), Toast.LENGTH_LONG).show()
-        }
-    }
-
-    /**
-     * Sprint (2026-07-14): exports exactly what BitLut already reads for its
-     * own dashboard (daily steps/distance/calories + recent workouts) as a
-     * CSV via the system share sheet. Read work happens off the main thread
-     * in lifecycleScope, same as every other Health Connect read in this
-     * class; CsvExporter.writeAndShare does its own file I/O synchronously
-     * but is only ever called here, already off the main thread.
-     */
-    private fun exportCsv() {
-        lifecycleScope.launch {
-            val app = application as SyncApplication
-            // readDailyTotals()/readRecentWorkouts() are plain GoogleHealthManager
-            // functions, not part of the HealthConnectManager interface that
-            // AppContainer.googleHealthManager is declared as (same reason
-            // SyncWorker only ever calls the interface's readDashboardSnapshot()).
-            // AppContainer always constructs a real GoogleHealthManager, so this
-            // cast is safe in practice; the null-check is defensive only.
-            val googleManager = app.container.googleHealthManager as? com.openhealth.sync.data.GoogleHealthManager
-            if (googleManager == null) {
-                Toast.makeText(this@MainActivity, getString(R.string.status_error), Toast.LENGTH_LONG).show()
-                return@launch
-            }
-            val dailyTotals = googleManager.readDailyTotals(30)
-            val workouts = googleManager.readRecentWorkouts(100)
-            com.openhealth.sync.util.CsvExporter.writeAndShare(this@MainActivity, dailyTotals, workouts)
         }
     }
 

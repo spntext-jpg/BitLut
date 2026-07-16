@@ -156,8 +156,6 @@
     <string name="summary_short_title">Summary</string>
     <string name="google_health_connect">Google Health Connect</string>
     <string name="huawei_health_title">Huawei Health</string>
-    <string name="huawei_pending_approval_title">Waiting for Huawei\'s approval</string>
-    <string name="huawei_pending_approval_body">This isn\'t a bug. Huawei reviews every app\'s data access request before it can start syncing — this can take a few days. BitLut will start working automatically the moment it\'s approved, with nothing for you to do in the meantime.</string>
     <string name="manual_sync_title">Manual sync</string>
     <string name="import_archive_title">Import archive</string>
     <string name="import_archive_selected">Huawei Health archive selected</string>
@@ -202,17 +200,6 @@
     <string name="onboarding_scope_distance">Distance and floors climbed</string>
     <string name="onboarding_scope_workouts">Workouts and active calories</string>
     <string name="onboarding_privacy_note">BitLut never reads or shares sleep, heart rate, or any other health data. Only activity metrics move from Huawei Health into Google Health Connect, and stay on your device.</string>
-    <string name="data_scopes_link">What data is shared?</string>
-    <string name="data_scopes_title">What moves, and where</string>
-    <string name="data_scopes_body">BitLut asks Huawei Health Kit for exactly 5 permissions. Nothing more is requested, read, or stored.</string>
-    <string name="data_scopes_step">Daily step count</string>
-    <string name="data_scopes_distance">Distance walked or run</string>
-    <string name="data_scopes_activity">Workout type and time (e.g. running, cycling)</string>
-    <string name="data_scopes_activity_record">Live workout details — duration, active calories</string>
-    <string name="data_scopes_history_week">The last 7 days of history, to back-fill on first sync</string>
-    <string name="data_scopes_destination">All of it goes to one place: Google Health Connect, on this device. No BitLut server, no BitLut account, no ads, nothing sent anywhere else.</string>
-    <string name="data_scopes_close">Got it</string>
-    <string name="export_csv_link">Export my data as CSV</string>
     <string name="onboarding_continue_button">Continue</string>
     <string name="insights_streak_days_ru_one">%1$d день подряд</string>
     <string name="insights_streak_days_ru_few">%1$d дня подряд</string>

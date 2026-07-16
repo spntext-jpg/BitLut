@@ -65,17 +65,6 @@ data class ActivitySessionData(
     val exerciseType: Int = ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
 )
 
-/** One row of the CSV export (sprint 2026-07-14): a single calendar day's
- *  activity totals, read the same raw-records-and-sum way as "today" on the
- *  dashboard (see the comment on readDashboardSnapshot for why -- aggregate()
- *  is not used here either, for the same staleness reason). */
-data class DailyTotal(
-    val date: LocalDate,
-    val steps: Long,
-    val distanceMeters: Double,
-    val caloriesKcal: Double
-)
-
 data class GoogleDashboardSnapshot(
     val stepsToday: Long,
     val distanceMeters: Double,
@@ -665,53 +654,6 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             AppLogger.e(TAG, "readRecentWorkouts failed: ${e.message}", e)
             emptyList()
         }
-    }
-
-    /**
-     * Feeds the CSV export (sprint 2026-07-14). One row per calendar day,
-     * oldest first, for the last [daysBack] days including today. Reads
-     * plain per-day records and sums in-app -- exactly the readDashboardSnapshot
-     * pattern, not aggregate() -- so an export taken right after a sync
-     * shows the same numbers as the dashboard, not a stale cached total.
-     *
-     * Sequential (not parallel) by design: this only runs on an explicit,
-     * infrequent user tap, so the ~3x daysBack Health Connect calls it makes
-     * are not a rate-limit concern the way a call inside load() would be
-     * (see CLAUDE.md Gotcha 4) -- correctness and simplicity here matter
-     * more than shaving a second off a manual export.
-     */
-    suspend fun readDailyTotals(daysBack: Int = 30): List<DailyTotal> {
-        val client = resolveClient() ?: return emptyList()
-        val today = LocalDate.now()
-        val zone = ZoneId.systemDefault()
-        val out = ArrayList<DailyTotal>(daysBack)
-
-        for (offset in (daysBack - 1) downTo 0) {
-            val day = today.minusDays(offset.toLong())
-            val dayStart = day.atStartOfDay(zone).toInstant()
-            val dayEnd = day.plusDays(1).atStartOfDay(zone).toInstant()
-            val range = TimeRangeFilter.between(dayStart, dayEnd)
-
-            try {
-                val steps = client.readRecords(
-                    ReadRecordsRequest(recordType = StepsRecord::class, timeRangeFilter = range)
-                ).records.sumOf { it.count }
-                val distance = client.readRecords(
-                    ReadRecordsRequest(recordType = DistanceRecord::class, timeRangeFilter = range)
-                ).records.sumOf { it.distance.inMeters }
-                val calories = client.readRecords(
-                    ReadRecordsRequest(recordType = ActiveCaloriesBurnedRecord::class, timeRangeFilter = range)
-                ).records.sumOf { it.energy.inKilocalories }
-                out.add(DailyTotal(day, steps, distance, calories))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                AppLogger.e(TAG, "readDailyTotals failed for $day: ${e.message}", e)
-                out.add(DailyTotal(day, 0L, 0.0, 0.0))
-            }
-        }
-
-        return out
     }
 
     suspend fun readWorkoutMinutesToday(): Long {
