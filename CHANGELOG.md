@@ -1,5 +1,76 @@
 # Changelog
 
+## 2026-07-14 -- full removal sprint: sleep/HR/SpO2/stress + History deleted outright
+
+Follow-up to the 2026-07-10 series. That sprint removed History from the
+bottom nav and stubbed sleep/heart-rate/SpO2/stress fields to empty/null,
+but deliberately left the underlying code in place, dormant, as minimal-diff
+precedent. This sprint changes that precedent for code proven to be
+permanently dead (see CLAUDE.md Gotcha 8) and deletes it outright instead.
+
+**Sleep / heart-rate / SpO2 / stress -- removed in full**
+- `GoogleDashboardSnapshot`, `DashboardUiState`, and `DashboardSnapshotCache`
+  no longer carry `sleepHours`, `sleepQualityScore`, `heartRateBpm`,
+  `heartRateTodayBars`, `stressScore`, `spo2Percent`, `sleepBars`, or
+  `heartRateBars` fields at all -- previously these existed and were just
+  hardcoded to `0.0`/`null`/`emptyList()`.
+- `HealthAccent.heart` deleted outright (confirmed zero real UI usage --
+  only ever referenced by the also-deleted `BitPalette.heart` mapping).
+  `HealthAccent.sleep` renamed to `HealthAccent.violet`: it *was* live UI
+  (the Manual Sync card's accent color in Settings), just never actually
+  representing sleep data, so the color stays and only the misleading name
+  goes. `BitPalette.sleep`/`BitPalette.heart` fields deleted (confirmed
+  zero reads anywhere, only ever assigned).
+- Corrected a stale doc comment above `HealthAccent` describing a "Sleep
+  progress ring on Summary" that had not existed in the UI for several
+  sprints, and two similarly stale comments in `MinimalSquareTile`/
+  `ProgressRingChip` referencing a "Heart/Sleep" 2x2 grid and "Sleep vs the
+  8h reference" that describe a design that was never actually shipped.
+- Removed 8 dead sleep/heart-rate-named string resources (`bpm`,
+  `bpm_unit`, `avg_bpm_7d`, plus 5 History-only strings listed below) from
+  both `values/strings.xml` and `values-ru/strings.xml`, confirmed unused
+  via a full `R.string.<name>` grep first.
+
+**History -- removed in full, not left dormant**
+- Deleted `HistoryScreen`, `HistoryRangeChips`, and `WorkoutTypeCard`
+  composables from `FinalBitLutShell.kt` (confirmed unreachable from the
+  `MainTab` enum / nav dispatch -- History was already removed from the
+  bottom nav in the 2026-07-10 sprint, this just finishes the job).
+- Deleted the bar-chart infrastructure that existed solely to feed
+  History's chart, once confirmed to have zero other callers: `MetricBar`
+  data type, `computeMetricBarRanges`/`bucketsOfEqualSize`/
+  `calendarMonthBuckets`, `readStepsBars()`, `readWorkoutSummariesByType()`,
+  `MiniSparkline`, `formatBarValueShort()`, `barDateLabel()`. Deleted the
+  entire `ui/components/MetricCharts.kt` file (existed only for the now-gone
+  `MetricBarChartCard`) and the standalone `MetricBarReflectionTest.kt`
+  scratch file (only exercised the now-gone `MetricBar` type).
+- Removed the `stepsBars`/`workoutSummaries` fields from
+  `GoogleDashboardSnapshot`/`DashboardUiState` and their
+  `DashboardSnapshotCache` JSON (de)serialization -- these existed only to
+  feed the deleted History chart and per-type workout list.
+- Removed `HISTORY_RANGE_OPTIONS`, `DashboardViewModel.onHistoryRangeSelected()`,
+  `DashboardUiState.selectedHistoryRangeDays`, and the
+  `onHistoryRangeSelected` parameter/wiring through `FinalBitLutShell` and
+  `MainActivity`.
+- `HealthConnectManager.readDashboardSnapshot()` lost its `daysBack`
+  parameter (in the interface, the `GoogleHealthManager` implementation,
+  and the `SyncWorker` call site that had hardcoded it to `7` anyway) --
+  it was only ever there to plumb History's range-chip selection through,
+  and had been fully unused inside the function body since the 2026-07-10
+  trim.
+- Removed 6 dead History-named string resources (`tab_history`,
+  `history_title`, `history_subtitle`, `history_short_title`, `tab_7days`,
+  `history_title_final`) plus 3 more that were dead *and* referenced the
+  removed screen in their text (`permissions_body`, `onboarding_step5`,
+  `connect_google_history_body`) from both locale files, and reworded
+  `widget_visibility_section_body` to drop its now-inaccurate "...and in
+  history" clause.
+- Updated `CLAUDE.md` to match: Gotcha 8's "deliberately unused, don't
+  clean up reflexively" list no longer includes anything from History
+  (only `DashboardWidgetGrid`/`WeeklyComparisonCard`/
+  `readWeekOverWeekComparison` remain dormant by that precedent -- unrelated
+  to today's change, still awaiting a possible future UI return).
+
 ## 2026-07-10 -- sync reliability + UI simplification sprint series
 
 Six days, one continuous thread: get the log-viewer build green, get the

@@ -136,9 +136,6 @@ class MainActivity : ComponentActivity() {
                     onRequestHuawei = { startHuaweiAuthorization() },
                     onSyncNow = { triggerImmediateSync() },
                     onImportArchive = { openHuaweiArchiveImport() },
-                    onHistoryRangeSelected = { days ->
-                        dashboardViewModel.onHistoryRangeSelected(days)
-                    },
                     onWidgetVisibilityChanged = { widget, visible ->
                         dashboardViewModel.setWidgetVisible(widget, visible)
                     },

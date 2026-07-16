@@ -65,84 +65,14 @@ data class ActivitySessionData(
     val exerciseType: Int = ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
 )
 
-data class WorkoutTypeSummary(
-    val exerciseType: Int,
-    val displayName: String,
-    val sessionCount: Int,
-    val totalDurationMinutes: Long
-)
-
 data class GoogleDashboardSnapshot(
     val stepsToday: Long,
     val distanceMeters: Double,
     val caloriesKcal: Double,
     val workoutMinutesToday: Long,
     val activeHoursToday: Int,
-    val sleepHours: Double,
-    val sleepQualityScore: Int?,
-    val heartRateBpm: Long?,
-    val heartRateTodayBars: List<MetricBar>,
-    val stressScore: Int?,
-    val spo2Percent: Double?,
-    val stepsBars: List<MetricBar>,
-    val sleepBars: List<MetricBar>,
-    val heartRateBars: List<MetricBar>,
-    val recentWorkouts: List<ActivitySessionData>,
-    val workoutSummaries: List<WorkoutTypeSummary>
+    val recentWorkouts: List<ActivitySessionData>
 )
-
-data class MetricBar(
-    val startDate: LocalDate,
-    val endDate: LocalDate,
-    val value: Double
-)
-
-fun computeMetricBarRanges(daysBack: Int, today: LocalDate = LocalDate.now()): List<Pair<LocalDate, LocalDate>> {
-    return when (daysBack) {
-        7 -> (0 until 7).map { index ->
-            val day = today.minusDays((6 - index).toLong())
-            day to day
-        }
-        14 -> (0 until 7).map { index ->
-            val start = today.minusDays((13 - index * 2).toLong())
-            start to start.plusDays(1)
-        }
-        30 -> bucketsOfEqualSize(daysBack, bucketCount = 5, today = today)
-        60 -> bucketsOfEqualSize(daysBack, bucketCount = 8, today = today)
-        90 -> bucketsOfEqualSize(daysBack, bucketCount = 13, today = today)
-        180 -> calendarMonthBuckets(monthCount = 6, today = today)
-        365 -> calendarMonthBuckets(monthCount = 12, today = today)
-        else -> bucketsOfEqualSize(daysBack, bucketCount = (daysBack / 7).coerceIn(1, 13), today = today)
-    }
-}
-
-private fun bucketsOfEqualSize(totalDays: Int, bucketCount: Int, today: LocalDate): List<Pair<LocalDate, LocalDate>> {
-    val safeDays = totalDays.coerceAtLeast(1)
-    val safeBuckets = bucketCount.coerceAtLeast(1)
-    val startDate = today.minusDays((safeDays - 1).toLong())
-    val baseSize = safeDays / safeBuckets
-    val remainder = safeDays % safeBuckets
-    val ranges = mutableListOf<Pair<LocalDate, LocalDate>>()
-    var cursor = startDate
-
-    for (index in 0 until safeBuckets) {
-        val size = (baseSize + if (index < remainder) 1 else 0).coerceAtLeast(1)
-        val end = cursor.plusDays((size - 1).toLong())
-        ranges.add(cursor to minOf(end, today))
-        cursor = end.plusDays(1)
-        if (cursor > today) break
-    }
-
-    return ranges
-}
-
-private fun calendarMonthBuckets(monthCount: Int, today: LocalDate): List<Pair<LocalDate, LocalDate>> {
-    return (0 until monthCount).map { index ->
-        val monthStart = today.withDayOfMonth(1).minusMonths((monthCount - 1 - index).toLong())
-        val monthEnd = monthStart.plusMonths(1).minusDays(1)
-        monthStart to minOf(monthEnd, today)
-    }
-}
 
 class GoogleHealthManager(private val context: Context) : HealthConnectManager {
 
@@ -516,7 +446,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
         }
     }
 
-    override suspend fun readDashboardSnapshot(daysBack: Int): GoogleDashboardSnapshot? {
+    override suspend fun readDashboardSnapshot(): GoogleDashboardSnapshot? {
         val client = resolveClient() ?: return null
         return try {
             val startOfToday = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
@@ -556,33 +486,21 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                 )
             ).records.sumOf { it.energy.inKilocalories }
 
+            // Sprint (2026-07-14): sleep/heart-rate/SpO2/stress and the
+            // History-only stepsBars/workoutSummaries fields were removed
+            // from GoogleDashboardSnapshot entirely (not just hardcoded to
+            // empty/null) -- Huawei's individual-developer tier can't supply
+            // the former, and History itself was removed from the bottom nav
+            // in an earlier sprint, so both were dead weight kept only for
+            // source compatibility. See CLAUDE.md for the platform-tier
+            // rationale on sleep/HR/SpO2/stress specifically.
             GoogleDashboardSnapshot(
                 stepsToday = stepsToday,
                 distanceMeters = distanceMeters,
                 caloriesKcal = caloriesKcal,
                 workoutMinutesToday = readWorkoutMinutesToday(),
                 activeHoursToday = readActiveHoursToday(),
-                sleepHours = 0.0,
-                sleepQualityScore = null,
-                heartRateBpm = null,
-                heartRateTodayBars = emptyList(),
-                stressScore = null,
-                spo2Percent = null,
-                // Sprint (2026-07-10): stepsBars and workoutSummaries fed the
-                // History screen's bar chart and per-type workout list --
-                // unreachable UI for several sprints now (History was removed
-                // from the bottom nav entirely). readStepsBars alone was one
-                // Health Connect call PER DAY in range (7 separate calls for
-                // the default 7-day range), so this cuts ~9 wasted API calls
-                // out of every single load(). Confirmed from a real device
-                // log: those wasted calls were a direct contributor to
-                // "Rate limited request quota has been exceeded" once
-                // sync-on-resume made load() fire far more often than before.
-                stepsBars = emptyList(),
-                sleepBars = emptyList(),
-                heartRateBars = emptyList(),
-                recentWorkouts = readRecentWorkouts(5),
-                workoutSummaries = emptyList()
+                recentWorkouts = readRecentWorkouts(5)
             )
         } catch (e: CancellationException) {
             throw e
@@ -603,7 +521,7 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
      * comparing complete weeks); "previous week" is the 7 days before that.
      * This intentionally does not require any new Huawei scope or Health
      * Connect permission -- it's a different aggregation of data BitLut
-     * already reads for the dashboard and history screens.
+     * already reads for the dashboard screen.
      */
     override suspend fun readWeekOverWeekComparison(): WeekComparison? {
         val client = resolveClient() ?: return null
@@ -674,30 +592,6 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
         }
     }
 
-    suspend fun readStepsBars(daysBack: Int): List<MetricBar> {
-        val client = resolveClient() ?: return emptyList()
-        val ranges = computeMetricBarRanges(daysBack)
-        return ranges.map { (start, end) ->
-            val rangeStart = start.atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val rangeEnd = end.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val steps = try {
-                val response = client.aggregate(
-                    AggregateRequest(
-                        metrics = setOf(StepsRecord.COUNT_TOTAL),
-                        timeRangeFilter = TimeRangeFilter.between(rangeStart, rangeEnd)
-                    )
-                )
-                response[StepsRecord.COUNT_TOTAL] ?: 0L
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                AppLogger.e(TAG, "readStepsBars failed for $start..$end: ${e.message}", e)
-                0L
-            }
-            MetricBar(start, end, steps.toDouble())
-        }
-    }
-
     suspend fun readDistanceToday(): Double {
         val client = resolveClient() ?: return 0.0
         return try {
@@ -758,50 +652,6 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "readRecentWorkouts failed: ${e.message}", e)
-            emptyList()
-        }
-    }
-
-    suspend fun readWorkoutSummariesByType(daysBack: Int): List<WorkoutTypeSummary> {
-        val client = resolveClient() ?: return emptyList()
-        return try {
-            val start = LocalDate.now().minusDays(daysBack.toLong().coerceAtLeast(1L) - 1L)
-                .atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val end = Instant.now()
-
-            val allRecords = mutableListOf<ExerciseSessionRecord>()
-            var pageToken: String? = null
-
-            do {
-                val response = client.readRecords(
-                    ReadRecordsRequest(
-                        recordType = ExerciseSessionRecord::class,
-                        timeRangeFilter = TimeRangeFilter.between(start, end),
-                        pageToken = pageToken
-                    )
-                )
-                allRecords.addAll(response.records)
-                pageToken = response.pageToken
-            } while (pageToken != null)
-
-            allRecords
-                .groupBy { it.exerciseType }
-                .map { (type, sessions) ->
-                    val totalMinutes = sessions.sumOf { session ->
-                        java.time.Duration.between(session.startTime, session.endTime).toMinutes().coerceAtLeast(0L)
-                    }
-                    WorkoutTypeSummary(
-                        exerciseType = type,
-                        displayName = exerciseTypeName(type),
-                        sessionCount = sessions.size,
-                        totalDurationMinutes = totalMinutes
-                    )
-                }
-                .sortedByDescending { it.totalDurationMinutes }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "readWorkoutSummariesByType failed: ${e.message}", e)
             emptyList()
         }
     }

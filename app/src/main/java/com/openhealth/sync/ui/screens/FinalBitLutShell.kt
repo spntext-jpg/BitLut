@@ -70,8 +70,6 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.data.ActivitySessionData
-import com.openhealth.sync.data.WorkoutTypeSummary
-import com.openhealth.sync.data.MetricBar
 import com.openhealth.sync.data.PersonalRecord
 import com.openhealth.sync.data.StreakState
 import com.openhealth.sync.data.WeekComparison
@@ -80,7 +78,6 @@ import com.openhealth.sync.config.GoalPrefs
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardUiState
 import com.openhealth.sync.ui.DashboardViewModel
-import com.openhealth.sync.ui.HISTORY_RANGE_OPTIONS
 import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
@@ -119,7 +116,6 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.geometry.Offset
 
 internal enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
@@ -135,7 +131,6 @@ fun FinalBitLutShell(
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
     onImportArchive: () -> Unit = {},
-    onHistoryRangeSelected: (Int) -> Unit = {},
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit = { _, _ -> },
     onStepsGoalChanged: (Long) -> Unit = {},
     onDistanceGoalChanged: (Double) -> Unit = {},
@@ -157,8 +152,8 @@ fun FinalBitLutShell(
     // permission request, show a plain-language rationale screen instead --
     // the system's own permission dialog is terse ("Allow BitLut to access
     // Steps?") and gives no context for why. This wraps every onRequestGoogle
-    // call site (Summary lock screen, History lock screen, Settings) without
-    // changing any of them individually.
+    // call site (Summary lock screen, Settings) without changing any of
+    // them individually.
     val wrappedOnRequestGoogle: () -> Unit = {
         if (!hasSeenPermissionsOnboarding) {
             showPermissionsOnboarding = true
@@ -453,176 +448,6 @@ private fun SummaryScreen(
     }
 }
 
-@Composable
-private fun HistoryScreen(
-    palette: BitPalette,
-    state: DashboardUiState,
-    onRequestGoogle: () -> Unit,
-    onRangeSelected: (Int) -> Unit
-) {
-    androidx.compose.foundation.lazy.LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        item {
-            MinimalHeader(
-                palette = palette,
-                title = stringResource(R.string.history_short_title)
-            )
-        }
-
-        if (!state.showConnectLockScreen && state.hasPermissions) {
-            item {
-                HistoryRangeChips(
-                    palette = palette,
-                    selectedDays = state.selectedHistoryRangeDays,
-                    onRangeSelected = onRangeSelected
-                )
-            }
-        }
-
-        if (state.showConnectLockScreen) {
-            item {
-                MinimalMetricCard(
-                    palette = palette,
-                    title = stringResource(R.string.connect_google_title),
-                    value = stringResource(R.string.no_data_short),
-                    unit = stringResource(R.string.connect_google_button),
-                    accent = HealthAccent.mind,
-                    icon = Icons.Rounded.Cloud,
-                    onClick = onRequestGoogle
-                )
-            }
-        } else if (state.isLoading && state.stepsBars.isEmpty()) {
-            item { DashboardLoadingCard(palette = palette) }
-        } else {
-            val rangeDays = state.selectedHistoryRangeDays
-            val stepsTotal = state.stepsBars.sumOf { it.value }
-
-            if (state.isWidgetVisible(DashboardWidget.STEPS)) {
-                item {
-                    MetricBarChartCard(
-                        palette = palette,
-                        title = stringResource(R.string.steps_label_days, rangeDays),
-                        periodValueLabel = stringResource(R.string.period_total_steps, formatNumber(stepsTotal.toLong())),
-                        bars = state.stepsBars,
-                        accent = HealthAccent.activity,
-                        valueFormatter = { formatNumber(it.toLong()) }
-                    )
-                }
-            }
-
-            if (state.isWidgetVisible(DashboardWidget.WORKOUTS) && state.workoutSummaries.isNotEmpty()) {
-                item {
-                    Text(
-                        text = stringResource(R.string.workouts_section_title),
-                        color = palette.text,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-                items(state.workoutSummaries) { summary ->
-                    WorkoutTypeCard(palette = palette, summary = summary)
-                }
-            }
-        }
-    }
-}
-
-/**
- * Scrollable row of range chips (7/14/30/60/90/180/365 days) for the History screen,
- * placed on its own row below the screen title rather than sharing the title's row —
- * this avoids the kind of overflow/wrap risk that the Settings buttons had before
- * they were switched to FlowRow (a 7-chip row needs its own horizontal space, and
- * fighting the title for space on one line would risk the title getting clipped on
- * narrower screens or longer locale strings).
- */
-@Composable
-private fun HistoryRangeChips(
-    palette: BitPalette,
-    selectedDays: Int,
-    onRangeSelected: (Int) -> Unit
-) {
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.End)
-    ) {
-        items(HISTORY_RANGE_OPTIONS) { days ->
-            val selected = days == selectedDays
-            val interactionSource = remember { MutableInteractionSource() }
-            Box(
-                modifier = Modifier
-                    .pressScale(interactionSource)
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(if (selected) HealthAccent.activity else palette.card)
-                    .border(1.dp, if (selected) Color.Transparent else palette.stroke, RoundedCornerShape(99.dp))
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = null
-                    ) { onRangeSelected(days) }
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(R.string.history_range_days_short, days),
-                    color = if (selected) Color.White else palette.secondaryText,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 13.sp,
-                    maxLines = 1
-                )
-            }
-        }
-    }
-}
-
-/**
- * Workout-type card for History: shown once per exercise type that has at least one
- * session in the currently selected range (no card for types with zero sessions).
- * Shows the localized exercise name (already handled by exerciseTypeName in
- * GoogleHealthManager — e.g. "Бег" for running), session count, and total duration.
- */
-@Composable
-private fun WorkoutTypeCard(
-    palette: BitPalette,
-    summary: WorkoutTypeSummary
-) {
-    SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = summary.displayName,
-                    color = palette.text,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 16.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = stringResource(R.string.workout_sessions_count, summary.sessionCount),
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp
-                )
-            }
-            Text(
-                text = stringResource(R.string.workout_total_minutes, summary.totalDurationMinutes),
-                color = HealthAccent.activity,
-                fontWeight = FontWeight.Black,
-                fontSize = 15.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
 /**
  * Last imported workout (sprint 2026-07-08). state.recentWorkouts is already
  * sorted most-recent-first by GoogleHealthManager.readRecentWorkouts, so the
@@ -722,30 +547,6 @@ private fun MiniMetricWidget(
             Text(value, color = palette.text, fontWeight = FontWeight.Black, fontSize = 24.sp, maxLines = 1)
             Spacer(Modifier.width(4.dp))
             Text(unit, color = accent, fontWeight = FontWeight.Black, fontSize = 12.sp, modifier = Modifier.padding(bottom = 3.dp))
-        }
-    }
-}
-
-@Composable
-private fun MiniSparkline(
-    bars: List<MetricBar>,
-    accent: Color,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier) {
-        val values = bars.map { it.value }.filter { it > 0.0 }
-        if (values.size < 2) return@Canvas
-        val min = values.minOrNull() ?: 0.0
-        val max = values.maxOrNull() ?: 1.0
-        val range = (max - min).takeIf { it > 0.0 } ?: 1.0
-        val step = size.width / (values.size - 1).coerceAtLeast(1)
-        var last: Offset? = null
-        values.forEachIndexed { index, value ->
-            val x = step * index
-            val y = size.height - (((value - min) / range).toFloat() * size.height)
-            val point = Offset(x, y.coerceIn(0f, size.height))
-            last?.let { drawLine(accent, it, point, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round) }
-            last = point
         }
     }
 }
@@ -1077,7 +878,7 @@ private fun SettingsScreen(
         SettingsConnectionCard(
             palette = palette,
             title = stringResource(R.string.manual_sync_title),
-            accent = HealthAccent.sleep,
+            accent = HealthAccent.violet,
             icon = Icons.Rounded.CloudSync,
             primaryAction = stringResource(R.string.sync_now),
             onPrimaryAction = onSyncNow,
@@ -1185,16 +986,15 @@ private fun GoalStepperButton(palette: BitPalette, accent: Color, symbol: String
 }
 
 /**
- * Generic reference target for the Sleep progress ring on Summary, in hours.
- * Unlike [DashboardUiState.stepsGoal], this is NOT a personalized or
- * user-configurable value — it's the commonly cited adult sleep guideline,
- * used only to give the ring a sense of "how close to a typical night" the
- * person is. If/when per-user sleep goals are added, replace this constant.
+ * Shared accent-color palette used across cards and icons throughout the app.
+ * These are purely visual accents (not tied to any specific health metric) --
+ * [violet] in particular is just the app's fourth decorative accent color
+ * (currently used for the Manual Sync card in Settings), not an indicator of
+ * any sleep-related feature or data.
  */
 internal object HealthAccent {
     val activity = Color(0xFFFF6B5A)
-    val sleep = Color(0xFF9E6FC3)
-    val heart = Color(0xFFFF453A)
+    val violet = Color(0xFF9E6FC3)
     val mind = Color(0xFF5FE0C6)
     val cardLight = Color.White
     val cardDark = Color(0xCC1C1C1E)
@@ -1426,10 +1226,11 @@ private fun DashboardLoadingCard(palette: BitPalette) {
 }
 
 /**
- * Square tile for the 2x2 Summary grid (Heart/Sleep sit side by side under the
- * full-width Steps hero card). Follows the "traffic light" rule: exactly three
- * elements on the tile — a filled icon chip, one large value, one small label.
- * No secondary text, no extra rows — the number does the talking.
+ * Square tile for the 2x2 Summary grid (calories/workout-minutes/active-hours
+ * sit side by side under the full-width Steps hero card). Follows the
+ * "traffic light" rule: exactly three elements on the tile — a filled icon
+ * chip, one large value, one small label. No secondary text, no extra rows —
+ * the number does the talking.
  */
 @Composable
 private fun MinimalSquareTile(
@@ -1497,7 +1298,7 @@ private fun MinimalSquareTile(
 
 /**
  * Compact progress ring used as the icon-chip replacement on Summary tiles that
- * have a real goal to show (Steps vs daily goal, Sleep vs the 8h reference).
+ * have a real goal to show (currently just Steps vs the daily goal).
  * [progress] is expected pre-clamped to 0f..1f by the caller (see [coerceProgress]).
  */
 @Composable
@@ -1554,44 +1355,6 @@ private fun ProgressRingChip(
  *  guards against division by zero when [goal] is zero or negative. */
 private fun coerceProgress(value: Double, goal: Double): Float =
     if (goal <= 0.0) 0f else (value / goal).toFloat().coerceIn(0f, 1f)
-
-/**
- * Combined count + trend widget for History: shows the period-aggregate value at
- * the top (e.g. total steps across the selected range) and a proportional-height
- * bar chart below it, one bar per MetricBar from computeMetricBarRanges, each
- * labeled with its value and a short date label. This replaces the earlier design
- * of two separate cards (an average-value card plus a standalone sparkline card)
- * with a single merged widget, per the latest design direction.
- *
- * Bar label granularity follows the bar's own date span: a single-day bar shows
- * the day-of-month, a multi-day bar shows a week-style short range, and the
- * 180/365-day cases (whose bars are real calendar months) show the month
- * abbreviation in the current locale.
- *
- * Safe by construction: an empty bar list (e.g. permission edge case) renders
- * nothing rather than dividing by zero; an all-zero bar list renders all bars at
- * minimum height rather than NaN-height bars.
- */
-/** Short numeric label above a bar (e.g. "1.2k" for 1200 steps, "72" for bpm). */
-internal fun formatBarValueShort(value: Double): String = when {
-    value <= 0.0 -> "0"
-    value >= 1000.0 -> String.format(Locale.getDefault(), "%.1fk", value / 1000.0)
-    value == value.toLong().toDouble() -> value.toLong().toString()
-    else -> String.format(Locale.getDefault(), "%.1f", value)
-}
-
-/** Short date label under a bar: day-of-month for single-day bars, month
- *  abbreviation for real calendar-month bars (180/365-day ranges), otherwise a
- *  compact day-range for the multi-day week-style buckets. */
-internal fun barDateLabel(bar: MetricBar): String {
-    val isWholeMonth = bar.startDate.dayOfMonth == 1 &&
-        bar.endDate == bar.startDate.plusMonths(1).minusDays(1)
-    return when {
-        isWholeMonth -> bar.startDate.month.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault())
-        bar.startDate == bar.endDate -> bar.startDate.dayOfMonth.toString()
-        else -> "${bar.startDate.dayOfMonth}–${bar.endDate.dayOfMonth}"
-    }
-}
 
 private fun List<Double>.safeAverage(): Double =
     if (isEmpty()) 0.0 else average()
@@ -1669,9 +1432,7 @@ internal data class BitPalette(
     val secondaryText: Color,
     val stroke: Color,
     val activity: Color,
-    val sleep: Color,
     val mind: Color,
-    val heart: Color,
     val backgroundBrush: Brush
 ) {
     companion object {
@@ -1679,9 +1440,7 @@ internal data class BitPalette(
         // values rather than HealthAccent's dark-mode hexes verbatim: the same
         // glow-tinted accent that reads as rich against a near-black card
         // washes out and looks chalky against white, so a small amount of
-        // per-theme accent tuning is correct design, not drift -- unlike the
-        // old dark() values below, which differed from HealthAccent by a few
-        // hex units for no reason and would have drifted further over time.
+        // per-theme accent tuning is correct design, not drift.
         fun light(): BitPalette = BitPalette(
             dark = false,
             systemBackground = Color(0xFFF6F4F1),
@@ -1690,17 +1449,11 @@ internal data class BitPalette(
             secondaryText = Color(0xFF6E6E73),
             stroke = Color(0x1A111318),
             activity = Color(0xFFFF6B5F),
-            sleep = Color(0xFF7B61FF),
             mind = Color(0xFF46C7B7),
-            heart = Color(0xFFE53935),
             backgroundBrush = Brush.verticalGradient(listOf(Color(0xFFF6F4F1), Color(0xFFFFFFFF)))
         )
-        // dark() now matches HealthAccent exactly (single source of truth):
-        // previously activity was FF6B5F here vs FF6B5A in HealthAccent, and
-        // sleep had three different values across the file (FF6B5A's sibling
-        // mismatch, 9E6FC3 here, 7B61FF in light(), 6D5DF6 in the old
-        // HealthAccent) -- imperceptible individually, but exactly the kind
-        // of token drift that compounds into visible inconsistency over time.
+        // dark() reuses HealthAccent directly (single source of truth) rather
+        // than redeclaring near-duplicate hex values that could drift apart.
         fun dark(): BitPalette = BitPalette(
             dark = true,
             systemBackground = Color(0xFF0C0C0E),
@@ -1709,9 +1462,7 @@ internal data class BitPalette(
             secondaryText = Color(0xFF8E8E93),
             stroke = Color(0x22FFFFFF),
             activity = HealthAccent.activity,
-            sleep = HealthAccent.sleep,
             mind = HealthAccent.mind,
-            heart = HealthAccent.heart,
             backgroundBrush = Brush.verticalGradient(listOf(Color(0xFF0C0C0E), Color(0xFF1C1C1E)))
         )
     }

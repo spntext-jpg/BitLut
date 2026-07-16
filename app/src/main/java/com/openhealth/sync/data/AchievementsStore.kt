@@ -32,8 +32,8 @@ data class StreakState(
  * no sleep/heart-rate/stress records, matching the same activity-only
  * boundary enforced by DashboardWidget.
  *
- * Health Connect's own aggregate queries only cover the range you ask for
- * (7/30/365 days via computeMetricBarRanges); there is no "give me my best
+ * Health Connect's own aggregate queries only cover the range you ask for;
+ * there is no "give me my best
  * day ever" query. So personal records are accumulated incrementally: every
  * time a fresh dashboard snapshot is read (manual refresh or the 30-minute
  * background sync), the day's totals are compared against the stored record

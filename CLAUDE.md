@@ -32,14 +32,25 @@ happens on-device.
   writes back to HUAWEI Health.
 - **Sleep / heart-rate / SpO2 / stress are intentionally absent everywhere**
   -- not requested from HUAWEI, not read/written to Health Connect, no UI
-  for them. HUAWEI's advanced data tier is not available to individual
-  developers at all (confirmed from HUAWEI's own docs), regardless of
-  application quality -- this is a platform policy, not a fixable bug. If
-  asked to add these, the honest answer is "would require registering as a
-  HUAWEI enterprise developer first."
-- **Screens: exactly 2** -- Today (Summary) and Settings. The History screen
-  was removed from the bottom nav (its composables/logic are left in the
-  codebase, unreachable, not deleted -- see Conventions below).
+  for them, and (as of 2026-07-14) no dead fields/serialization/color
+  tokens for them left in the codebase either -- removed in full, not just
+  disabled, down to `GoogleDashboardSnapshot`, `DashboardUiState`,
+  `DashboardSnapshotCache` JSON (de)serialization, and the old
+  `HealthAccent.heart`/`BitPalette.heart` color tokens. HUAWEI's advanced
+  data tier is not available to individual developers at all (confirmed
+  from HUAWEI's own docs), regardless of application quality -- this is a
+  platform policy, not a fixable bug. If asked to add these, the honest
+  answer is "would require registering as a HUAWEI enterprise developer
+  first."
+- **Screens: exactly 2** -- Today (Summary) and Settings. The History
+  screen was removed from the bottom nav in an earlier sprint; as of
+  2026-07-14 its code (`HistoryScreen`, `HistoryRangeChips`,
+  `WorkoutTypeCard`, `readStepsBars`, `readWorkoutSummariesByType`,
+  `computeMetricBarRanges` and its bucket helpers, the `MetricBar` type,
+  the whole `MetricCharts.kt` file, and the now-dead `daysBack` parameter
+  that only ever existed to feed History's range chips) was deleted
+  outright rather than left dormant -- see Conventions below for why this
+  is now the standing precedent instead of "leave it dormant."
 - **Today screen widgets (fixed set, not user-configurable):** steps today,
   workout time today, personal records, current streak, last imported
   workout. The old widget-visibility toggle feature was removed entirely.
@@ -55,9 +66,9 @@ happens on-device.
 | `data/worker/SyncReliability.kt` | `SyncCircuitBreaker`, `SyncWindowPlanner`, `SyncRunLease`, `SyncRetryPolicy`. |
 | `data/worker/BackgroundSyncScheduler.kt` | WorkManager scheduling. `UNIQUE_PERIODIC_SYNC` (every 30 min) and `UNIQUE_SYNC_NOW` (manual/launch-triggered) are **different** unique-work names -- WorkManager does not serialize them against each other, which is exactly why `SyncRunLease` exists at the app level. |
 | `data/HuaweiHealthManager.kt` | Reads from HUAWEI Health Kit. Type-safe dedup (an `Any?`/`UNCHECKED_CAST` bug here was fixed long ago -- watch for regressions if touching this). |
-| `data/GoogleHealthManager.kt` | Reads/writes Health Connect. `readDashboardSnapshot()` reads today's steps/distance/calories via `readRecords()` + manual sum, **not** `aggregate()` (see Gotcha 1). Coalesces concurrent permission checks behind a mutex + 3s cache (see Gotcha 6). |
+| `data/GoogleHealthManager.kt` | Reads/writes Health Connect. `readDashboardSnapshot()` (no `daysBack` param since 2026-07-14 -- it was only ever fed by History's now-deleted range chips) reads today's steps/distance/calories via `readRecords()` + manual sum, **not** `aggregate()` (see Gotcha 1). Coalesces concurrent permission checks behind a mutex + 3s cache (see Gotcha 6). |
 | `ui/DashboardViewModel.kt` | `load()` drives the Today screen's state. Deliberately trimmed (2026-07-10) to only compute fields actually rendered somewhere reachable (see Gotcha 4). |
-| `ui/screens/FinalBitLutShell.kt` | All UI lives in one file: `SummaryScreen`, `SettingsScreen`, and every card/widget composable (`PersonalRecordsCard`, `StreakCard`, `LastWorkoutCard`, `MinimalMetricCard`, `SettingsConnectionCard`, etc.). `HistoryScreen`/`WorkoutTypeCard`/`DashboardWidgetGrid`/`WeeklyComparisonCard` are defined but intentionally unused (dormant, see Conventions). |
+| `ui/screens/FinalBitLutShell.kt` | All UI lives in one file: `SummaryScreen`, `SettingsScreen`, and every card/widget composable (`PersonalRecordsCard`, `StreakCard`, `LastWorkoutCard`, `MinimalMetricCard`, `SettingsConnectionCard`, etc.). `DashboardWidgetGrid`/`WeeklyComparisonCard` are defined but intentionally unused (dormant, see Conventions). `HistoryScreen`/`HistoryRangeChips`/`WorkoutTypeCard` no longer exist at all (deleted 2026-07-14, not just dormant). |
 | `ui/components/GlassNavigation.kt` | Bottom nav bar: Today tab, centered larger warm-orange `Glass20RefreshButton`, Settings tab. |
 | `config/HealthPermissionPolicy.kt` | The authoritative Health Connect permission list. Activity-only, with an explicit in-code comment documenting that this is intentional, not incomplete. |
 | `config/WidgetVisibilityPrefs.kt` | `DashboardWidget` enum + prefs -- the toggle *feature* was removed from Settings UI, but this underlying plumbing is left in place, currently unused from the UI. |
@@ -79,7 +90,7 @@ happens on-device.
 
 7. **Individual HUAWEI developers cannot obtain advanced-tier data (sleep/heart-rate/SpO2/stress) at all**, regardless of how the application is written -- this is a HUAWEI platform policy documented in their own developer docs, not something that can be worked around in code or in the application form.
 
-8. **Several composables/functions are defined but deliberately unused** -- `HistoryScreen`, `WorkoutTypeCard`, `DashboardWidgetGrid`, `WeeklyComparisonCard`, `readStepsBars`, `readWeekOverWeekComparison` (the last one's *call site* was removed, the function itself may still exist). This is intentional minimal-diff precedent used throughout this project's patch history, not leftover cruft to "clean up" reflexively -- confirm a function is truly dead (no call sites, checked via grep across the whole non-backup tree) before touching it.
+8. **Some composables/functions are defined but deliberately unused** -- currently `DashboardWidgetGrid`, `WeeklyComparisonCard`, `readWeekOverWeekComparison` (the last one's *call site* was removed, the function itself may still exist). This is intentional minimal-diff precedent for code that might come back (e.g. if week-over-week UI returns) -- confirm a function is truly dead (no call sites, checked via grep across the whole non-backup tree) before touching it. This is a case-by-case call, not a blanket rule, though: `HistoryScreen`/`HistoryRangeChips`/`WorkoutTypeCard`/`readStepsBars`/`readWorkoutSummariesByType`/`computeMetricBarRanges`/`MetricBar` were all fully deleted on 2026-07-14 rather than left dormant, once it was clear History itself was never coming back and they had zero remaining callers -- "leave it dormant" is the default for something that might be reconnected later, not a permanent policy for code proven to be permanently dead.
 
 ## Patch script conventions (follow exactly, for consistency with prior sessions)
 

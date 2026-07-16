@@ -312,7 +312,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
      */
     private suspend fun refreshDashboardCacheAfterWrite(googleManager: HealthConnectManager): GoogleDashboardSnapshot? {
         return try {
-            val freshSnapshot = googleManager.readDashboardSnapshot(daysBack = 7)
+            val freshSnapshot = googleManager.readDashboardSnapshot()
             if (freshSnapshot != null) {
                 snapshotCache.save(freshSnapshot)
                 AppLogger.d(TAG, "Dashboard snapshot cache refreshed after background sync")

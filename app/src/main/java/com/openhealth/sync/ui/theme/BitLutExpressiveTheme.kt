@@ -32,13 +32,13 @@ val BgElevated     = Color(0xCC1C1C1E)   // BitPalette.dark().card
 // Accent Colors (mirrors HealthAccent / BitPalette.dark())
 val Orange         = Color(0xFFFF6B5A)   // HealthAccent.activity -- the one true "activity" accent
 val OrangeDim      = Color(0xFFE25A4B)
-val Purple         = Color(0xFF9E6FC3)   // BitPalette.dark().sleep -- the one true "sleep" accent
+val Purple         = Color(0xFF9E6FC3)   // HealthAccent.violet -- the one true purple/tertiary accent
 val Mind           = Color(0xFF5FE0C6)   // BitPalette.dark().mind / HealthAccent.mind
 
 // Semantic
 val Success        = Color(0xFF22C55E)
 val Warning        = Color(0xFFF59E0B)
-val Danger         = Color(0xFFFF453A)   // BitPalette.dark().heart
+val Danger         = Color(0xFFFF453A)   // the app's one true error/danger accent
 
 // Text (mirrors BitPalette.dark())
 val TextPrimary    = Color(0xFFF8F8F8)

@@ -16,7 +16,7 @@ interface HealthConnectManager {
 
     suspend fun missingRequiredPermissions(): Set<String>
     suspend fun hasAllPermissions(): Boolean
-    suspend fun readDashboardSnapshot(daysBack: Int): GoogleDashboardSnapshot?
+    suspend fun readDashboardSnapshot(): GoogleDashboardSnapshot?
     suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): WriteSnapshotResult
 
     /**

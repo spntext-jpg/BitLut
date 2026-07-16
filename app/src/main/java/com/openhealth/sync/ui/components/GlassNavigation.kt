@@ -166,7 +166,7 @@ internal fun Glass20BottomNavigation(
 
 /**
  * Warm orange, sprint 2026-07-09: distinct from every existing accent
- * (activity/mind/sleep/heart) on purpose, so the refresh button reads as its
+ * (activity/mind/violet) on purpose, so the refresh button reads as its
  * own clearly-tappable action rather than belonging to either tab.
  */
 private val WarmRefreshOrange = Color(0xFFFF8A34)

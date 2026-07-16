@@ -11,11 +11,9 @@ import com.openhealth.sync.data.AchievementsStore
 import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.DashboardSnapshotCache
 import com.openhealth.sync.data.GoogleDashboardSnapshot
-import com.openhealth.sync.data.MetricBar
 import com.openhealth.sync.data.PersonalRecord
 import com.openhealth.sync.data.StreakState
 import com.openhealth.sync.data.WeekComparison
-import com.openhealth.sync.data.WorkoutTypeSummary
 import com.openhealth.sync.util.AppLogger
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,9 +25,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private const val TAG = "DashboardViewModel"
-
-/** Selectable History range options, in days. Order matters for the chip row UI. */
-val HISTORY_RANGE_OPTIONS = listOf(7, 14, 30, 60, 90, 180, 365)
 
 data class DashboardUiState(
     /** True only while the very first load of this process is still in flight and
@@ -58,18 +53,7 @@ data class DashboardUiState(
     val caloriesKcal: Double = 0.0,
     val workoutMinutesToday: Long = 0L,
     val activeHoursToday: Int = 0,
-    val stepsBars: List<MetricBar> = emptyList(),
-    val sleepHours: Double = 0.0,
-    val sleepQualityScore: Int? = null,
-    val heartRateBpm: Long? = null,
-    val heartRateTodayBars: List<MetricBar> = emptyList(),
-    val stressScore: Int? = null,
-    val spo2Percent: Double? = null,
-    val sleepBars: List<MetricBar> = emptyList(),
-    val heartRateBars: List<MetricBar> = emptyList(),
     val recentWorkouts: List<ActivitySessionData> = emptyList(),
-    val selectedHistoryRangeDays: Int = 7,
-    val workoutSummaries: List<WorkoutTypeSummary> = emptyList(),
     val visibleWidgets: Map<DashboardWidget, Boolean> = DashboardWidget.entries.associateWith { true },
     // ── Sprint 4: insights & trends (activity-only) ──────────────────────
     val weekComparison: WeekComparison? = null,
@@ -115,15 +99,8 @@ class DashboardViewModel(
 
     fun refresh() { load() }
 
-    /** Called when the person taps a different range chip (7/14/30/60/90/180/365) on History. */
-    fun onHistoryRangeSelected(days: Int) {
-        if (days == _state.value.selectedHistoryRangeDays) return
-        _state.update { it.copy(selectedHistoryRangeDays = days) }
-        load()
-    }
-
     /** Called from the Settings widget-visibility toggles. Persists immediately and
-     *  updates the in-memory state so Summary/History reflect the change without a
+     *  updates the in-memory state so Summary reflects the change without a
      *  full reload (no Health Connect calls needed — this is purely a display
      *  preference, not new data). */
     fun setWidgetVisible(widget: DashboardWidget, visible: Boolean) {
@@ -244,9 +221,7 @@ class DashboardViewModel(
                 return@launch
             }
 
-            val previous = _state.value
-            val rangeDays = previous.selectedHistoryRangeDays
-            val snapshot = googleManager.readDashboardSnapshot(rangeDays)
+            val snapshot = googleManager.readDashboardSnapshot()
             if (generation != loadGeneration) return@launch
 
             _state.update { current ->
@@ -306,17 +281,7 @@ class DashboardViewModel(
             caloriesKcal    = snapshot.caloriesKcal,
             workoutMinutesToday = snapshot.workoutMinutesToday,
             activeHoursToday = snapshot.activeHoursToday,
-            sleepHours      = snapshot.sleepHours,
-            sleepQualityScore = snapshot.sleepQualityScore,
-            heartRateBpm    = snapshot.heartRateBpm,
-            heartRateTodayBars = snapshot.heartRateTodayBars.ifEmpty { heartRateTodayBars },
-            stressScore     = snapshot.stressScore,
-            spo2Percent     = snapshot.spo2Percent,
-            sleepBars       = snapshot.sleepBars.ifEmpty { sleepBars },
-            heartRateBars   = snapshot.heartRateBars.ifEmpty { heartRateBars },
-            stepsBars       = snapshot.stepsBars.ifEmpty { stepsBars },
-            recentWorkouts  = snapshot.recentWorkouts.ifEmpty { recentWorkouts },
-            workoutSummaries = snapshot.workoutSummaries.ifEmpty { workoutSummaries }
+            recentWorkouts  = snapshot.recentWorkouts.ifEmpty { recentWorkouts }
         )
 
     companion object {
