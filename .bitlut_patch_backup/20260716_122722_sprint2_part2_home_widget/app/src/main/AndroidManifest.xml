@@ -120,23 +120,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-
-        <!-- Sprint (2026-07-14): the home screen widget (widget/HomeWidget.kt).
-             exported="true" is required for widget receivers: the platform's
-             AppWidgetHost, not another app, is what binds to it (Health
-             Connect/Huawei data never passes through this component; it only
-             enqueues a WorkManager sync request and renders whatever the
-             already-local DashboardSnapshotCache says). -->
-        <receiver
-            android:name=".widget.HomeWidgetReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/home_widget_info" />
-        </receiver>
 </application>
 
 </manifest>

@@ -10,8 +10,6 @@ import com.openhealth.sync.data.HealthConnectManager
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.util.AppLogger
-import androidx.glance.appwidget.updateAll
-import com.openhealth.sync.widget.HomeWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
@@ -318,17 +316,6 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
             if (freshSnapshot != null) {
                 snapshotCache.save(freshSnapshot)
                 AppLogger.d(TAG, "Dashboard snapshot cache refreshed after background sync")
-                // Sprint (2026-07-14): the home screen widget reads this same
-                // cache (see HomeWidget.kt) rather than calling Health Connect
-                // itself, so it needs an explicit nudge to re-render with the
-                // now-fresh numbers -- Glance widgets don't observe
-                // SharedPreferences changes on their own. Runs after every
-                // successful sync regardless of trigger (periodic, the
-                // Settings "Sync now" button, or a tap on the widget itself),
-                // since they all funnel through this one function -- a single
-                // source of truth instead of updating the widget separately
-                // from each trigger site.
-                HomeWidget().updateAll(applicationContext)
             }
             freshSnapshot
         } catch (e: Exception) {

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sprint (2026-07-14): provider info for the single-tile home screen widget
+  (widget/HomeWidget.kt). minWidth/minHeight sized for a compact 2x1 cell on
+  a standard 4-column launcher grid; resizeMode allows a bit of slack
+  without pretending this widget has more than one size worth designing for,
+  matching the "one tile, not a second UI" scope. updatePeriodMillis is a
+  defensive fallback only: SyncWorker already calls HomeWidget().updateAll()
+  right after every successful sync (periodic, manual, or widget-tap
+  triggered), which is what actually keeps this fresh; the platform clamps
+  any updatePeriodMillis below 30 minutes to 30 minutes regardless, so this
+  is not doing double duty as a real refresh mechanism.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
+    android:minResizeWidth="80dp"
+    android:minResizeHeight="80dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:previewImage="@mipmap/ic_launcher"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_description" />

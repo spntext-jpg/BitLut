@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0D0D0D</color>
+    <!-- Sprint (2026-07-16): home screen widget colors, light (day)
+         variant: see values-night/colors.xml for the dark counterpart.
+         Resource-qualified files, not Glance's ColorProvider(day=, night=)
+         Color-based factory: that overload doesn't exist in
+         glance-appwidget 1.1.1 (confirmed from a real compiler error; only
+         ColorProvider(color: Color) and ColorProvider(resId: Int) exist). -->
+    <color name="widget_card">#FFFFFFFF</color>
+    <color name="widget_text">#FF111318</color>
+    <color name="widget_secondary_text">#FF6E6E73</color>
 </resources>

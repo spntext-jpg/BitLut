@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sprint (2026-07-16): home screen widget colors, dark (night) variant.
+  See values/colors.xml for why this is resource-qualified files rather
+  than Glance's ColorProvider(day=, night=).
+-->
+<resources>
+    <color name="widget_card">#FF1C1C1E</color>
+    <color name="widget_text">#FFF8F8F8</color>
+    <color name="widget_secondary_text">#FF8E8E93</color>
+</resources>

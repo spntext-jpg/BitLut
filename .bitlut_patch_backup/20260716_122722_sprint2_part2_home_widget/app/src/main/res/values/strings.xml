@@ -213,14 +213,6 @@
     <string name="data_scopes_destination">All of it goes to one place: Google Health Connect, on this device. No BitLut server, no BitLut account, no ads, nothing sent anywhere else.</string>
     <string name="data_scopes_close">Got it</string>
     <string name="export_csv_link">Export my data as CSV</string>
-    <string name="widget_steps_label">steps</string>
-    <string name="widget_synced_just_now">Synced just now</string>
-    <string name="widget_synced_minutes_ago">Synced %1$d min ago</string>
-    <string name="widget_synced_hours_ago">Synced %1$dh ago</string>
-    <string name="widget_synced_long_ago">Synced a while ago</string>
-    <string name="widget_never_synced">Not synced yet · tap to sync</string>
-    <string name="widget_tap_to_sync">Tap to sync</string>
-    <string name="widget_description">Today\'s steps and last sync time, with a tap to sync now</string>
     <string name="onboarding_continue_button">Continue</string>
     <string name="insights_streak_days_ru_one">%1$d день подряд</string>
     <string name="insights_streak_days_ru_few">%1$d дня подряд</string>

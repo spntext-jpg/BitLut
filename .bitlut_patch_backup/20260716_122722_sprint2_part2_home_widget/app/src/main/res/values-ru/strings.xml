@@ -214,13 +214,5 @@
     <string name="data_scopes_destination">Всё это уходит в одно место: Google Health Connect на этом же устройстве. Нет сервера BitLut, нет аккаунта BitLut, нет рекламы, никуда больше ничего не отправляется.</string>
     <string name="data_scopes_close">Понятно</string>
     <string name="export_csv_link">Экспортировать мои данные в CSV</string>
-    <string name="widget_steps_label">шагов</string>
-    <string name="widget_synced_just_now">Синхронизировано только что</string>
-    <string name="widget_synced_minutes_ago">Синхронизировано %1$d мин назад</string>
-    <string name="widget_synced_hours_ago">Синхронизировано %1$d ч назад</string>
-    <string name="widget_synced_long_ago">Синхронизировано давно</string>
-    <string name="widget_never_synced">Ещё не синхронизировано · нажмите</string>
-    <string name="widget_tap_to_sync">Нажмите для синхронизации</string>
-    <string name="widget_description">Шаги за сегодня и время последней синхронизации, нажатие запускает синк</string>
     <string name="onboarding_continue_button">Продолжить</string>
 </resources>
