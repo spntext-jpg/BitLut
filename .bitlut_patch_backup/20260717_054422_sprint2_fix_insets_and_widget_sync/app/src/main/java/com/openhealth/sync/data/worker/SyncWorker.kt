@@ -174,24 +174,11 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
 
         if (huaweiManager.isPendingApproval()) {
             AppLogger.w(TAG, "Huawei Health Kit approval pending (50005); sync degraded to no-op")
-            // Sprint (2026-07-16): refresh the dashboard cache/widget here too,
-            // not just on a full Huawei sync success. Health Connect can
-            // already contain real data from other apps (Google Fit, Samsung
-            // Health, the device's own step counter) regardless of Huawei's
-            // approval state -- BitLut just wasn't writing to it. Without this,
-            // the Today screen still updates fine (DashboardViewModel.load()
-            // does its own live readDashboardSnapshot() call, unaffected by
-            // this), but the home screen widget -- which only ever reads the
-            // cache this function writes -- would show "not synced yet"
-            // forever until Huawei's review completes, even if there's real
-            // step data sitting in Health Connect the whole time.
-            refreshDashboardCacheAfterWrite(googleManager)
             return SyncAttemptOutcome.GracefulNoop
         }
 
         if (!localHuaweiAuthorized) {
             AppLogger.w(TAG, "Huawei not locally authorized; sync degraded to no-op")
-            refreshDashboardCacheAfterWrite(googleManager)
             return SyncAttemptOutcome.GracefulNoop
         }
 

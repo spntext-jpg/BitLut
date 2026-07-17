@@ -2,7 +2,6 @@ package com.openhealth.sync
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBarsPadding
 
 import android.content.Context
 import android.os.Bundle
@@ -237,17 +236,10 @@ private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val logs by com.openhealth.sync.util.AppLogger.logs.collectAsStateWithLifecycle()
 
-    // Sprint (2026-07-16): same fix as PermissionsOnboardingScreen just
-    // above -- this screen also renders outside the Scaffold, so its Copy/
-    // Close buttons started rendering half under the status bar the moment
-    // enableEdgeToEdge() shipped (confirmed from a real device: "кнопка
-    // слезла вверх, наполовину закрыта").
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.backgroundBrush)
-            .statusBarsPadding()
-            .navigationBarsPadding()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
@@ -313,23 +305,10 @@ private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
 
 @Composable
 private fun PermissionsOnboardingScreen(palette: BitPalette, onContinue: () -> Unit) {
-    // Sprint (2026-07-16): this screen renders outside the main Scaffold
-    // (see FinalBitLutShell's root -- it's a sibling shown after the
-    // Scaffold closes, not routed through its content padding), so it never
-    // got the Scaffold's automatic safeDrawing inset padding that
-    // ImportScreen/SummaryScreen/SettingsScreen get for free. That was
-    // invisible before enableEdgeToEdge() (the OS reserved status/nav bar
-    // space outside the app's content entirely), but became a real bug the
-    // moment edge-to-edge was enabled: this screen's own content now draws
-    // under the status bar with nothing pushing it down. Fixed here rather
-    // than by routing this screen through the Scaffold, to keep this a
-    // one-line fix instead of a structural change.
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.backgroundBrush)
-            .statusBarsPadding()
-            .navigationBarsPadding()
     ) {
         Column(
             modifier = Modifier
