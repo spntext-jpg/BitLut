@@ -105,19 +105,9 @@ class MainActivity : ComponentActivity() {
             syncViewModel.onHuaweiAuthorizationResult(success)
             syncViewModel.refreshStatuses()
 
-            // Sprint (2026-07-18): previously this always showed the same
-            // generic toast_huawei_pending text for every possible failure
-            // (scope pending, privacy not accepted, cert mismatch, invalid
-            // config) -- which is exactly the message an AppGallery reviewer
-            // quoted in a real rejection report, with no way for anyone
-            // reading it to tell which of those 4 very different causes was
-            // actually in play. The specific reason (and full explanation)
-            // now lives in the Settings screen's Huawei card instead of a
-            // fleeting Toast, since a Toast can't hold enough text to be
-            // useful here -- this toast just points there.
             Toast.makeText(
                 this,
-                if (success) getString(R.string.toast_huawei_connected) else getString(R.string.toast_huawei_failed),
+                if (success) getString(R.string.toast_huawei_connected) else getString(R.string.toast_huawei_pending),
                 Toast.LENGTH_LONG
             ).show()
         }

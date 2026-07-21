@@ -86,22 +86,6 @@ class HuaweiHealthManager(
     override fun isPendingApproval(): Boolean =
         prefs.getBoolean(KEY_HUAWEI_PENDING_APPROVAL, false)
 
-    /**
-     * Sprint 2026-07-18: the *specific* reason the last authorization
-     * attempt failed, persisted separately from the isPendingApproval/
-     * isAppGalleryVerificationRequired booleans above (which both only
-     * ever fire for the 50005 case) so cert-mismatch/privacy/invalid-config
-     * failures are distinguishable too -- see classifyFailure() below.
-     */
-    override fun lastAuthFailureReason(): HuaweiAuthFailureReason? {
-        val raw = prefs.getString(KEY_HUAWEI_LAST_AUTH_FAILURE_REASON, null) ?: return null
-        return try {
-            HuaweiAuthFailureReason.valueOf(raw)
-        } catch (_: IllegalArgumentException) {
-            null
-        }
-    }
-
     override fun isAppGalleryVerificationRequired(): Boolean =
         prefs.getBoolean(KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED, false)
 
@@ -139,7 +123,7 @@ class HuaweiHealthManager(
 
     override fun handleAuthorizationResult(resultCode: Int, data: Intent?): Boolean {
         if (data == null) {
-            saveAuthorizationState(success = false, pendingApproval = false, failureReason = HuaweiAuthFailureReason.UNKNOWN)
+            saveAuthorizationState(success = false, pendingApproval = false)
             AppLogger.e(TAG, "Huawei authorization returned no result intent")
             return false
         }
@@ -148,9 +132,8 @@ class HuaweiHealthManager(
         val success = result?.isSuccess == true
         val code = result?.errorCode
         val pendingApproval = code == HUAWEI_SCOPE_UNAUTHORIZED
-        val failureReason = if (success) null else classifyFailure(code)
 
-        saveAuthorizationState(success = success, pendingApproval = pendingApproval, failureReason = failureReason)
+        saveAuthorizationState(success = success, pendingApproval = pendingApproval)
 
         if (success) {
             AppLogger.i(TAG, "Huawei Health Kit authorization granted")
@@ -186,23 +169,8 @@ class HuaweiHealthManager(
         return false
     }
 
-    /**
-     * Maps a raw HMS error code to the coarser [HuaweiAuthFailureReason]
-     * bucket the UI (Settings card + toast) actually branches on. Kept
-     * separate from the dev-facing `hint` strings in handleAuthorizationResult
-     * above -- those stay verbose/technical for AppLogger and the hidden Log
-     * Viewer; this feeds short, localized, end-user-facing copy instead.
-     */
-    private fun classifyFailure(code: Int?): HuaweiAuthFailureReason = when (code) {
-        HUAWEI_SCOPE_UNAUTHORIZED -> HuaweiAuthFailureReason.SCOPE_PENDING_APPROVAL
-        HUAWEI_PRIVACY_NOT_ACCEPTED -> HuaweiAuthFailureReason.PRIVACY_NOT_ACCEPTED
-        HUAWEI_CERT_MISMATCH, HUAWEI_CERT_VERIFY_FAILED -> HuaweiAuthFailureReason.CERTIFICATE_MISMATCH
-        HUAWEI_INVALID_ARGS -> HuaweiAuthFailureReason.INVALID_CONFIGURATION
-        else -> HuaweiAuthFailureReason.UNKNOWN
-    }
-
     override fun markAuthorizationUnknown() {
-        saveAuthorizationState(success = false, pendingApproval = false, failureReason = null)
+        saveAuthorizationState(success = false, pendingApproval = false)
     }
 
     override suspend fun readSnapshot(startTimeMs: Long, endTimeMs: Long): HuaweiHealthSnapshot {
@@ -230,17 +198,12 @@ class HuaweiHealthManager(
         }
     }
 
-    private fun saveAuthorizationState(success: Boolean, pendingApproval: Boolean, failureReason: HuaweiAuthFailureReason?) {
-        val editor = prefs.edit()
+    private fun saveAuthorizationState(success: Boolean, pendingApproval: Boolean) {
+        prefs.edit()
             .putBoolean(HuaweiConfig.KEY_HUAWEI_AUTHORIZED, success)
             .putBoolean(KEY_HUAWEI_PENDING_APPROVAL, pendingApproval)
             .putBoolean(KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED, pendingApproval)
-        if (failureReason != null) {
-            editor.putString(KEY_HUAWEI_LAST_AUTH_FAILURE_REASON, failureReason.name)
-        } else {
-            editor.remove(KEY_HUAWEI_LAST_AUTH_FAILURE_REASON)
-        }
-        editor.apply()
+            .apply()
     }
 
     private fun ensureRuntimeReady() {
@@ -628,7 +591,6 @@ class HuaweiHealthManager(
 
         const val KEY_HUAWEI_PENDING_APPROVAL = "huawei_pending_approval"
         const val KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED = "huawei_appgallery_verification_required"
-        const val KEY_HUAWEI_LAST_AUTH_FAILURE_REASON = "huawei_last_auth_failure_reason"
 
         const val HUAWEI_SCOPE_UNAUTHORIZED = 50005
         const val HUAWEI_PRIVACY_NOT_ACCEPTED = 50011

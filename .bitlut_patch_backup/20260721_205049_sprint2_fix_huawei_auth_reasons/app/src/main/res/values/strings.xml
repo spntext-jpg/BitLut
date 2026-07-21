@@ -124,7 +124,7 @@
     <string name="manual_sync">Manual sync</string>
     <string name="manual_sync_body">Start Huawei Health to Health Connect sync now.</string>
     <string name="toast_huawei_connected">Huawei Health connected.</string>
-    <string name="toast_huawei_failed">Couldn\'t connect to Huawei Health. Check Settings for details.</string>
+    <string name="toast_huawei_pending">Huawei Health Kit has not confirmed access yet. Check approval status.</string>
     <string name="toast_huawei_health_missing">Install Huawei Health and sign in.</string>
     <string name="toast_huawei_start_failed">Could not open Huawei Health authorization.</string>
     <string name="last_sync_never">Never synced</string>
@@ -158,15 +158,6 @@
     <string name="huawei_health_title">Huawei Health</string>
     <string name="huawei_pending_approval_title">Waiting for Huawei\'s approval</string>
     <string name="huawei_pending_approval_body">This isn\'t a bug. Huawei reviews every app\'s data access request before it can start syncing — this can take a few days. BitLut will start working automatically the moment it\'s approved, with nothing for you to do in the meantime.</string>
-    <string name="huawei_reason_privacy_not_accepted_title">Accept Huawei Health\'s privacy terms</string>
-    <string name="huawei_reason_privacy_not_accepted_body">Open Huawei Health, accept its privacy terms, then try connecting again.</string>
-    <string name="huawei_reason_cert_mismatch_title">Certificate configuration issue</string>
-    <string name="huawei_reason_cert_mismatch_body">Huawei Health Kit is rejecting this app\'s signing certificate. This usually means the SHA-256 fingerprint registered in AppGallery Connect doesn\'t match how this build was actually signed — for example, if Huawei\'s own "App Signing" re-signs release builds with a different certificate than the one registered for Health Kit. This needs to be fixed in AppGallery Connect, not in the app itself.</string>
-    <string name="huawei_reason_invalid_config_title">Configuration issue</string>
-    <string name="huawei_reason_invalid_config_body">Huawei Health Kit didn\'t recognize this app\'s configuration (App ID, package name, or agconnect-services.json). This needs to be fixed in AppGallery Connect, not in the app itself.</string>
-    <string name="huawei_reason_unknown_title">Couldn\'t connect to Huawei Health</string>
-    <string name="huawei_reason_unknown_body">Something prevented Huawei Health Kit from authorizing this app. Check the in-app log viewer for the specific error code, or try again later.</string>
-    <string name="huawei_retry_connect">Try connecting again</string>
     <string name="manual_sync_title">Manual sync</string>
     <string name="import_archive_title">Import archive</string>
     <string name="import_archive_selected">Huawei Health archive selected</string>

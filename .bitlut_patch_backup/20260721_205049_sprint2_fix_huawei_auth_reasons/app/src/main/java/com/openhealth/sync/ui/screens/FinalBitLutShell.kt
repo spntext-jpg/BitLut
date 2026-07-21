@@ -71,7 +71,6 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.data.ActivitySessionData
-import com.openhealth.sync.data.HuaweiAuthFailureReason
 import com.openhealth.sync.data.PersonalRecord
 import com.openhealth.sync.data.StreakState
 import com.openhealth.sync.data.WeekComparison
@@ -974,18 +973,14 @@ private fun SettingsScreen(
             onSecondaryAction = onRefresh
         )
 
-        // Sprint (2026-07-14, generalized 2026-07-18): a calm, specific
-        // explanation instead of a silent no-op degrade or a generic toast.
-        // Previously only shown for the 50005/pending-approval case; now
-        // covers all known Huawei Health Kit failure reasons (see
-        // HuaweiAuthFailureReason), since an AppGallery review rejection
-        // showed that a reviewer or user hitting ANY of the other 4 cases
-        // (cert mismatch, invalid config, privacy not accepted, unknown)
-        // previously saw nothing here at all -- just the same generic toast
-        // regardless of cause.
-        val huaweiFailureReason = syncState.lastHuaweiAuthFailureReason
-        if (!syncState.isHuaweiAuthorized && huaweiFailureReason != null) {
-            HuaweiAuthIssueCard(palette = palette, reason = huaweiFailureReason, onRetryConnect = onRequestHuawei)
+        // Sprint (2026-07-14): a calm, specific explanation instead of a
+        // silent no-op degrade. Huawei's server-side scope review can take
+        // days; without this, a new install just sees zero data flowing
+        // with no indication of why, which reads as "broken" rather than
+        // "waiting." Only shown while genuinely pending (confirmed via a
+        // real 50005 response, not guessed) and not yet authorized.
+        if (syncState.isHuaweiPendingApproval && !syncState.isHuaweiAuthorized) {
+            HuaweiPendingApprovalCard(palette = palette)
         }
 
         SettingsConnectionCard(
@@ -1029,53 +1024,14 @@ private fun SettingsScreen(
 }
 
 /**
- * Explains *why* the last Huawei Health Kit authorization attempt failed,
- * in plain language specific to the actual cause (sprint 2026-07-18,
- * generalized from a 50005-only card after an AppGallery review rejection
- * showed the other 4 cases had no explanation at all -- just a generic
- * toast). [onRetryConnect] re-triggers the real Huawei OAuth flow -- shown
- * only for the two reasons where a fresh attempt can plausibly succeed:
- * SCOPE_PENDING_APPROVAL (Huawei's own approval notification arrives
- * outside the app entirely, e.g. by email -- the app has no way to detect
- * that on its own, so a manual retry is the only way to pick it up) and
- * PRIVACY_NOT_ACCEPTED (resolved by accepting terms in Huawei Health, then
- * retrying here). CERTIFICATE_MISMATCH and INVALID_CONFIGURATION need an
- * AppGallery Connect-side fix first -- retrying before that's done would
- * just fail the same way again, so no retry button is shown for those.
+ * Explains the 50005 / "scope not authorized" wait state in plain language
+ * instead of leaving a new install to wonder why no Huawei data is showing
+ * up. This is a review-queue wait, not a permission the person needs to
+ * grant again -- re-tapping Connect won't skip the queue, so this card
+ * intentionally has no primary action, only the explanation.
  */
 @Composable
-private fun HuaweiAuthIssueCard(palette: BitPalette, reason: HuaweiAuthFailureReason, onRetryConnect: () -> Unit) {
-    val title: String
-    val body: String
-    val showRetry: Boolean
-    when (reason) {
-        HuaweiAuthFailureReason.SCOPE_PENDING_APPROVAL -> {
-            title = stringResource(R.string.huawei_pending_approval_title)
-            body = stringResource(R.string.huawei_pending_approval_body)
-            showRetry = true
-        }
-        HuaweiAuthFailureReason.PRIVACY_NOT_ACCEPTED -> {
-            title = stringResource(R.string.huawei_reason_privacy_not_accepted_title)
-            body = stringResource(R.string.huawei_reason_privacy_not_accepted_body)
-            showRetry = true
-        }
-        HuaweiAuthFailureReason.CERTIFICATE_MISMATCH -> {
-            title = stringResource(R.string.huawei_reason_cert_mismatch_title)
-            body = stringResource(R.string.huawei_reason_cert_mismatch_body)
-            showRetry = false
-        }
-        HuaweiAuthFailureReason.INVALID_CONFIGURATION -> {
-            title = stringResource(R.string.huawei_reason_invalid_config_title)
-            body = stringResource(R.string.huawei_reason_invalid_config_body)
-            showRetry = false
-        }
-        HuaweiAuthFailureReason.UNKNOWN -> {
-            title = stringResource(R.string.huawei_reason_unknown_title)
-            body = stringResource(R.string.huawei_reason_unknown_body)
-            showRetry = false
-        }
-    }
-
+private fun HuaweiPendingApprovalCard(palette: BitPalette) {
     SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
         Row(verticalAlignment = Alignment.Top) {
             Icon(
@@ -1087,38 +1043,19 @@ private fun HuaweiAuthIssueCard(palette: BitPalette, reason: HuaweiAuthFailureRe
             Spacer(Modifier.width(10.dp))
             Column {
                 Text(
-                    text = title,
+                    text = stringResource(R.string.huawei_pending_approval_title),
                     color = palette.text,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 15.sp
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = body,
+                    text = stringResource(R.string.huawei_pending_approval_body),
                     color = palette.secondaryText,
                     fontWeight = FontWeight.Medium,
                     fontSize = 13.sp,
                     lineHeight = 18.sp
                 )
-                if (showRetry) {
-                    Spacer(Modifier.height(10.dp))
-                    val interactionSource = remember { MutableInteractionSource() }
-                    Box(
-                        modifier = Modifier
-                            .pressScale(interactionSource)
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(HealthAccent.activity)
-                            .clickable(interactionSource = interactionSource, indication = null) { onRetryConnect() }
-                            .padding(horizontal = 16.dp, vertical = 9.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.huawei_retry_connect),
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
             }
         }
     }

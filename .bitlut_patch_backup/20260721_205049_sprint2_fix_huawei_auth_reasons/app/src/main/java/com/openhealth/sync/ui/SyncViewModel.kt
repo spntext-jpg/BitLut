@@ -1,6 +1,5 @@
 package com.openhealth.sync.ui
 import com.openhealth.sync.data.HuaweiHealthReader
-import com.openhealth.sync.data.HuaweiAuthFailureReason
 import com.openhealth.sync.data.HealthConnectManager
 
 import android.content.Context
@@ -23,7 +22,7 @@ data class SyncUiState(
     val hasGooglePermissions: Boolean = false,
     val needsPermissionRefresh: Boolean = false,
     val isHuaweiAuthorized: Boolean = false,
-    val lastHuaweiAuthFailureReason: HuaweiAuthFailureReason? = null,
+    val isHuaweiPendingApproval: Boolean = false,
     val isSyncing: Boolean = false,
     val syncStatus: String = "sync_status_idle",
     val lastSyncTime: String = "sync_no_data"
@@ -51,7 +50,7 @@ class SyncViewModel(
                     hasGooglePermissions = hasPerms,
                     needsPermissionRefresh = isAvailable && !hasPerms,
                     isHuaweiAuthorized = huaweiHealthManager.isAuthorized(),
-                    lastHuaweiAuthFailureReason = huaweiHealthManager.lastAuthFailureReason(),
+                    isHuaweiPendingApproval = huaweiHealthManager.isPendingApproval(),
                     lastSyncTime = savedTime
                 )
             }
@@ -62,7 +61,6 @@ class SyncViewModel(
         _uiState.update {
             it.copy(
                 isHuaweiAuthorized = success,
-                lastHuaweiAuthFailureReason = if (success) null else huaweiHealthManager.lastAuthFailureReason(),
                 syncStatus = if (success) "sync_status_success" else "sync_status_error"
             )
         }

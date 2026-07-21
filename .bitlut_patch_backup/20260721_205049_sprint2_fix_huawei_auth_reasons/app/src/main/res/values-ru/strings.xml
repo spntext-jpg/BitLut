@@ -124,7 +124,7 @@
     <string name="manual_sync">Ручная синхронизация</string>
     <string name="manual_sync_body">Запустить синхронизацию Huawei Health в Health Connect сейчас.</string>
     <string name="toast_huawei_connected">Huawei Health подключён.</string>
-    <string name="toast_huawei_failed">Не удалось подключиться к Huawei Health. Подробности в настройках.</string>
+    <string name="toast_huawei_pending">Huawei Health Kit пока не подтвердил доступ. Проверьте статус согласования.</string>
     <string name="toast_huawei_health_missing">Установите Huawei Health и войдите в аккаунт.</string>
     <string name="toast_huawei_start_failed">Не удалось открыть авторизацию Huawei Health.</string>
     <string name="last_sync_never">Синхронизации ещё не было</string>
@@ -158,15 +158,6 @@
     <string name="huawei_health_title">Huawei Health</string>
     <string name="huawei_pending_approval_title">Ждём подтверждения от Huawei</string>
     <string name="huawei_pending_approval_body">Это не ошибка. Huawei проверяет запрос на доступ к данным у каждого приложения, прежде чем синхронизация сможет заработать — это может занять несколько дней. BitLut заработает автоматически, как только заявка будет одобрена, делать ничего не нужно.</string>
-    <string name="huawei_reason_privacy_not_accepted_title">Примите условия конфиденциальности Huawei Health</string>
-    <string name="huawei_reason_privacy_not_accepted_body">Откройте Huawei Health, примите условия конфиденциальности, затем попробуйте подключиться снова.</string>
-    <string name="huawei_reason_cert_mismatch_title">Проблема с сертификатом</string>
-    <string name="huawei_reason_cert_mismatch_body">Huawei Health Kit отклоняет сертификат подписи этого приложения. Обычно это значит, что SHA-256 отпечаток, зарегистрированный в AppGallery Connect, не совпадает с тем, каким на самом деле подписана эта сборка — например, если функция Huawei "App Signing" переподписывает релизные сборки другим сертификатом, отличным от зарегистрированного для Health Kit. Это нужно исправить в AppGallery Connect, а не в самом приложении.</string>
-    <string name="huawei_reason_invalid_config_title">Проблема с конфигурацией</string>
-    <string name="huawei_reason_invalid_config_body">Huawei Health Kit не распознал конфигурацию этого приложения (App ID, имя пакета или agconnect-services.json). Это нужно исправить в AppGallery Connect, а не в самом приложении.</string>
-    <string name="huawei_reason_unknown_title">Не удалось подключиться к Huawei Health</string>
-    <string name="huawei_reason_unknown_body">Что-то помешало Huawei Health Kit авторизовать это приложение. Проверьте код ошибки в просмотрщике логов внутри приложения или попробуйте позже.</string>
-    <string name="huawei_retry_connect">Попробовать снова</string>
     <string name="manual_sync_title">Ручная синхронизация</string>
     <string name="import_archive_title">Импорт архива</string>
     <string name="import_archive_selected">Архив Huawei Health выбран</string>
