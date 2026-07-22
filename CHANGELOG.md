@@ -1,5 +1,143 @@
 # Changelog
 
+## 2026-07-18 -- Huawei auth failure reasons + retry button (post-AppGallery-rejection)
+
+Triggered by a real AppGallery review rejection: "does not collect to
+Huawei Health successfully." The test evidence quoted was BitLut's own
+`toast_huawei_pending` string, confirmed via exact text match -- meaning
+the reviewer hit the same 50005 wall real devices had shown for weeks, with
+no way to tell from that one message which of 5 different HMS failure
+codes was actually in play (all 5 triggered the identical toast).
+
+- Added `HuaweiAuthFailureReason` enum (`SCOPE_PENDING_APPROVAL`,
+  `PRIVACY_NOT_ACCEPTED`, `CERTIFICATE_MISMATCH`, `INVALID_CONFIGURATION`,
+  `UNKNOWN`) to `HealthDataContracts.kt`, plus `lastAuthFailureReason()` on
+  `HuaweiHealthReader`.
+- `HuaweiHealthManager.handleAuthorizationResult()` now classifies and
+  persists the specific reason via a new `classifyFailure()` mapping (HMS
+  codes 50005/50011/907135702/6003/907135000 -> the enum above), separately
+  from the pre-existing `isAuthorized()`/`isPendingApproval()` booleans.
+- Generalized the Settings screen's single 50005-only explanation card
+  (`HuaweiPendingApprovalCard`) into `HuaweiAuthIssueCard`, which shows the
+  right explanation for whichever of the 5 reasons actually happened --
+  previously the other 4 cases showed nothing at all in Settings, just the
+  same generic toast.
+- Added a "Try connecting again" retry button on the card, shown only for
+  `SCOPE_PENDING_APPROVAL` and `PRIVACY_NOT_ACCEPTED` (the two reasons a
+  fresh attempt can plausibly fix) -- deliberately not shown for
+  `CERTIFICATE_MISMATCH`/`INVALID_CONFIGURATION`, which need an AppGallery
+  Connect-side fix first and would just fail the same way again.
+- Replaced the old generic `toast_huawei_pending` toast (now dead, deleted)
+  with `toast_huawei_failed`, which points to Settings for the specific
+  explanation instead of trying to cram reason-specific detail into a
+  fleeting Toast.
+- Added `huawei_reason_*_title`/`_body` string resources for the 4
+  previously-unhandled reasons, plus `huawei_retry_connect`, in both
+  `values/strings.xml` and `values-ru/strings.xml`.
+- Removed the now-dead `SyncUiState.isHuaweiPendingApproval` boolean field
+  (fully superseded by `lastHuaweiAuthFailureReason`, confirmed zero
+  remaining reads via grep) and its population in `refreshStatuses()`.
+
+Separately: while this fix was in progress, Huawei approved BitLut's
+Health Kit scope application at the app level (App ID 117824685). Device
+logs taken immediately after still showed `localHuaweiAuthorized=false`/
+50005 -- expected, not a regression, since that's a locally-cached flag
+from the last real OAuth attempt, decoupled from the server-side approval
+(see CLAUDE.md Gotcha 12). The new retry button exists specifically to
+make the next required action -- a fresh authorization attempt -- obvious,
+since Huawei's approval notification arrives outside the app entirely and
+BitLut has no way to detect it on its own.
+
+## 2026-07-16 -- two real-device hotfixes: widget colors, edge-to-edge insets, widget stuck while pending
+
+Two separate real-device reports after the 2026-07-14 sprint below shipped,
+each root-caused from device logs/screenshots rather than guessed.
+
+**Widget colors (`Gradle compileDebugKotlin` failure, caught before commit)**
+- `ColorProvider(day = Color(...), night = Color(...))` does not exist in
+  `glance-appwidget:1.1.1` -- only `ColorProvider(color: Color)` and
+  `ColorProvider(resId: Int)` do (see CLAUDE.md Gotcha 9). Switched
+  `widget/HomeWidget.kt` to resource-qualified colors instead: added
+  `widget_card`/`widget_text`/`widget_secondary_text` to both
+  `values/colors.xml` (light) and a new `values-night/colors.xml` (dark).
+
+**Edge-to-edge inset regression ("Copy button half covered" in Log Viewer)**
+- `PermissionsOnboardingScreen` and `LogViewerScreen` both render as
+  siblings of the main `Scaffold`, not through its content slot, so they
+  never got the Scaffold's automatic safe-area inset padding -- invisible
+  before `enableEdgeToEdge()`, a real visible bug the moment it shipped
+  (see CLAUDE.md Gotcha 10). Fixed with `.statusBarsPadding()`/
+  `.navigationBarsPadding()` on both screens' root `Box`. The 2026-07-14
+  sprint's own new `DataScopesScreen` was unaffected -- it renders inside
+  `SettingsScreen`, inside the Scaffold's own padding.
+
+**Home screen widget stuck showing nothing while Huawei stayed pending**
+- `SyncWorker` only ever called `refreshDashboardCacheAfterWrite()` (the
+  function the widget's data ultimately comes from) deep inside the
+  Huawei-sync-succeeded branch. While Huawei was pending -- true for weeks
+  -- that branch was never reached, so the widget stayed stuck indefinitely
+  even though Health Connect could already contain real data from other
+  apps regardless of Huawei's state (see CLAUDE.md Gotcha 11). Fixed by
+  calling the refresh on the `isPendingApproval()` and
+  `!localHuaweiAuthorized` graceful-no-op paths too.
+- Investigated but deliberately did NOT change: a separately reported
+  "sync only works after opening Google Fit first" symptom. Traced
+  `DashboardViewModel.load()`'s live `readDashboardSnapshot()` call and
+  confirmed it does not depend on Huawei's auth state at all -- with
+  Huawei still blocked at the time, BitLut could not have been writing the
+  data being seen, so it was very likely coming from another app (Google
+  Fit) that may only push to Health Connect when opened. Not a BitLut bug
+  as far as the evidence showed; worth re-checking once Huawei sync is
+  actually live and BitLut itself is writing on its own schedule.
+
+## 2026-07-14 -- Sprint 2: edge-to-edge/predictive back, trust screen, Huawei pending-approval card, CSV export, home screen widget
+
+Delivered as two scripts: Part 1 (no new Gradle dependency) and Part 2 (the
+home screen widget, which adds `androidx.glance:glance-appwidget:1.1.1`),
+kept separate specifically so a problem in the higher-risk widget piece
+wouldn't block the other four.
+
+**Edge-to-edge + predictive back**
+- `MainActivity.onCreate()` now calls `enableEdgeToEdge()` before
+  `setContent`. `AndroidManifest.xml`'s `<application>` tag gained
+  `android:enableOnBackInvokedCallback="true"` for the predictive back
+  gesture. targetSdk stayed at 35 (not bumped to 36) since the current AGP
+  version doesn't support compileSdk 36.
+
+**"What data is shared" trust screen**
+- New `DataScopesScreen` composable, reachable any time from a link in
+  Settings (not a one-time onboarding step) -- lists the actual 5 Huawei
+  Health Kit scopes BitLut requests, matching `requestedScopeNames()`
+  verbatim in substance, plus a one-line statement that everything goes to
+  Google Health Connect on-device and nowhere else. Answers the most common
+  complaint pattern in reviews of similar sync apps: "I don't understand
+  what's being synced where."
+
+**Huawei pending-approval status card**
+- `SyncUiState` gained `isHuaweiPendingApproval`; a new
+  `HuaweiPendingApprovalCard` in Settings explains the 50005 wait state in
+  plain language instead of a silent no-op degrade, so a new install
+  doesn't read "no data" as "broken." (Generalized into
+  `HuaweiAuthIssueCard` on 2026-07-18 above -- this card's specific name
+  and single-reason scope no longer exist as of that date.)
+
+**CSV export**
+- New `util/CsvExporter.kt`: writes daily totals (`GoogleHealthManager.
+  readDailyTotals()`, added alongside it, same raw-records-not-aggregate
+  pattern as the dashboard) plus recent workouts to a CSV in `cacheDir/
+  export/`, handed off via a new `FileProvider` (`res/xml/file_paths.xml`)
+  to the system share sheet. Reachable from a link in Settings.
+
+**Home screen widget (Jetpack Glance)**
+- New `widget/HomeWidget.kt` + `HomeWidgetReceiver`: one tile, today's
+  steps + last-sync time, tap anywhere enqueues the same
+  `BackgroundSyncScheduler.enqueueImmediateSync` work request the Settings
+  "Sync now" button uses. Reads `DashboardSnapshotCache` only, never Health
+  Connect directly, so `provideGlance()` stays cheap. New
+  `res/xml/home_widget_info.xml` provider info (2x1 cell, 30-minute
+  fallback `updatePeriodMillis`, real refresh driven by `SyncWorker`
+  calling `updateAll()` after every successful cache write).
+
 ## 2026-07-14 -- full removal sprint: sleep/HR/SpO2/stress + History deleted outright
 
 Follow-up to the 2026-07-10 series. That sprint removed History from the
