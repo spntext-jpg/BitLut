@@ -1,14 +1,18 @@
 package com.openhealth.sync
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -25,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 /**
  * Hidden diagnostic log viewer trigger: 5 taps on the Settings nav icon
@@ -179,6 +185,10 @@ private val WarmRefreshOrange = Color(0xFFFF8A34)
 @Composable
 private fun Glass20RefreshButton(onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scope = rememberCoroutineScope()
+    val iconRotation = remember { Animatable(0f) }
+    val iconBounce = remember { Animatable(1f) }
     val shape = remember { RoundedCornerShape(30.dp) }
     val brush = remember {
         Brush.linearGradient(
@@ -188,16 +198,55 @@ private fun Glass20RefreshButton(onClick: () -> Unit) {
     val glowColors = remember {
         listOf(Color.White.copy(alpha = 0.30f), Color.Transparent)
     }
+    val buttonScale by animateFloatAsState(
+        targetValue = if (pressed) 0.86f else 1f,
+        animationSpec = spring(
+            dampingRatio = if (pressed) Spring.DampingRatioNoBouncy else Spring.DampingRatioMediumBouncy,
+            stiffness = if (pressed) Spring.StiffnessHigh else Spring.StiffnessMedium
+        ),
+        label = "refreshButtonBounce"
+    )
+    val elevation by animateDpAsState(
+        targetValue = if (pressed) 7.dp else 16.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "refreshButtonElevation"
+    )
+
+    fun runRefreshMotion() {
+        scope.launch {
+            iconBounce.snapTo(0.72f)
+            iconBounce.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
+        }
+        scope.launch {
+            val start = iconRotation.value % 360f
+            iconRotation.snapTo(start)
+            iconRotation.animateTo(
+                targetValue = start + 360f,
+                animationSpec = tween(durationMillis = 620, easing = FastOutSlowInEasing)
+            )
+        }
+        onClick()
+    }
+
     Box(
         modifier = Modifier
             .size(66.dp)
+            .graphicsLayer {
+                scaleX = buttonScale
+                scaleY = buttonScale
+            }
             .shadow(
-                elevation = 16.dp,
+                elevation = elevation,
                 shape = shape,
                 ambientColor = WarmRefreshOrange.copy(alpha = 0.40f),
                 spotColor = WarmRefreshOrange.copy(alpha = 0.55f)
             )
-            .pressScale(interactionSource)
             .clip(shape)
             .background(brush)
             .drawBehind {
@@ -213,7 +262,7 @@ private fun Glass20RefreshButton(onClick: () -> Unit) {
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick
+                onClick = ::runRefreshMotion
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -221,7 +270,14 @@ private fun Glass20RefreshButton(onClick: () -> Unit) {
             imageVector = Icons.Rounded.Refresh,
             contentDescription = null,
             tint = Color.White,
-            modifier = Modifier.size(30.dp)
+            modifier = Modifier
+                .size(30.dp)
+                .graphicsLayer {
+                    val pressedScale = if (pressed) 0.86f else 1f
+                    scaleX = iconBounce.value * pressedScale
+                    scaleY = iconBounce.value * pressedScale
+                    rotationZ = iconRotation.value
+                }
         )
     }
 }
@@ -234,18 +290,16 @@ private fun Glass20NavButton(
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scope = rememberCoroutineScope()
+    val iconBounce = remember { Animatable(1f) }
+    val iconTilt = remember { Animatable(0f) }
     val shape = remember { RoundedCornerShape(26.dp) }
     val selectedHighlightShape = remember { RoundedCornerShape(99.dp) }
     val iconTint by animateColorAsState(
         targetValue = if (selected) Color.White else palette.secondaryText.copy(alpha = 0.84f),
         label = "glass20NavIconTint"
     )
-    // Animated: was a hard `if (selected) 27.dp else 24.dp` snap with no
-    // transition -- every other state change in this button (tint, scale,
-    // glow) animates smoothly, so the icon instantly jumping 3dp on tab
-    // switch was the one visibly "cheap" moment. Same spring profile as the
-    // button's own selection [scale] below, so both animations read as one
-    // coordinated motion.
     val iconSize by animateDpAsState(
         targetValue = if (selected) 27.dp else 24.dp,
         animationSpec = spring(
@@ -254,13 +308,39 @@ private fun Glass20NavButton(
         ),
         label = "glass20NavIconSize"
     )
-    val scale by animateFloatAsState(
-        targetValue = if (selected) 1.0f else 0.94f,
+    val buttonScale by animateFloatAsState(
+        targetValue = when {
+            pressed -> 0.86f
+            selected -> 1.02f
+            else -> 0.94f
+        },
+        animationSpec = spring(
+            dampingRatio = if (pressed) Spring.DampingRatioNoBouncy else Spring.DampingRatioMediumBouncy,
+            stiffness = if (pressed) Spring.StiffnessHigh else Spring.StiffnessMedium
+        ),
+        label = "glass20NavButtonBounce"
+    )
+    val elevation by animateDpAsState(
+        targetValue = when {
+            pressed -> 1.dp
+            selected -> 9.dp
+            else -> 3.dp
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "glass20NavElevation"
+    )
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (selected) 18.dp else 0.dp,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
+            stiffness = Spring.StiffnessMedium
         ),
-        label = "glass20NavScale"
+        label = "glass20NavIndicatorWidth"
+    )
+    val indicatorAlpha by animateFloatAsState(
+        targetValue = if (selected) 0.78f else 0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "glass20NavIndicatorAlpha"
     )
     val selectedBrush = remember(palette.activity, palette.mind) {
         Brush.linearGradient(
@@ -282,14 +362,45 @@ private fun Glass20NavButton(
     val selectedGlowColors = remember {
         listOf(Color.White.copy(alpha = 0.34f), Color.Transparent)
     }
+
+    fun runTabMotion() {
+        scope.launch {
+            iconBounce.snapTo(0.74f)
+            iconBounce.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
+        }
+        scope.launch {
+            iconTilt.snapTo(if (tab == MainTab.Today) -13f else 13f)
+            iconTilt.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
+        }
+        onClick()
+    }
+
     Box(
         modifier = Modifier
             .size(54.dp)
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                scaleX = buttonScale
+                scaleY = buttonScale
+                translationY = if (selected && !pressed) -2f else 0f
             }
-            .pressScale(interactionSource)
+            .shadow(
+                elevation = elevation,
+                shape = shape,
+                ambientColor = palette.activity.copy(alpha = if (selected) 0.22f else 0.06f),
+                spotColor = palette.mind.copy(alpha = if (selected) 0.18f else 0.04f)
+            )
             .clip(shape)
             .background(if (selected) selectedBrush else idleBrush)
             .drawBehind {
@@ -315,7 +426,7 @@ private fun Glass20NavButton(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick
+                onClick = ::runTabMotion
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -323,17 +434,24 @@ private fun Glass20NavButton(
             imageVector = tab.icon,
             contentDescription = null,
             tint = iconTint,
-            modifier = Modifier.size(iconSize)
+            modifier = Modifier
+                .size(iconSize)
+                .graphicsLayer {
+                    val pressedScale = if (pressed) 0.86f else 1f
+                    scaleX = iconBounce.value * pressedScale
+                    scaleY = iconBounce.value * pressedScale
+                    rotationZ = iconTilt.value
+                    translationY = if (selected) -1.5f else 0f
+                }
         )
-        if (selected) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 6.dp)
-                    .size(width = 16.dp, height = 3.dp)
-                    .clip(selectedHighlightShape)
-                    .background(Color.White.copy(alpha = 0.72f))
-            )
-        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 6.dp)
+                .size(width = indicatorWidth, height = 3.dp)
+                .graphicsLayer { alpha = indicatorAlpha }
+                .clip(selectedHighlightShape)
+                .background(Color.White)
+        )
     }
 }
