@@ -194,6 +194,11 @@
     <string name="distance_short_title">Distance</string>
     <string name="insights_week_comparison_title">This week vs last week</string>
     <string name="insights_first_week">First tracked week</string>
+    <string name="dashboard_latest_workout">Latest workout</string>
+    <string name="dashboard_previous_workout">Previous workout</string>
+    <string name="dashboard_workout_empty_latest">Your latest imported workout will appear here.</string>
+    <string name="dashboard_workout_empty_previous">A second recent workout will appear here.</string>
+    <string name="dashboard_records_empty">Personal records will appear after the first full day of activity.</string>
     <string name="insights_personal_records_title">Personal records</string>
     <string name="insights_new_record_badge">NEW</string>
     <string name="insights_streak_subtitle">Days hitting %1$s steps</string>

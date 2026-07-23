@@ -524,9 +524,12 @@ class GoogleHealthManager(
                 stepsToday = stepsToday,
                 distanceMeters = distanceMeters,
                 caloriesKcal = caloriesKcal,
-                workoutMinutesToday = readWorkoutMinutesToday(),
-                activeHoursToday = readActiveHoursToday(),
-                recentWorkouts = readRecentWorkouts(5)
+                // These two totals no longer have reachable Dashboard cards.
+                // Keep the serialized fields for backward compatibility, but do
+                // not spend two Health Connect reads on invisible information.
+                workoutMinutesToday = 0L,
+                activeHoursToday = 0,
+                recentWorkouts = readRecentWorkouts(2)
             )
         } catch (e: CancellationException) {
             throw e

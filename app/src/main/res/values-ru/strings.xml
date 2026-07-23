@@ -194,6 +194,11 @@
     <string name="distance_short_title">Дистанция</string>
     <string name="insights_week_comparison_title">Эта неделя vs прошлая</string>
     <string name="insights_first_week">Первая неделя трекинга</string>
+    <string name="dashboard_latest_workout">Последняя тренировка</string>
+    <string name="dashboard_previous_workout">Предпоследняя тренировка</string>
+    <string name="dashboard_workout_empty_latest">Здесь появится последняя импортированная тренировка.</string>
+    <string name="dashboard_workout_empty_previous">Здесь появится предпоследняя тренировка.</string>
+    <string name="dashboard_records_empty">Личные рекорды появятся после первого полного дня активности.</string>
     <string name="insights_personal_records_title">Личные рекорды</string>
     <string name="insights_new_record_badge">НОВЫЙ</string>
     <string name="insights_streak_subtitle">Дней с целью %1$s шагов</string>

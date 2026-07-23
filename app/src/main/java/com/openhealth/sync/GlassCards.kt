@@ -1,7 +1,13 @@
 package com.openhealth.sync
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -11,10 +17,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -37,9 +47,36 @@ internal fun SoftCard(
     accent: Color = palette.activity,
     hero: Boolean = false,
     tintWithAccent: Boolean = false,
+    pressLift: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = remember(hero) { RoundedCornerShape(if (hero) 34.dp else 28.dp) }
+    var pressed by remember { mutableStateOf(false) }
+    val lift by animateDpAsState(
+        targetValue = if (pressed) 5.dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "softCardLift"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 1.012f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "softCardScale"
+    )
+    val baseShadowElevation = if (hero) 36.dp else 24.dp
+    val shadowElevation by animateDpAsState(
+        targetValue = baseShadowElevation + if (pressed) 10.dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "softCardShadow"
+    )
     val targetCardColor = if (palette.dark) {
         lerp(palette.card, accent, if (hero || tintWithAccent) 0.12f else 0.07f)
     } else {
@@ -51,7 +88,10 @@ internal fun SoftCard(
         // accent hue actually perceptible instead of nearly invisible.
         lerp(palette.card, accent, if (hero || tintWithAccent) 0.085f else 0.05f)
     }
-    val bg by animateColorAsState(targetCardColor, label = "glass20CardBg")
+    val bg by animateColorAsState(
+        targetValue = if (pressed) lerp(targetCardColor, accent, if (palette.dark) 0.035f else 0.025f) else targetCardColor,
+        label = "glass20CardBg"
+    )
     val backgroundBrush = remember(bg, palette.systemBackground, palette.dark) {
         Brush.linearGradient(
             listOf(
@@ -67,11 +107,34 @@ internal fun SoftCard(
     val mindGlowColors = remember(palette.mind, hero, palette.dark) {
         listOf(palette.mind.copy(alpha = if (hero) (if (palette.dark) 0.14f else 0.10f) else (if (palette.dark) 0.08f else 0.06f)), Color.Transparent)
     }
+    val pressModifier = if (pressLift) {
+        Modifier.pointerInput(Unit) {
+            awaitEachGesture {
+                try {
+                    awaitFirstDown(requireUnconsumed = false)
+                    pressed = true
+                    do {
+                        val event = awaitPointerEvent()
+                    } while (event.changes.any { it.pressed })
+                } finally {
+                    pressed = false
+                }
+            }
+        }
+    } else {
+        Modifier
+    }
 
     Column(
         modifier = modifier
+            .then(pressModifier)
+            .graphicsLayer {
+                translationY = -lift.toPx()
+                scaleX = scale
+                scaleY = scale
+            }
             .shadow(
-                elevation = if (hero) 36.dp else 24.dp,
+                elevation = shadowElevation,
                 shape = shape,
                 // Light-theme shadow strengthened from a near-invisible 0.06f
                 // pure-black ambient to a warm slate tone with real presence,
@@ -113,3 +176,4 @@ internal fun SoftCard(
         content = content
     )
 }
+

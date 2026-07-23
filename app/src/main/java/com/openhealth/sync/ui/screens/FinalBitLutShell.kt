@@ -477,120 +477,212 @@ private fun SummaryScreen(
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit
 ) {
-    // Sprint (2026-07-08): fixed, non-scrolling layout with exactly the 5
-    // widgets that map to our current Huawei Health Kit scope: steps today,
-    // workout time today, personal records, streak, and the last imported
-    // workout. The calories/workout-minutes/active-hours mini-grid and the
-    // week-over-week comparison card moved off this screen so it fits one
-    // viewport without scrolling.
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+    // The dashboard is intentionally a short, stable hierarchy: today's
+    // movement, the two most recent workouts, then all-time records. A
+    // LazyColumn keeps the premium spacing intact on smaller devices and with
+    // larger accessibility fonts instead of squeezing cards into one viewport.
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        MinimalHeader(
-            palette = palette,
-            title = stringResource(R.string.summary_short_title),
-            subtitle = formatUpdatedAgo(state.lastUpdatedAtMs, state.isFromCache)
-        )
-
-        if (state.showConnectLockScreen) {
-            MinimalMetricCard(
+        item {
+            MinimalHeader(
                 palette = palette,
-                title = stringResource(R.string.connect_google_title),
-                value = stringResource(R.string.no_data_short),
-                unit = stringResource(R.string.connect_google_button),
-                accent = HealthAccent.mind,
-                icon = Icons.Rounded.Cloud,
-                onClick = onRequestGoogle
+                title = stringResource(R.string.summary_short_title),
+                subtitle = formatUpdatedAgo(state.lastUpdatedAtMs, state.isFromCache)
             )
-        } else if (state.isLoading && state.stepsToday == 0L && state.recentWorkouts.isEmpty()) {
-            // First-ever launch on this device, with no cached snapshot yet and no
-            // confirmed permission result either way. Show a neutral loading state
-            // instead of either real (zero) numbers or the "Connect Google Health"
-            // lock screen, which would be misleading this early.
-            DashboardLoadingCard(palette = palette)
-        } else {
-            MinimalMetricCard(
-                palette = palette,
-                title = stringResource(R.string.steps_today),
-                value = formatNumber(state.stepsToday),
-                unit = "${stringResource(R.string.steps_unit)} · ${stringResource(R.string.distance_today_value, formatOneDecimal(state.distanceMeters / 1000.0))} · ${stringResource(R.string.dashboard_pct_goal, (state.stepsProgress * 100).toInt())}",
-                accent = HealthAccent.activity,
-                progress = state.stepsProgress
-            )
+        }
 
-            MiniMetricWidget(
-                palette = palette,
-                title = stringResource(R.string.workout_minutes_title),
-                value = "${state.workoutMinutesToday}",
-                unit = stringResource(R.string.minutes_short),
-                accent = HealthAccent.activity,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            if (state.bestStepsDay != null || state.bestDistanceDay != null) {
-                PersonalRecordsCard(
+        when {
+            state.showConnectLockScreen -> item {
+                MinimalMetricCard(
                     palette = palette,
-                    bestStepsDay = state.bestStepsDay,
-                    bestDistanceDay = state.bestDistanceDay,
-                    isStepsRecordToday = state.isStepsRecordToday
+                    title = stringResource(R.string.connect_google_title),
+                    value = stringResource(R.string.no_data_short),
+                    unit = stringResource(R.string.connect_google_button),
+                    accent = HealthAccent.mind,
+                    icon = Icons.Rounded.Cloud,
+                    onClick = onRequestGoogle
                 )
             }
-            if (state.streak.currentStreakDays > 0 || state.streak.longestStreakDays > 0) {
-                StreakCard(palette = palette, streak = state.streak, stepsGoal = state.stepsGoal)
+
+            state.isLoading && state.stepsToday == 0L && state.recentWorkouts.isEmpty() -> item {
+                DashboardLoadingCard(palette = palette)
             }
-            state.recentWorkouts.firstOrNull()?.let { lastWorkout ->
-                LastWorkoutCard(palette = palette, session = lastWorkout)
+
+            else -> {
+                item {
+                    MinimalMetricCard(
+                        palette = palette,
+                        title = stringResource(R.string.steps_today),
+                        value = formatNumber(state.stepsToday),
+                        unit = "${stringResource(R.string.steps_unit)} · ${stringResource(R.string.distance_today_value, formatOneDecimal(state.distanceMeters / 1000.0))} · ${stringResource(R.string.dashboard_pct_goal, (state.stepsProgress * 100).toInt())}",
+                        accent = HealthAccent.activity,
+                        progress = state.stepsProgress,
+                        hero = true,
+                        pressLift = true
+                    )
+                }
+
+                item {
+                    WorkoutRecencyCard(
+                        palette = palette,
+                        label = stringResource(R.string.dashboard_latest_workout),
+                        emptyText = stringResource(R.string.dashboard_workout_empty_latest),
+                        position = 1,
+                        session = state.recentWorkouts.getOrNull(0),
+                        accent = HealthAccent.mind
+                    )
+                }
+
+                item {
+                    WorkoutRecencyCard(
+                        palette = palette,
+                        label = stringResource(R.string.dashboard_previous_workout),
+                        emptyText = stringResource(R.string.dashboard_workout_empty_previous),
+                        position = 2,
+                        session = state.recentWorkouts.getOrNull(1),
+                        accent = HealthAccent.violet
+                    )
+                }
+
+                item {
+                    PersonalRecordsCard(
+                        palette = palette,
+                        bestStepsDay = state.bestStepsDay,
+                        bestDistanceDay = state.bestDistanceDay,
+                        isStepsRecordToday = state.isStepsRecordToday
+                    )
+                }
             }
         }
     }
 }
 
 /**
- * Last imported workout (sprint 2026-07-08). state.recentWorkouts is already
- * sorted most-recent-first by GoogleHealthManager.readRecentWorkouts, so the
- * first entry is exactly "the last imported workout".
+ * Premium summary of one of the two most recent exercise sessions. Health
+ * Connect exposes the session title/type and start/end timestamps here; the
+ * card deliberately does not invent distance or calories that are not linked
+ * to the session by the current data model.
  */
 @Composable
-private fun LastWorkoutCard(palette: BitPalette, session: ActivitySessionData) {
-    val durationMinutes = ((session.endTimeMs - session.startTimeMs) / 60_000L).coerceAtLeast(0L)
-    SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
+private fun WorkoutRecencyCard(
+    palette: BitPalette,
+    label: String,
+    emptyText: String,
+    position: Int,
+    session: ActivitySessionData?,
+    accent: Color
+) {
+    val durationMinutes = session?.let {
+        ((it.endTimeMs - it.startTimeMs) / 60_000L).coerceAtLeast(0L)
+    }
+
+    SoftCard(
+        palette = palette,
+        accent = accent,
+        hero = false,
+        tintWithAccent = true,
+        pressLift = true
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Rounded.DirectionsRun, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(accent.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.DirectionsRun,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = label.uppercase(Locale.getDefault()),
+                        color = palette.secondaryText,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(accent.copy(alpha = 0.14f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "#$position",
+                            color = accent,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+                Spacer(Modifier.height(7.dp))
                 Text(
-                    text = session.title,
+                    text = session?.title ?: stringResource(R.string.no_workouts),
                     color = palette.text,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 17.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                formatUpdatedAgo(session.startTimeMs, isFromCache = false)?.let { agoText ->
+                Spacer(Modifier.height(5.dp))
+                if (session != null && durationMinutes != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = formatWorkoutDateTime(session.startTimeMs),
+                            color = palette.secondaryText,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.workout_total_minutes, durationMinutes),
+                            color = accent,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 12.sp,
+                            maxLines = 1
+                        )
+                    }
+                } else {
                     Text(
-                        text = agoText,
+                        text = emptyText,
                         color = palette.secondaryText,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
                     )
                 }
             }
-            Text(
-                text = stringResource(R.string.workout_total_minutes, durationMinutes),
-                color = HealthAccent.activity,
-                fontWeight = FontWeight.Black,
-                fontSize = 14.sp,
-                maxLines = 1
-            )
         }
     }
 }
+
+private fun formatWorkoutDateTime(epochMs: Long): String =
+    java.time.Instant.ofEpochMilli(epochMs)
+        .atZone(java.time.ZoneId.systemDefault())
+        .format(
+            java.time.format.DateTimeFormatter.ofPattern(
+                "d MMM · HH:mm",
+                Locale.getDefault()
+            )
+        )
 
 @Composable
 private fun DashboardWidgetGrid(
@@ -742,18 +834,36 @@ private fun PersonalRecordsCard(
     bestDistanceDay: PersonalRecord?,
     isStepsRecordToday: Boolean
 ) {
-    SoftCard(palette = palette, accent = HealthAccent.activity, tintWithAccent = true) {
+    SoftCard(
+        palette = palette,
+        accent = HealthAccent.activity,
+        tintWithAccent = true,
+        pressLift = true
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.EmojiEvents, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(HealthAccent.activity.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.EmojiEvents,
+                    contentDescription = null,
+                    tint = HealthAccent.activity,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(Modifier.width(10.dp))
             Text(
                 text = stringResource(R.string.insights_personal_records_title),
                 color = palette.text,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 16.sp,
+                modifier = Modifier.weight(1f)
             )
             if (isStepsRecordToday) {
-                Spacer(Modifier.width(8.dp))
                 Box(
                     modifier = Modifier
                         .background(HealthAccent.activity.copy(alpha = 0.18f), shape = RoundedCornerShape(20.dp))
@@ -768,28 +878,38 @@ private fun PersonalRecordsCard(
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            if (bestStepsDay != null) {
-                RecordStat(
-                    modifier = Modifier.weight(1f),
-                    palette = palette,
-                    label = stringResource(R.string.steps_today),
-                    value = formatNumber(bestStepsDay.value.toLong()),
-                    date = bestStepsDay.date
-                )
-            }
-            if (bestDistanceDay != null) {
-                RecordStat(
-                    modifier = Modifier.weight(1f),
-                    palette = palette,
-                    label = stringResource(R.string.distance_short_title),
-                    value = stringResource(R.string.distance_today_value, formatOneDecimal(bestDistanceDay.value / 1000.0)),
-                    date = bestDistanceDay.date
-                )
+        Spacer(Modifier.height(14.dp))
+        if (bestStepsDay == null && bestDistanceDay == null) {
+            Text(
+                text = stringResource(R.string.dashboard_records_empty),
+                color = palette.secondaryText,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                lineHeight = 18.sp
+            )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (bestStepsDay != null) {
+                    RecordStat(
+                        modifier = Modifier.weight(1f),
+                        palette = palette,
+                        label = stringResource(R.string.steps_today),
+                        value = formatNumber(bestStepsDay.value.toLong()),
+                        date = bestStepsDay.date
+                    )
+                }
+                if (bestDistanceDay != null) {
+                    RecordStat(
+                        modifier = Modifier.weight(1f),
+                        palette = palette,
+                        label = stringResource(R.string.distance_short_title),
+                        value = stringResource(R.string.distance_today_value, formatOneDecimal(bestDistanceDay.value / 1000.0)),
+                        date = bestDistanceDay.date
+                    )
+                }
             }
         }
     }
@@ -1437,6 +1557,8 @@ private fun MinimalMetricCard(
     accent: Color,
     progress: Float? = null,
     icon: ImageVector? = null,
+    hero: Boolean = false,
+    pressLift: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -1448,7 +1570,14 @@ private fun MinimalMetricCard(
     } else {
         Modifier.fillMaxWidth()
     }
-    SoftCard(palette = palette, modifier = cardModifier, accent = accent, hero = false, tintWithAccent = true) {
+    SoftCard(
+        palette = palette,
+        modifier = cardModifier,
+        accent = accent,
+        hero = hero,
+        tintWithAccent = true,
+        pressLift = pressLift
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
