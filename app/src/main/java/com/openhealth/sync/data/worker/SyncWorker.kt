@@ -20,6 +20,7 @@ private const val TAG = "SyncWorker"
 private const val HUAWEI_SCOPE_UNAUTHORIZED = 50005
 private const val WORKER_TIMEOUT_MS = 9L * 60L * 1000L
 private const val LEASE_TTL_MS = 10L * 60L * 1000L
+private const val SYNC_INTEGRITY_BACKFILL_KEY = "sync_integrity_backfill_20260723"
 
 class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
     private val appContainer by lazy { (applicationContext as SyncApplication).container }
@@ -196,6 +197,18 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
         }
 
         val now = System.currentTimeMillis()
+        val needsIntegrityBackfill = !prefs.getBoolean(SYNC_INTEGRITY_BACKFILL_KEY, false)
+        if (needsIntegrityBackfill) {
+            // Older builds advanced last_sync_ms even when distance failed with
+            // "invalid UID". Reset once so the repaired idempotent writer gets
+            // a full catch-up window instead of only the normal overlap.
+            prefs.edit()
+                .putLong(HuaweiConfig.KEY_LAST_SYNC_MS, 0L)
+                .putBoolean(SYNC_INTEGRITY_BACKFILL_KEY, true)
+                .apply()
+            AppLogger.i(TAG, "Applied one-time sync integrity backfill cursor reset")
+        }
+
         prefs.edit()
             .putLong(HuaweiConfig.KEY_LAST_SYNC_ATTEMPT_MS, now)
             .apply()
@@ -240,25 +253,43 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE)
             }
 
-            if (!writeResult.allSucceeded) {
-                // Partial success: some categories wrote, others didn't. Advancing
-                // the cursor here is intentional -- the categories that failed will
-                // simply produce another (likely identical) attempt next cycle if
-                // they still have data, while the categories that succeeded must
-                // not be blocked from progressing by a sibling category that may
-                // be permanently unavailable on this device/firmware (e.g. floors
-                // on devices without a barometer). Writes are idempotent via
-                // clientRecordId, so retrying a successful category again later
-                // is always safe.
-                AppLogger.w(
+            val failedWithData = writeResult.failedCategories.filterTo(mutableSetOf()) { category ->
+                when (category) {
+                    "steps" -> snapshot.steps.isNotEmpty()
+                    "distance" -> snapshot.distances.isNotEmpty()
+                    "floors" -> snapshot.floors.isNotEmpty()
+                    "elevation" -> snapshot.elevations.isNotEmpty()
+                    "activeCalories" -> snapshot.activeCalories.isNotEmpty()
+                    "activitySessions" -> snapshot.activities.isNotEmpty()
+                    else -> true
+                }
+            }
+
+            if (failedWithData.isNotEmpty()) {
+                // Never advance the cursor past real source records that did
+                // not reach Health Connect. Stable client IDs make retrying the
+                // categories that already succeeded safe and idempotent.
+                AppLogger.e(
                     TAG,
-                    "Health Connect write partially succeeded: ok=${writeResult.succeededCategories.joinToString()} " +
-                        "failed=${writeResult.failedCategories.joinToString()}"
+                    "Health Connect rejected record-bearing categories; preserving cursor and retrying: " +
+                        failedWithData.joinToString()
                 )
                 SyncDiagnosticLog.record(
                     prefs,
-                    "write_partial",
-                    "ok=${writeResult.succeededCategories.joinToString()} failed=${writeResult.failedCategories.joinToString()}"
+                    "write_partial_retry",
+                    "failedWithData=${failedWithData.joinToString()}"
+                )
+                googleManager.invalidateClientCache()
+                val freshSnapshot = refreshDashboardCacheAfterWrite(googleManager)
+                updateAchievements(freshSnapshot)
+                return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE)
+            }
+
+            if (!writeResult.allSucceeded) {
+                AppLogger.w(
+                    TAG,
+                    "Health Connect reported failures only for categories with no source records: " +
+                        writeResult.failedCategories.joinToString()
                 )
             }
 

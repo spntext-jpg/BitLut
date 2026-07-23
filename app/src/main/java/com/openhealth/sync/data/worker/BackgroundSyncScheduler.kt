@@ -138,7 +138,12 @@ object BackgroundSyncScheduler {
 
         WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
             UNIQUE_SYNC_NOW,
-            ExistingWorkPolicy.REPLACE,
+            // REPLACE cancels a currently-running worker. That exact race was
+            // visible in the device log: a new foreground trigger cancelled
+            // the Huawei read after steps but before distance. Queue the new
+            // request behind the active one instead; if its prerequisite was
+            // cancelled/failed, APPEND_OR_REPLACE starts a fresh chain.
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
             request
         )
 

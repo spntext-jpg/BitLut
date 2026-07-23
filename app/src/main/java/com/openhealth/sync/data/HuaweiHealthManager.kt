@@ -1,7 +1,8 @@
 package com.openhealth.sync.data
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 import android.app.Activity
 import android.content.Context
@@ -15,6 +16,7 @@ import com.huawei.hms.hihealth.data.DataType
 import com.huawei.hms.hihealth.data.Field
 import com.huawei.hms.hihealth.data.SamplePoint
 import com.huawei.hms.hihealth.data.Scopes
+import com.huawei.hms.hihealth.options.ActivityRecordReadOptions
 import com.huawei.hms.hihealth.options.ReadOptions
 import com.huawei.hms.support.hwid.request.HuaweiIdAuthParamsHelper
 import com.huawei.hms.support.hwid.request.HuaweiIdAuthParams
@@ -25,6 +27,7 @@ import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.util.AppLogger
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 private const val TAG = "HuaweiHealthManager"
 
@@ -321,15 +324,29 @@ class HuaweiHealthManager(
         }
     }
 
-    private suspend fun readSteps(startTimeMs: Long, endTimeMs: Long): List<StepData> =
-        readPoints(DataType.DT_CONTINUOUS_STEPS_DELTA, startTimeMs, endTimeMs, "steps", dedupFields = listOf(Field.FIELD_STEPS))
-            .mapNotNull { point ->
-                val value = point.firstNumericValue(listOf(Field.FIELD_STEPS))?.toLong() ?: return@mapNotNull null
-                val start = point.getStartTime(TimeUnit.MILLISECONDS)
-                val end = point.getEndTime(TimeUnit.MILLISECONDS)
+    private suspend fun readSteps(startTimeMs: Long, endTimeMs: Long): List<StepData> {
+        // DT_CONTINUOUS_STEPS_DELTA stores the incremental count in
+        // FIELD_STEPS_DELTA. FIELD_STEPS belongs to the daily total type and
+        // made valid Huawei points map to zero on affected SDK/device builds.
+        val stepFields = fields("FIELD_STEPS_DELTA", "FIELD_STEPS")
+        if (stepFields.isEmpty()) {
+            return emptyListWithLog("steps", "Huawei SDK exposes no supported step field")
+        }
 
-                if (value > 0L && start < end) StepData(start, end, value) else null
-            }
+        return readPoints(
+            DataType.DT_CONTINUOUS_STEPS_DELTA,
+            startTimeMs,
+            endTimeMs,
+            "steps",
+            dedupFields = stepFields
+        ).mapNotNull { point ->
+            val value = point.firstNumericValue(stepFields)?.toLong() ?: return@mapNotNull null
+            val start = point.getStartTime(TimeUnit.MILLISECONDS)
+            val end = point.getEndTime(TimeUnit.MILLISECONDS)
+
+            if (value > 0L && start < end) StepData(start, end, value) else null
+        }
+    }
 
     private suspend fun readDistance(startTimeMs: Long, endTimeMs: Long): List<DistanceData> {
         val type = firstDataType(
@@ -429,51 +446,90 @@ class HuaweiHealthManager(
     }
 
     private suspend fun readActivitySessions(startTimeMs: Long, endTimeMs: Long): List<ActivitySessionData> {
-        val type = firstDataType(
-            "DT_CONTINUOUS_EXERCISE_INTENSITY",
-            "DT_CONTINUOUS_ACTIVITY_FRAGMENT",
-            "DT_INSTANTANEOUS_ACTIVITY_SAMPLE"
-        ) ?: return emptyListWithLog("activitySessions", "Huawei SDK does not expose a supported activity session DataType")
+        // Exercise records are not continuous intensity samples. Huawei's
+        // supported API for workouts is ActivityRecordsController, covered by
+        // the already-requested HEALTHKIT_ACTIVITY_RECORD_READ scope.
+        val options = ActivityRecordReadOptions.Builder()
+            .setTimeInterval(startTimeMs, endTimeMs, TimeUnit.MILLISECONDS)
+            .readActivityRecordsFromAllApps()
+            .build()
 
-        val fields = fields(
-            "FIELD_EXERCISE_INTENSITY",
-            "FIELD_ACTIVITY",
-            "FIELD_ACTIVITY_TYPE",
-            "FIELD_INTENSITY"
-        )
+        val reply = HuaweiHiHealth.getActivityRecordsController(context)
+            .getActivityRecord(options)
+            .awaitTask()
+        val records = reply.getActivityRecords().orEmpty()
 
-        val samples = readMetric(type, fields, startTimeMs, endTimeMs, "activitySessions")
-            .filter { it.value > 0.0 && it.startTimeMs < it.endTimeMs }
-            .sortedBy { it.startTimeMs }
+        AppLogger.i(TAG, "Huawei activity records read: ${records.size}")
 
-        if (samples.isEmpty()) return emptyList()
+        return records.mapNotNull { record ->
+            // ActivityRecord's accessor naming has changed across HMS SDK
+            // generations (activityType vs activityTypeId). Reflect only the
+            // model accessors while keeping the controller/options API typed.
+            val start = activityRecordTime(record, "getStartTime") ?: return@mapNotNull null
+            val end = activityRecordTime(record, "getEndTime") ?: return@mapNotNull null
+            if (start <= 0L || end <= start) return@mapNotNull null
 
-        val sessions = mutableListOf<ActivitySessionData>()
-        var sessionStart = samples.first().startTimeMs
-        var sessionEnd = samples.first().endTimeMs
+            val rawType = activityRecordString(record, "getActivityTypeId", "getActivityType")
+            val title = activityRecordString(record, "getName")
+                ?.takeIf { it.isNotBlank() }
+                ?: rawType?.replace('_', ' ')?.takeIf { it.isNotBlank() }
+                ?: "Huawei workout"
 
-        for (sample in samples.drop(1)) {
-            val gapMs = sample.startTimeMs - sessionEnd
-            if (gapMs <= ACTIVITY_SESSION_MAX_GAP_MS) {
-                sessionEnd = maxOf(sessionEnd, sample.endTimeMs)
-            } else {
-                addSessionIfValid(sessions, sessionStart, sessionEnd)
-                sessionStart = sample.startTimeMs
-                sessionEnd = sample.endTimeMs
-            }
-        }
-
-        addSessionIfValid(sessions, sessionStart, sessionEnd)
-        return sessions
+            ActivitySessionData(
+                startTimeMs = start,
+                endTimeMs = end,
+                title = title,
+                exerciseType = mapHuaweiExerciseType(rawType)
+            )
+        }.distinctBy { Triple(it.startTimeMs, it.endTimeMs, it.title) }
     }
 
-    private fun addSessionIfValid(
-        sessions: MutableList<ActivitySessionData>,
-        startTimeMs: Long,
-        endTimeMs: Long
-    ) {
-        if (endTimeMs - startTimeMs >= ACTIVITY_SESSION_MIN_DURATION_MS) {
-            sessions.add(ActivitySessionData(startTimeMs, endTimeMs, "Huawei activity"))
+    private fun activityRecordTime(record: Any, methodName: String): Long? =
+        try {
+            (record.javaClass
+                .getMethod(methodName, TimeUnit::class.java)
+                .invoke(record, TimeUnit.MILLISECONDS) as? Number)
+                ?.toLong()
+        } catch (_: Exception) {
+            null
+        }
+
+    private fun activityRecordString(record: Any, vararg methodNames: String): String? {
+        for (methodName in methodNames) {
+            val value = try {
+                record.javaClass.getMethod(methodName).invoke(record)
+            } catch (_: Exception) {
+                null
+            }
+            if (value != null) return value.toString()
+        }
+        return null
+    }
+
+    private fun mapHuaweiExerciseType(rawType: String?): Int {
+        // Resolve Health Connect constants by name so this activity-only app
+        // remains source-compatible across the alpha Health Connect client it
+        // currently ships with. WALKING is the safe compile-time fallback.
+        val normalized = rawType.orEmpty().lowercase()
+        val constantName = when {
+            "run" in normalized || "jog" in normalized -> "EXERCISE_TYPE_RUNNING"
+            "cycl" in normalized || "bike" in normalized -> "EXERCISE_TYPE_BIKING"
+            "swim" in normalized -> "EXERCISE_TYPE_SWIMMING_POOL"
+            "hik" in normalized || "climb" in normalized -> "EXERCISE_TYPE_HIKING"
+            "row" in normalized -> "EXERCISE_TYPE_ROWING_MACHINE"
+            "ellipt" in normalized -> "EXERCISE_TYPE_ELLIPTICAL"
+            "strength" in normalized || "weight" in normalized -> "EXERCISE_TYPE_STRENGTH_TRAINING"
+            "yoga" in normalized -> "EXERCISE_TYPE_YOGA"
+            "walk" in normalized -> "EXERCISE_TYPE_WALKING"
+            else -> "EXERCISE_TYPE_OTHER_WORKOUT"
+        }
+
+        return try {
+            androidx.health.connect.client.records.ExerciseSessionRecord::class.java
+                .getField(constantName)
+                .getInt(null)
+        } catch (_: Exception) {
+            androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_WALKING
         }
     }
 
@@ -519,6 +575,11 @@ class HuaweiHealthManager(
             val points = reply.sampleSets.flatMap { it.samplePoints }
             AppLogger.i(TAG, "Huawei $label read: ${points.size} points")
             points
+        } catch (e: CancellationException) {
+            // Never turn WorkManager/coroutine cancellation into an empty
+            // health snapshot. Propagate it so the worker releases its lease
+            // and does not advance the sync cursor with partial data.
+            throw e
         } catch (e: SecurityException) {
             AppLogger.e(TAG, "Huawei $label read denied. Missing approved scope or user authorization.", e)
             throw e
@@ -668,8 +729,15 @@ class HuaweiHealthManager(
 
     private suspend fun <T> Task<T>.awaitTask(): T =
         kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-            addOnSuccessListener { value -> cont.resume(value) }
-            addOnFailureListener { error -> cont.cancel(error) }
+            addOnSuccessListener { value ->
+                if (cont.isActive) cont.resume(value)
+            }
+            addOnFailureListener { error ->
+                // A failed HMS Task is an API failure, not coroutine
+                // cancellation. Preserve the original exception type so
+                // 50005 remains classifiable as a SecurityException.
+                if (cont.isActive) cont.resumeWithException(error)
+            }
         }
 
     /**

@@ -433,13 +433,12 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
 
         return try {
             records.chunked(WRITE_BATCH_SIZE).forEach { chunk ->
-                val clientRecordIds = chunk.mapNotNull { it.metadata.clientRecordId }
-                if (clientRecordIds.isNotEmpty()) {
-                    client.deleteRecords(recordType, emptyList(), clientRecordIds)
-                }
+                // insertRecords is an upsert when clientRecordId is stable and
+                // clientRecordVersion is newer. Deleting an ID before its first
+                // insert is what produced Health Connect's "invalid UID" error.
                 client.insertRecords(chunk)
             }
-            AppLogger.i(TAG, "Replaced ${records.size} $label records")
+            AppLogger.i(TAG, "Upserted ${records.size} $label records")
             true
         } catch (e: CancellationException) {
             throw e
@@ -854,7 +853,10 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
         endTimeMs: Long,
         discriminator: String = ""
     ): Metadata = Metadata(
-        clientRecordId = generateRecordId(type, startTimeMs, endTimeMs, discriminator)
+        clientRecordId = generateRecordId(type, startTimeMs, endTimeMs, discriminator),
+        // Version 1 supersedes records written by older BitLut builds, whose
+        // implicit version was 0, while preserving deterministic idempotency.
+        clientRecordVersion = 1L
     )
 
     private fun offset(instant: Instant): ZoneOffset = zoneRules.getOffset(instant)
