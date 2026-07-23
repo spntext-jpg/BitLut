@@ -27,326 +27,55 @@
 </p>
 
 <!-- BITLUT_STATUS:START -->
-## Текущий статус
+BitLut помогает переносить данные об активности из HUAWEI Health в Health Connect и просматривать их в удобном интерфейсе.
 
-_Этот блок поддерживается скриптом `update_readme_status.py` — перезапускайте его при смене статуса, не редактируйте руками между маркерами._
+Приложение предназначено для пользователей, которые хотят использовать данные HUAWEI Health в других приложениях, совместимых с Health Connect.
 
-**HUAWEI Health Kit:** заявка на scope одобрена Huawei на уровне приложения (App ID 117824685, одобрение получено 2026-07-18). Это **не значит**, что синк уже работает — `localHuaweiAuthorized` на устройстве это отдельный, локально закэшированный флаг с последней попытки авторизации, и он не обновляется автоматически при серверном одобрении. Реальный лог, снятый уже после одобрения, всё ещё показывал `localHuaweiAuthorized=false`/`50005` — это ожидаемо, а не регресс: нужно вручную нажать «Connect Huawei Health» (или новую кнопку «Попробовать снова» в Settings) ещё раз на реальном устройстве, чтобы подхватить одобрение. Если после этого снова 50005 в течение 1–2 дней — вероятно, дело в несовпадении сертификата (см. CLAUDE.md).
+Возможности BitLut
 
-**AppGallery review:** было одно отклонение (2026-07-18) с формулировкой «does not collect to Huawei Health successfully» — ревьюер увидел тот же обобщённый тост на 50005, что и разработчик неделями видел в логах. Причина найдена и исправлена: теперь 5 разных причин ошибки авторизации Huawei показывают разные, конкретные объяснения в Settings вместо одного общего сообщения. Перед повторной отправкой на ревью нужно подтвердить, что живое устройство успешно проходит авторизацию.
+• Импорт шагов и пройденного расстояния
+• Импорт поддерживаемых тренировок
+• Передача данных в Health Connect
+• Отображение шагов за текущий день
+• Просмотр двух последних тренировок
+• Домашний виджет с количеством шагов
+• Экспорт данных в CSV
+• Ручная и автоматическая фоновая синхронизация
+• Выбор источника данных для главного экрана
 
-**Запрошенный/ожидаемый scope у Huawei** (activity-only, индивидуальный разработчик): `HEALTHKIT_STEP_READ`, `HEALTHKIT_DISTANCE_READ`, `HEALTHKIT_ACTIVITY_READ`, `HEALTHKIT_ACTIVITY_RECORD_READ`, `HEALTHKIT_HISTORYDATA_OPEN_WEEK`. Только чтение из Huawei — запись обратно не производится.
+BitLut работает локально на устройстве. Для использования приложения не требуется создавать аккаунт. В приложении нет рекламы, облачного сервера и продажи пользовательских данных.
 
-**Sleep / heart-rate / SpO2 / stress отсутствуют намеренно** — не запрашиваются у Huawei, не читаются и не пишутся в Health Connect, нет UI, и (с 2026-07-14) в коде не осталось даже мёртвых полей/сериализации/цветовых токенов под них — убраны полностью, а не просто отключены. Индивидуальным разработчикам Huawei не открывает advanced-уровень данных вообще, независимо от качества заявки.
+Для синхронизации необходимы HUAWEI Health, HMS Core, Health Connect и соответствующие разрешения. Доступность отдельных типов данных зависит от разрешений HUAWEI Health Kit и от данных, сохранённых в HUAWEI Health.
 
-**Экраны:** ровно 2 — Today (Summary) и Settings. History-экран убран из нижней навигации ещё в прошлом спринте; с 2026-07-14 его код (экран, чипы диапазона, карточка типа тренировки, вся инфраструктура bar-графика под него) удалён из репозитория полностью, а не просто оставлен неиспользуемым.
+BitLut получает данные из HUAWEI Health только для чтения и не изменяет информацию в HUAWEI Health.
 
-**Виджеты на Today (фиксированный набор, без возможности отключения):** шаги сегодня, время тренировок, личные рекорды, дней с целью подряд, последняя импортированная тренировка.
+BitLut — независимое приложение и не является официальным приложением HUAWEI.
 
-**Также добавлено с 2026-07-14 по 2026-07-18:** виджет на рабочий стол (Jetpack Glance — шаги + время последней синхронизации, тап = синк); экспорт данных в CSV; экран «Что именно передаётся» со списком реальных 5 scope; edge-to-edge + жест «назад» (Android 15/16); карточка объяснения проблемы авторизации Huawei с конкретной причиной вместо общего сообщения.
 
-**Синхронизация:** автоматический триггер на каждом возврате в приложение (`onResume`, не только холодный старт), плюс кнопка Refresh в нижней навигации, плюс периодический воркер каждые 30 минут. Защищена debounce (5 сек между ручными триггерами) и process-wide lease против параллельных синков. Чтение сегодняшних метрик — через `readRecords()` с суммированием, не через `aggregate()` (у последнего есть задержка кэша на стороне Health Connect, что было подтверждённой причиной "синк работает только после открытия Google Fit").
 
-_Обновлено: 2026-07-22_
-<!-- BITLUT_STATUS:END -->
+BitLut transfers activity data from HUAWEI Health to Health Connect and presents it in a clear, convenient dashboard.
 
----
+The app is designed for users who want to make their HUAWEI Health activity data available to other apps compatible with Health Connect.
 
----
+BitLut features
 
-## Один мост для данных Huawei Health
+• Import steps and distance
+• Import supported workout sessions
+• Transfer data to Health Connect
+• View today’s step count
+• View the two most recent workouts
+• Home screen widget with today’s steps
+• Export synchronized data as a CSV file
+• Manual and automatic background synchronization
+• Select the data source used by the dashboard
 
-BitLut создан для пользователей Huawei-устройств, которым нужен чистый и понятный способ перенести данные активности в Android Health Connect.
+BitLut works locally on your device. No account is required. The app contains no advertising, has no cloud server, and does not sell user data.
 
-Многие показатели с Huawei Band и Huawei Watch остаются внутри Huawei Health. BitLut делает эти данные доступными в общей Android health-экосистеме, чтобы пользователь мог видеть, анализировать и использовать их в совместимых приложениях.
+HUAWEI Health, HMS Core, Health Connect, and the relevant permissions are required for synchronization. The availability of individual data types depends on the permissions provided by HUAWEI Health Kit and the data stored in HUAWEI Health.
 
-```text
-Huawei Band / Huawei Watch
-        ↓
-Huawei Health
-        ↓
-Huawei Health Kit
-        ↓
-BitLut
-        ↓
-Android Health Connect
-```
+BitLut accesses HUAWEI Health data in read-only mode and does not modify information stored in HUAWEI Health.
 
----
-
-## Что умеет BitLut
-
-### Активность
-
-* **Шаги за сегодня** — крупный счетчик, дневная цель и процент выполнения.
-* **Дистанция** — пройденное расстояние в километрах.
-* **Активные калории** — расход энергии за день.
-* **Часы активности** — количество часов, когда пользователь двигался хотя бы одну минуту.
-* **Время тренировок** — минуты активности и тренировок.
-
-### История и контроль
-
-* **Summary dashboard** — чистый главный экран со всеми ключевыми метриками.
-* **History** — история показателей и тренды за последние дни.
-* **Settings** — подключение Health Connect, Huawei Health и управление виджетами.
-* **Widget toggles** — пользователь сам выбирает, какие карточки показывать на главном экране.
-
----
-
-## Почему это важно
-
-BitLut не пытается заменить Huawei Health. Он дополняет его.
-
-Приложение решает конкретную задачу: аккуратно связать Huawei Health с Android Health Connect, сохранив контроль, прозрачность и доверие к данным.
-
-* **Без рекламы**
-* **Open source**
-* **Без фейковых health-записей**
-* **Без лишней аналитики**
-* **Без скрытой подмены данных**
-* **С понятной архитектурой синхронизации**
-* **С современным Android UI на Jetpack Compose**
-
----
-
-## Production-статус
-
-* Приложение опубликовано в **Huawei AppGallery**.
-* Android Health Connect permission flow работает.
-* Dashboard читает данные из Health Connect.
-* Полный Huawei Health import подключен через Settings.
-* Huawei Health Kit import защищен approval gate со стороны Huawei.
-* Фоновая синхронизация построена на WorkManager.
-* Последний релиз: **v1.9.5**.
-
----
-
-## Интерфейс
-
-BitLut использует современный premium health-интерфейс на базе Jetpack Compose и Material 3.
-
-### Summary
-
-Главный экран с ключевыми показателями: шаги, дистанция, активные калории, пульс, сон, стресс, SpO₂ и активность.
-
-### History
-
-История здоровья и активности: графики, тренды и показатели за выбранный период.
-
-### Settings
-
-Подключение Health Connect, Huawei Health, ручная синхронизация, статус разрешений и настройка виджетов.
-
----
-
-# Техническая часть
-
-## Стек
-
-* **Kotlin**
-* **Jetpack Compose**
-* **Material 3**
-* **MVVM**
-* **StateFlow**
-* **Android Health Connect**
-* **Huawei Health Kit**
-* **HMS Core**
-* **WorkManager**
-* **GitHub Actions**
-
----
-
-## Архитектура
-
-```text
-app/
-├── data/
-│   ├── GoogleHealthManager.kt
-│   ├── HuaweiHealthManager.kt
-│   ├── remote/
-│   │   └── HuaweiConfig.kt
-│   └── worker/
-│       ├── BackgroundSyncScheduler.kt
-│       ├── SyncReliability.kt
-│       └── SyncWorker.kt
-├── ui/
-│   ├── DashboardViewModel.kt
-│   ├── SyncStatusViewModel.kt
-│   ├── screens/
-│   │   └── FinalBitLutShell.kt
-│   └── theme/
-└── config/
-    ├── HealthPermissionPolicy.kt
-    └── WidgetVisibilityPrefs.kt
-```
-
----
-
-## Как работает синхронизация
-
-BitLut использует два направления работы с health-данными.
-
-### 1. Чтение dashboard
-
-Dashboard читает данные из Android Health Connect.
-
-```text
-Health Connect
-      ↓
-GoogleHealthManager
-      ↓
-DashboardViewModel
-      ↓
-Summary / History UI
-```
-
-При обновлении dashboard:
-
-1. Проверяются разрешения Health Connect.
-2. Данные читаются единым snapshot.
-3. Если Health Connect временно возвращает ошибку, UI сохраняет последний хороший state.
-4. Временный сбой не превращает реальные показатели в нули.
-5. Пользователь может включать и выключать отдельные виджеты в Settings.
-
----
-
-### 2. Импорт Huawei Health
-
-Huawei import работает через Huawei Health Kit.
-
-```text
-Huawei Health
-      ↓
-Huawei Health Kit
-      ↓
-HuaweiHealthManager
-      ↓
-SyncWorker
-      ↓
-GoogleHealthManager
-      ↓
-Android Health Connect
-```
-
-BitLut переносит только реальные данные, полученные от Huawei Health. Если Huawei Health возвращает пустой snapshot, приложение не создает искусственные записи и не продвигает sync cursor.
-
----
-
-## Background sync
-
-Фоновая синхронизация построена на **WorkManager**.
-
-BitLut запрашивает запуск sync каждые 30 минут. Android может сдвигать выполнение из-за Doze Mode, battery optimization и OEM-политик, поэтому корректность обеспечивается не “идеальным таймером”, а устойчивой архитектурой.
-
-### Reliability-механизмы
-
-* **30-minute periodic cadence request**
-  WorkManager планирует регулярный sync каждые 30 минут.
-
-* **Single-flight lease**
-  Manual sync и periodic sync не выполняются параллельно.
-
-* **Exponential backoff + jitter**
-  Временные сбои повторяются с безопасной задержкой.
-
-* **Circuit breaker**
-  Если зависимость нестабильна, sync временно уходит в graceful no-op.
-
-* **Catch-up window**
-  Если Android задержал фоновую задачу, следующий запуск подхватывает пропущенный диапазон.
-
-* **Bounded execution timeout**
-  Worker не может зависнуть бесконечно.
-
-* **No fake data policy**
-  Пустой ответ Huawei Health не превращается в фейковые записи.
-
----
-
-## Поддерживаемые Health Connect records
-
-| Категория        | Health Connect record             | Назначение                 |
-| ---------------- | --------------------------------- | -------------------------- |
-| Шаги             | `StepsRecord`                     | Количество шагов           |
-| Дистанция        | `DistanceRecord`                  | Пройденное расстояние      |
-| Этажи            | `FloorsClimbedRecord`             | Подъемы и этажи            |
-| Набор высоты     | `ElevationGainedRecord`           | Положительный набор высоты |
-| Активные калории | `ActiveCaloriesBurnedRecord`      | Активный расход энергии    |
-| Тренировки       | `ExerciseSessionRecord`           | Сессии активности          |
-
----
-
-## Разрешения
-
-BitLut использует только те разрешения, которые нужны для отображения и синхронизации health-данных.
-
-Пользователь явно выдает доступ через Android Health Connect. Huawei Health Kit используется только для реального импорта Huawei-derived данных.
-
-Принципы privacy:
-
-* данные не подменяются;
-* данные не синтезируются;
-* placeholder records не создаются;
-* ошибки логируются только для диагностики;
-* пользовательский интерфейс не перегружается debug-информацией.
-
----
-
-## Huawei Health Kit approval
-
-Полный импорт из Huawei Health зависит от approval со стороны Huawei Health Kit.
-
-BitLut уже содержит:
-
-* Huawei authorization flow;
-* обработку approval gate;
-* защиту от ошибки `50005`;
-* graceful degradation без падения приложения;
-* запрет на создание фейковых данных при недоступности Huawei import.
-
----
-
-## Release process
-
-Текущий релиз:
-
-```text
-v1.9.5
-```
-
-Базовый release flow:
-
-```bash
-git checkout main
-git pull origin main
-./gradlew clean
-./gradlew :app:assembleRelease
-git tag -a vX.Y.Z -m "Release vX.Y.Z"
-git push origin main
-git push origin vX.Y.Z
-```
-
-Ожидаемые secrets для production-сборки:
-
-```text
-BITLUT_KEYSTORE_BASE64
-BITLUT_KEYSTORE_PASSWORD
-BITLUT_KEY_ALIAS
-BITLUT_KEY_PASSWORD
-HUAWEI_APP_ID
-AGCONNECT_SERVICES_JSON_BASE64
-```
-
----
-
-## Engineering principles
-
-* **KISS** — простые компоненты вместо скрытой магии.
-* **DRY** — единые политики permissions, sync window и reliability.
-* **Zero Trust** — любые внешние health-данные валидируются перед записью.
-* **Observability First** — ключевые решения sync-пайплайна логируются.
-* **Graceful Degradation** — отсутствие approval, HMS Core или permissions не ломает приложение.
-* **No Fake Health Data** — BitLut никогда не генерирует искусственные health records.
+BitLut is an independent application and is not an official HUAWEI app.
 
 ---
 
