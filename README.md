@@ -23,7 +23,7 @@
   <img alt="Health Connect" src="https://img.shields.io/badge/Health%20Connect-ready-34A853?style=flat-square">
   <img alt="Huawei Health" src="https://img.shields.io/badge/Huawei%20Health-import%20ready-D61F26?style=flat-square">
   <img alt="Open Source" src="https://img.shields.io/badge/Open%20Source-free-111111?style=flat-square">
-  <img alt="Release" src="https://img.shields.io/badge/release-v1.9.5-9E6FC3?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/release-v1.10.11-9E6FC3?style=flat-square">
 </p>
 
 <!-- BITLUT_STATUS:START -->
