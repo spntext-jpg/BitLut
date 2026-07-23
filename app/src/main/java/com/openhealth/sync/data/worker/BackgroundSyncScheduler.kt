@@ -23,10 +23,14 @@ import java.util.concurrent.TimeUnit
 private const val TAG = "BackgroundSyncScheduler"
 
 object BackgroundSyncScheduler {
-    const val UNIQUE_SYNC_NOW = "bitlut_sync_now"
+    // v2 intentionally breaks away from the old APPEND_OR_REPLACE
+    // chain, which could retain a backlog of manual requests across upgrades.
+    const val UNIQUE_SYNC_NOW = "bitlut_sync_now_v2"
+    private const val LEGACY_UNIQUE_SYNC_NOW = "bitlut_sync_now"
     const val UNIQUE_PERIODIC_SYNC = "bitlut_periodic_sync"
     const val UNIQUE_EVENING_REMINDER = "bitlut_evening_reminder"
 
+    private const val KEY_MANUAL_QUEUE_V2_MIGRATED = "manual_sync_queue_v2_migrated"
     const val SYNC_INTERVAL_MINUTES = 30L
     private const val SYNC_FLEX_MINUTES = 5L
     private const val INITIAL_BACKOFF_MINUTES = 10L
@@ -42,6 +46,8 @@ object BackgroundSyncScheduler {
             .build()
 
     fun schedulePeriodic(context: Context) {
+        clearLegacyManualQueueOnce(context)
+
         val request = PeriodicWorkRequestBuilder<SyncWorker>(
             SYNC_INTERVAL_MINUTES,
             TimeUnit.MINUTES,
@@ -108,6 +114,22 @@ object BackgroundSyncScheduler {
         AppLogger.i(TAG, "Scheduled evening reminder; next run in ${initialDelay.toMinutes()} minutes")
     }
 
+    private fun clearLegacyManualQueueOnce(context: Context) {
+        val appContext = context.applicationContext
+        val prefs = appContext.getSharedPreferences(HuaweiConfig.PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_MANUAL_QUEUE_V2_MIGRATED, false)) return
+
+        // Old builds used APPEND_OR_REPLACE, so repeated foreground triggers
+        // could leave a persistent chain behind the currently running job.
+        // Cancel that legacy chain once, then all new manual sync requests use
+        // the v2 KEEP queue below. Cancellation is safe because SyncWorker and
+        // HuaweiHealthManager rethrow CancellationException and never advance
+        // the cursor for an interrupted read.
+        WorkManager.getInstance(appContext).cancelUniqueWork(LEGACY_UNIQUE_SYNC_NOW)
+        prefs.edit().putBoolean(KEY_MANUAL_QUEUE_V2_MIGRATED, true).apply()
+        AppLogger.i(TAG, "Cleared legacy manual-sync queue; migrated to $UNIQUE_SYNC_NOW")
+    }
+
     private fun computeInitialDelayUntilEveningReminder(): Duration {
         val zone = ZoneId.systemDefault()
         val now = LocalDateTime.now(zone)
@@ -138,12 +160,11 @@ object BackgroundSyncScheduler {
 
         WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
             UNIQUE_SYNC_NOW,
-            // REPLACE cancels a currently-running worker. That exact race was
-            // visible in the device log: a new foreground trigger cancelled
-            // the Huawei read after steps but before distance. Queue the new
-            // request behind the active one instead; if its prerequisite was
-            // cancelled/failed, APPEND_OR_REPLACE starts a fresh chain.
-            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            // KEEP gives manual sync "single-flight" semantics: an existing
+            // queued/running request wins, repeated taps do not cancel it and
+            // do not build an unbounded chain behind it. SyncOrchestrator
+            // already observes the active work and schedules UI refreshes.
+            ExistingWorkPolicy.KEEP,
             request
         )
 

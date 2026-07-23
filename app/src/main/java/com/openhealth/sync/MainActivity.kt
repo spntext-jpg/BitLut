@@ -168,10 +168,6 @@ class MainActivity : ComponentActivity() {
                     onWidgetVisibilityChanged = { widget, visible ->
                         dashboardViewModel.setWidgetVisible(widget, visible)
                     },
-                    onStepsGoalChanged = { value -> dashboardViewModel.setStepsGoal(value) },
-                    onDistanceGoalChanged = { value -> dashboardViewModel.setDistanceGoalMeters(value) },
-                    onActiveMinutesGoalChanged = { value -> dashboardViewModel.setActiveMinutesGoal(value) },
-                    onCaloriesGoalChanged = { value -> dashboardViewModel.setCaloriesGoalKcal(value) },
                     onDataSourceSelected = { source -> selectDataSource(source) },
                     hasSeenPermissionsOnboarding = hasSeenOnboarding,
                     onPermissionsOnboardingSeen = {

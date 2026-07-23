@@ -215,6 +215,18 @@ class HuaweiHealthManager(
 
             AppLogger.i(TAG, "Reading real Huawei Health data from $startTimeMs to $endTimeMs")
 
+            // The ordinary steps/distance cursor is intentionally incremental,
+            // but workouts are sparse and the granted Huawei history scope is
+            // exactly one week. Query the complete allowed workout window on
+            // every run; Health Connect clientRecordId upserts make this safe
+            // and idempotent while ensuring two-day-old workouts are not lost.
+            val activityStartTimeMs = (endTimeMs - TimeUnit.DAYS.toMillis(ACTIVITY_HISTORY_WINDOW_DAYS))
+                .coerceAtLeast(0L)
+            AppLogger.i(
+                TAG,
+                "Huawei workout query window: start=$activityStartTimeMs end=$endTimeMs days=$ACTIVITY_HISTORY_WINDOW_DAYS"
+            )
+
             // Sprint (2026-07-22): each category is read independently now, and
             // a SecurityException (50005) from ANY ONE of them no longer
             // aborts the whole snapshot. A real device log showed Huawei can
@@ -264,7 +276,7 @@ class HuaweiHealthManager(
             val floors = readCategory("floors") { readFloors(startTimeMs, endTimeMs) }
             val elevations = readCategory("elevation") { readElevation(startTimeMs, endTimeMs) }
             val activeCalories = readCategory("activeCalories") { readActiveCalories(startTimeMs, endTimeMs) }
-            val activities = readCategory("activitySessions") { readActivitySessions(startTimeMs, endTimeMs) }
+            val activities = readCategory("activitySessions") { readActivitySessions(activityStartTimeMs, endTimeMs) }
 
             if (anyScopeDenied && !anySucceeded) {
                 // Every category was scope-denied -- genuinely not authorized
@@ -452,7 +464,18 @@ class HuaweiHealthManager(
         val options = ActivityRecordReadOptions.Builder()
             .setTimeInterval(startTimeMs, endTimeMs, TimeUnit.MILLISECONDS)
             .readActivityRecordsFromAllApps()
+            // Huawei's own Health Kit guide warns that an activity-record
+            // request without a carried DataType may return no records from
+            // Huawei Health. Steps delta is already inside BitLut's approved
+            // basic scope and is used here only to request associated detail;
+            // readActivityRecordsFromAllApps still controls the record list.
+            .read(DataType.DT_CONTINUOUS_STEPS_DELTA)
             .build()
+
+        AppLogger.i(
+            TAG,
+            "Querying Huawei activity records with steps-delta detail: start=$startTimeMs end=$endTimeMs"
+        )
 
         val reply = HuaweiHiHealth.getActivityRecordsController(context)
             .getActivityRecord(options)
@@ -764,6 +787,7 @@ class HuaweiHealthManager(
 
     private companion object {
         private const val HUAWEI_READ_CHUNK_MS: Long = 24L * 60L * 60L * 1000L
+        private const val ACTIVITY_HISTORY_WINDOW_DAYS = 7L
 
         const val KEY_HUAWEI_PENDING_APPROVAL = "huawei_pending_approval"
         const val KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED = "huawei_appgallery_verification_required"

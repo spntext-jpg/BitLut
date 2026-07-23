@@ -78,7 +78,6 @@ import com.openhealth.sync.data.PersonalRecord
 import com.openhealth.sync.data.StreakState
 import com.openhealth.sync.data.WeekComparison
 import com.openhealth.sync.config.DashboardWidget
-import com.openhealth.sync.config.GoalPrefs
 import com.openhealth.sync.config.HealthDataSource
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardUiState
@@ -139,10 +138,6 @@ fun FinalBitLutShell(
     onImportArchive: () -> Unit = {},
     onExportCsv: () -> Unit = {},
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit = { _, _ -> },
-    onStepsGoalChanged: (Long) -> Unit = {},
-    onDistanceGoalChanged: (Double) -> Unit = {},
-    onActiveMinutesGoalChanged: (Int) -> Unit = {},
-    onCaloriesGoalChanged: (Double) -> Unit = {},
     onDataSourceSelected: (HealthDataSource) -> Unit = {},
     hasSeenPermissionsOnboarding: Boolean = true,
     onPermissionsOnboardingSeen: () -> Unit = {},
@@ -196,14 +191,10 @@ fun FinalBitLutShell(
                 )
             } else when (selected) {
                 MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, wrappedOnRequestGoogle)
-                MainTab.Settings -> SettingsScreen(palette, syncState, dashboardState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
+                MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
                     onExportCsv = onExportCsv,
                     onWidgetVisibilityChanged = onWidgetVisibilityChanged,
-                    onStepsGoalChanged = onStepsGoalChanged,
-                    onDistanceGoalChanged = onDistanceGoalChanged,
-                    onActiveMinutesGoalChanged = onActiveMinutesGoalChanged,
-                    onCaloriesGoalChanged = onCaloriesGoalChanged,
                     onDataSourceSelected = onDataSourceSelected)
             }
         }
@@ -517,9 +508,8 @@ private fun SummaryScreen(
                         palette = palette,
                         title = stringResource(R.string.steps_today),
                         value = formatNumber(state.stepsToday),
-                        unit = "${stringResource(R.string.steps_unit)} · ${stringResource(R.string.distance_today_value, formatOneDecimal(state.distanceMeters / 1000.0))} · ${stringResource(R.string.dashboard_pct_goal, (state.stepsProgress * 100).toInt())}",
+                        unit = "${stringResource(R.string.steps_unit)} · ${stringResource(R.string.distance_today_value, formatOneDecimal(state.distanceMeters / 1000.0))}",
                         accent = HealthAccent.activity,
-                        progress = state.stepsProgress,
                         hero = true,
                         pressLift = true
                     )
@@ -1010,7 +1000,6 @@ private fun formatRecordDate(date: java.time.LocalDate): String {
 private fun SettingsScreen(
     palette: BitPalette,
     syncState: SyncUiState,
-    dashboardState: DashboardUiState,
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit,
     onRequestHuawei: () -> Unit,
@@ -1018,20 +1007,13 @@ private fun SettingsScreen(
     onImportArchive: () -> Unit,
     onExportCsv: () -> Unit,
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit,
-    onStepsGoalChanged: (Long) -> Unit,
-    onDistanceGoalChanged: (Double) -> Unit,
-    onActiveMinutesGoalChanged: (Int) -> Unit,
-    onCaloriesGoalChanged: (Double) -> Unit,
     onDataSourceSelected: (HealthDataSource) -> Unit
 ) {
     var showDataScopes by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
-    // Sprint (2026-07-08): Daily goals moved to the top (right under the
-    // header), calories dropped from it. The three connection cards below
-    // lost their explanatory body text and status line (title + icon only
-    // now) and their two actions are a single compact row instead of a
-    // wrapping FlowRow. The widget-visibility toggle section was removed
-    // entirely -- Summary's widget set is fixed now, not user-configurable.
+    // Settings intentionally contains only source selection,
+    // permissions/connections, import/export, and trust information. Daily
+    // goals were removed because they are outside BitLut's transfer mission.
     Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
@@ -1075,40 +1057,6 @@ private fun SettingsScreen(
                 accent = HealthAccent.mind,
                 selected = syncState.selectedDataSource == HealthDataSource.GOOGLE_FIT,
                 onSelect = { onDataSourceSelected(HealthDataSource.GOOGLE_FIT) },
-                isLast = true
-            )
-        }
-
-        Text(
-            text = stringResource(R.string.goals_section_title),
-            color = palette.text,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 18.sp
-        )
-        SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
-            GoalStepperRow(
-                palette = palette,
-                accent = HealthAccent.activity,
-                label = stringResource(R.string.goal_steps_label),
-                valueText = "${formatNumber(dashboardState.stepsGoal)} ${stringResource(R.string.steps_unit)}",
-                onDecrease = { onStepsGoalChanged((dashboardState.stepsGoal - STEPS_GOAL_STEP).coerceAtLeast(GoalPrefs.STEPS_GOAL_RANGE.first)) },
-                onIncrease = { onStepsGoalChanged((dashboardState.stepsGoal + STEPS_GOAL_STEP).coerceAtMost(GoalPrefs.STEPS_GOAL_RANGE.last)) }
-            )
-            GoalStepperRow(
-                palette = palette,
-                accent = HealthAccent.mind,
-                label = stringResource(R.string.goal_distance_label),
-                valueText = stringResource(R.string.distance_today_value, formatOneDecimal(dashboardState.distanceGoalMeters / 1000.0)),
-                onDecrease = { onDistanceGoalChanged((dashboardState.distanceGoalMeters - DISTANCE_GOAL_STEP_METERS).coerceAtLeast(GoalPrefs.DISTANCE_GOAL_RANGE_METERS.start)) },
-                onIncrease = { onDistanceGoalChanged((dashboardState.distanceGoalMeters + DISTANCE_GOAL_STEP_METERS).coerceAtMost(GoalPrefs.DISTANCE_GOAL_RANGE_METERS.endInclusive)) }
-            )
-            GoalStepperRow(
-                palette = palette,
-                accent = HealthAccent.activity,
-                label = stringResource(R.string.goal_active_minutes_label),
-                valueText = "${dashboardState.activeMinutesGoal} ${stringResource(R.string.minutes_short)}",
-                onDecrease = { onActiveMinutesGoalChanged((dashboardState.activeMinutesGoal - ACTIVE_MINUTES_GOAL_STEP).coerceAtLeast(GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE.first)) },
-                onIncrease = { onActiveMinutesGoalChanged((dashboardState.activeMinutesGoal + ACTIVE_MINUTES_GOAL_STEP).coerceAtMost(GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE.last)) },
                 isLast = true
             )
         }
@@ -1371,65 +1319,6 @@ private fun WidgetVisibilityRow(
     }
     if (!isLast) {
         Spacer(Modifier.height(8.dp))
-    }
-}
-
-// ── Sprint 7: goal step sizes for the Settings steppers ──────────────────
-private const val STEPS_GOAL_STEP = 500L
-private const val DISTANCE_GOAL_STEP_METERS = 500.0
-private const val ACTIVE_MINUTES_GOAL_STEP = 5
-private const val CALORIES_GOAL_STEP = 50.0
-
-/**
- * A single goal row in Settings: label, current value, and -/+ stepper
- * buttons (v1.9.12, sprint 7). Deliberately a stepper rather than a free-text
- * field: it makes an invalid/out-of-range value structurally impossible
- * (every tap is pre-clamped by the caller against GoalPrefs' *_RANGE bounds),
- * which is both simpler to implement correctly and more comfortable to use
- * one-handed than opening a keyboard for a single number.
- */
-@Composable
-private fun GoalStepperRow(
-    palette: BitPalette,
-    accent: Color,
-    label: String,
-    valueText: String,
-    onDecrease: () -> Unit,
-    onIncrease: () -> Unit,
-    isLast: Boolean = false
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, color = palette.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            Spacer(Modifier.height(2.dp))
-            Text(valueText, color = palette.secondaryText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-        }
-        Spacer(Modifier.width(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            GoalStepperButton(palette = palette, accent = accent, symbol = "–", onClick = onDecrease)
-            Spacer(Modifier.width(8.dp))
-            GoalStepperButton(palette = palette, accent = accent, symbol = "+", onClick = onIncrease)
-        }
-    }
-    if (!isLast) {
-        Spacer(Modifier.height(14.dp))
-    }
-}
-
-@Composable
-private fun GoalStepperButton(palette: BitPalette, accent: Color, symbol: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(34.dp)
-            .background(accent.copy(alpha = 0.16f), shape = RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(symbol, color = accent, fontWeight = FontWeight.Black, fontSize = 18.sp)
     }
 }
 
