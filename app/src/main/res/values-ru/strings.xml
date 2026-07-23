@@ -201,6 +201,12 @@
     <string name="insights_streak_days_ru_one">%1$d день подряд</string>
     <string name="insights_streak_days_ru_few">%1$d дня подряд</string>
     <string name="insights_streak_days_ru_many">%1$d дней подряд</string>
+    <string name="data_source_section_title">Источник данных</string>
+    <string name="data_source_section_body">Выберите один источник для Dashboard. Второй источник исключается, чтобы шаги и дистанция не суммировались дважды.</string>
+    <string name="data_source_huawei_title">Huawei Health</string>
+    <string name="data_source_huawei_body">Импорт через BitLut; Dashboard показывает только записи BitLut.</string>
+    <string name="data_source_google_fit_title">Google Fit</string>
+    <string name="data_source_google_fit_body">Dashboard читает только записи Google Fit из Health Connect.</string>
     <string name="goals_section_title">Дневные цели</string>
     <string name="goal_steps_label">Шаги</string>
     <string name="goal_distance_label">Дистанция</string>

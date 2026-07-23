@@ -12,6 +12,7 @@ import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.openhealth.sync.config.HealthDataSource
 import com.openhealth.sync.config.WidgetVisibilityPrefs
 import com.openhealth.sync.domain.SyncOrchestrator
 import com.openhealth.sync.platform.HmsCoreHelper
@@ -33,7 +34,8 @@ class MainActivity : ComponentActivity() {
         SyncViewModel.provideFactory(
             app.container.googleHealthManager,
             app.container.huaweiHealthManager,
-            this
+            this,
+            app.container.dataSourcePrefs
         )
     }
 
@@ -170,6 +172,7 @@ class MainActivity : ComponentActivity() {
                     onDistanceGoalChanged = { value -> dashboardViewModel.setDistanceGoalMeters(value) },
                     onActiveMinutesGoalChanged = { value -> dashboardViewModel.setActiveMinutesGoal(value) },
                     onCaloriesGoalChanged = { value -> dashboardViewModel.setCaloriesGoalKcal(value) },
+                    onDataSourceSelected = { source -> selectDataSource(source) },
                     hasSeenPermissionsOnboarding = hasSeenOnboarding,
                     onPermissionsOnboardingSeen = {
                         onboardingPrefs.markPermissionsRationaleSeen()
@@ -282,6 +285,19 @@ class MainActivity : ComponentActivity() {
             val workouts = googleManager.readRecentWorkouts(100)
             com.openhealth.sync.util.CsvExporter.writeAndShare(this@MainActivity, dailyTotals, workouts)
         }
+    }
+
+    private fun selectDataSource(source: HealthDataSource) {
+        if (syncViewModel.uiState.value.selectedDataSource == source) return
+
+        syncViewModel.setDataSource(source)
+        dashboardViewModel.onDataSourceChanged()
+        AppLogger.i("MainActivity", "Selected dashboard/import source: $source")
+
+        // Refresh immediately in either mode. Huawei mode imports into Health
+        // Connect; Google Fit mode skips Huawei and refreshes the selected
+        // source cache/widget only.
+        triggerImmediateSync()
     }
 
     private fun setupPeriodicSync() {

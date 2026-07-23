@@ -11,12 +11,14 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Length
+import com.openhealth.sync.config.DataSourcePrefs
 import com.openhealth.sync.config.HealthPermissionPolicy
 import com.openhealth.sync.util.AppLogger
 import java.time.Instant
@@ -85,9 +87,16 @@ data class GoogleDashboardSnapshot(
     val recentWorkouts: List<ActivitySessionData>
 )
 
-class GoogleHealthManager(private val context: Context) : HealthConnectManager {
+class GoogleHealthManager(
+    private val context: Context,
+    private val dataSourcePrefs: DataSourcePrefs = DataSourcePrefs(context)
+) : HealthConnectManager {
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
+
+    private fun selectedDataOrigins(): Set<DataOrigin> = setOf(
+        DataOrigin(dataSourcePrefs.selectedOriginPackage(context.packageName))
+    )
 
     /**
      * Self-healing replacement for the previous `by lazy { ... }` client cache.
@@ -461,6 +470,10 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
         return try {
             val startOfToday = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
             val now = Instant.now()
+            AppLogger.i(
+                TAG,
+                "Reading dashboard source=${dataSourcePrefs.selected()} origins=${selectedDataOrigins()}"
+            )
 
             // Sprint (2026-07-10): stepsToday/distanceMeters/caloriesKcal used
             // Health Connect's aggregate() API, which is a provider-side cache
@@ -478,21 +491,24 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             val stepsToday = client.readRecords(
                 ReadRecordsRequest(
                     recordType = StepsRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now)
+                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             ).records.sumOf { it.count }
 
             val distanceMeters = client.readRecords(
                 ReadRecordsRequest(
                     recordType = DistanceRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now)
+                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             ).records.sumOf { it.distance.inMeters }
 
             val caloriesKcal = client.readRecords(
                 ReadRecordsRequest(
                     recordType = ActiveCaloriesBurnedRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now)
+                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             ).records.sumOf { it.energy.inKilocalories }
 
@@ -549,7 +565,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                         DistanceRecord.DISTANCE_TOTAL,
                         ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL
                     ),
-                    timeRangeFilter = TimeRangeFilter.between(currentWeekStart, currentWeekEnd)
+                    timeRangeFilter = TimeRangeFilter.between(currentWeekStart, currentWeekEnd),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             )
             val previousAgg = client.aggregate(
@@ -559,7 +576,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
                         DistanceRecord.DISTANCE_TOTAL,
                         ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL
                     ),
-                    timeRangeFilter = TimeRangeFilter.between(previousWeekStart, previousWeekEnd)
+                    timeRangeFilter = TimeRangeFilter.between(previousWeekStart, previousWeekEnd),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             )
 
@@ -591,7 +609,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             client.readRecords(
                 ReadRecordsRequest(
                     recordType = StepsRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, end)
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             ).records.sumOf { it.count }
         } catch (e: CancellationException) {
@@ -609,7 +628,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             client.readRecords(
                 ReadRecordsRequest(
                     recordType = DistanceRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now()),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             ).records.sumOf { it.distance.inMeters }
         } catch (e: CancellationException) {
@@ -627,7 +647,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             client.readRecords(
                 ReadRecordsRequest(
                     recordType = ActiveCaloriesBurnedRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now()),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             ).records.sumOf { it.energy.inKilocalories }
         } catch (e: CancellationException) {
@@ -645,7 +666,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             client.readRecords(
                 ReadRecordsRequest(
                     recordType = ExerciseSessionRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now()),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             ).records
                 .sortedByDescending { it.startTime }
@@ -693,13 +715,25 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
 
             try {
                 val steps = client.readRecords(
-                    ReadRecordsRequest(recordType = StepsRecord::class, timeRangeFilter = range)
+                    ReadRecordsRequest(
+                        recordType = StepsRecord::class,
+                        timeRangeFilter = range,
+                        dataOriginFilter = selectedDataOrigins()
+                    )
                 ).records.sumOf { it.count }
                 val distance = client.readRecords(
-                    ReadRecordsRequest(recordType = DistanceRecord::class, timeRangeFilter = range)
+                    ReadRecordsRequest(
+                        recordType = DistanceRecord::class,
+                        timeRangeFilter = range,
+                        dataOriginFilter = selectedDataOrigins()
+                    )
                 ).records.sumOf { it.distance.inMeters }
                 val calories = client.readRecords(
-                    ReadRecordsRequest(recordType = ActiveCaloriesBurnedRecord::class, timeRangeFilter = range)
+                    ReadRecordsRequest(
+                        recordType = ActiveCaloriesBurnedRecord::class,
+                        timeRangeFilter = range,
+                        dataOriginFilter = selectedDataOrigins()
+                    )
                 ).records.sumOf { it.energy.inKilocalories }
                 out.add(DailyTotal(day, steps, distance, calories))
             } catch (e: CancellationException) {
@@ -720,7 +754,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             client.readRecords(
                 ReadRecordsRequest(
                     recordType = ExerciseSessionRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now()),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             ).records.sumOf {
                 java.time.Duration.between(it.startTime, it.endTime).toMinutes().coerceAtLeast(0L)
@@ -740,7 +775,8 @@ class GoogleHealthManager(private val context: Context) : HealthConnectManager {
             client.readRecords(
                 ReadRecordsRequest(
                     recordType = StepsRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now())
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now()),
+                    dataOriginFilter = selectedDataOrigins()
                 )
             ).records
                 .filter { it.count > 0 }

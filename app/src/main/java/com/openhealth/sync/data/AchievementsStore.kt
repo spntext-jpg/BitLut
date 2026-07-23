@@ -2,6 +2,7 @@ package com.openhealth.sync.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.openhealth.sync.config.DataSourcePrefs
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.util.AppLogger
 import java.time.LocalDate
@@ -42,7 +43,10 @@ data class StreakState(
  * captured -- and critically, this requires no new Huawei scope or Health
  * Connect permission.
  */
-class AchievementsStore(context: Context) {
+class AchievementsStore(
+    context: Context,
+    private val dataSourcePrefs: DataSourcePrefs = DataSourcePrefs(context)
+) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(
         HuaweiConfig.PREFS_NAME,
@@ -53,9 +57,15 @@ class AchievementsStore(context: Context) {
 
     // ── Personal records ──────────────────────────────────────────────
 
-    fun bestStepsDay(): PersonalRecord? = readRecord(KEY_BEST_STEPS_VALUE, KEY_BEST_STEPS_DATE)
+    fun bestStepsDay(): PersonalRecord? = readRecord(
+        sourceKey(KEY_BEST_STEPS_VALUE),
+        sourceKey(KEY_BEST_STEPS_DATE)
+    )
 
-    fun bestDistanceMetersDay(): PersonalRecord? = readRecord(KEY_BEST_DISTANCE_VALUE, KEY_BEST_DISTANCE_DATE)
+    fun bestDistanceMetersDay(): PersonalRecord? = readRecord(
+        sourceKey(KEY_BEST_DISTANCE_VALUE),
+        sourceKey(KEY_BEST_DISTANCE_DATE)
+    )
 
     /**
      * Compares today's totals against stored records and updates them if
@@ -74,18 +84,22 @@ class AchievementsStore(context: Context) {
 
         try {
             val editor = prefs.edit()
+            val bestStepsValueKey = sourceKey(KEY_BEST_STEPS_VALUE)
+            val bestStepsDateKey = sourceKey(KEY_BEST_STEPS_DATE)
+            val bestDistanceValueKey = sourceKey(KEY_BEST_DISTANCE_VALUE)
+            val bestDistanceDateKey = sourceKey(KEY_BEST_DISTANCE_DATE)
 
-            val currentBestSteps = prefs.getFloat(KEY_BEST_STEPS_VALUE, 0f)
+            val currentBestSteps = prefs.getFloat(bestStepsValueKey, 0f)
             if (stepsToday > currentBestSteps) {
-                editor.putFloat(KEY_BEST_STEPS_VALUE, stepsToday.toFloat())
-                editor.putString(KEY_BEST_STEPS_DATE, date.format(isoDate))
+                editor.putFloat(bestStepsValueKey, stepsToday.toFloat())
+                editor.putString(bestStepsDateKey, date.format(isoDate))
                 newRecords.add(RecordKind.STEPS)
             }
 
-            val currentBestDistance = prefs.getFloat(KEY_BEST_DISTANCE_VALUE, 0f)
+            val currentBestDistance = prefs.getFloat(bestDistanceValueKey, 0f)
             if (distanceMetersToday > currentBestDistance) {
-                editor.putFloat(KEY_BEST_DISTANCE_VALUE, distanceMetersToday.toFloat())
-                editor.putString(KEY_BEST_DISTANCE_DATE, date.format(isoDate))
+                editor.putFloat(bestDistanceValueKey, distanceMetersToday.toFloat())
+                editor.putString(bestDistanceDateKey, date.format(isoDate))
                 newRecords.add(RecordKind.DISTANCE)
             }
 
@@ -113,9 +127,9 @@ class AchievementsStore(context: Context) {
     // ── Streak ─────────────────────────────────────────────────────────
 
     fun readStreak(): StreakState {
-        val current = prefs.getInt(KEY_STREAK_CURRENT, 0)
-        val longest = prefs.getInt(KEY_STREAK_LONGEST, 0)
-        val lastDateStr = prefs.getString(KEY_STREAK_LAST_DATE, null)
+        val current = prefs.getInt(sourceKey(KEY_STREAK_CURRENT), 0)
+        val longest = prefs.getInt(sourceKey(KEY_STREAK_LONGEST), 0)
+        val lastDateStr = prefs.getString(sourceKey(KEY_STREAK_LAST_DATE), null)
         val lastDate = try {
             lastDateStr?.let { LocalDate.parse(it, isoDate) }
         } catch (e: Exception) {
@@ -162,15 +176,18 @@ class AchievementsStore(context: Context) {
     private fun persistStreak(currentStreakDays: Int, longestStreakDays: Int, lastCountedDate: LocalDate): StreakState {
         try {
             prefs.edit()
-                .putInt(KEY_STREAK_CURRENT, currentStreakDays)
-                .putInt(KEY_STREAK_LONGEST, longestStreakDays)
-                .putString(KEY_STREAK_LAST_DATE, lastCountedDate.format(isoDate))
+                .putInt(sourceKey(KEY_STREAK_CURRENT), currentStreakDays)
+                .putInt(sourceKey(KEY_STREAK_LONGEST), longestStreakDays)
+                .putString(sourceKey(KEY_STREAK_LAST_DATE), lastCountedDate.format(isoDate))
                 .apply()
         } catch (e: Exception) {
             AppLogger.e(TAG, "Failed to persist streak: ${e.message}", e)
         }
         return StreakState(currentStreakDays, longestStreakDays, lastCountedDate)
     }
+
+    private fun sourceKey(base: String): String =
+        "${base}_${dataSourcePrefs.selected().storageValue}"
 
     companion object {
         private const val KEY_BEST_STEPS_VALUE = "achv_best_steps_value"

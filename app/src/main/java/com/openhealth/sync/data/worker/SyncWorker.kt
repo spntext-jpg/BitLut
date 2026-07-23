@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.openhealth.sync.SyncApplication
+import com.openhealth.sync.config.HealthDataSource
 import com.openhealth.sync.data.GoogleDashboardSnapshot
 import com.openhealth.sync.data.HealthConnectManager
 import com.openhealth.sync.data.remote.HuaweiConfig
@@ -42,7 +43,11 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
         val owner = id.toString()
         val startedAt = System.currentTimeMillis()
 
-        AppLogger.i(TAG, "Starting resilient Huawei -> Health Connect sync owner=$owner attempt=$runAttemptCount")
+        val selectedSource = appContainer.dataSourcePrefs.selected()
+        AppLogger.i(
+            TAG,
+            "Starting resilient health sync source=$selectedSource owner=$owner attempt=$runAttemptCount"
+        )
 
         if (!lease.tryAcquire(owner, startedAt, LEASE_TTL_MS)) {
             // Another periodic/manual worker is already running. This is a safe no-op:
@@ -59,7 +64,9 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
         // and recovers independently, so a Huawei-only outage does not
         // penalize a healthy Health Connect dependency's failure count, and
         // vice versa.
-        if (huaweiCircuitBreaker.isOpen(startedAt) || googleCircuitBreaker.isOpen(startedAt)) {
+        val huaweiBreakerBlocksSelectedSource =
+            selectedSource == HealthDataSource.HUAWEI_HEALTH && huaweiCircuitBreaker.isOpen(startedAt)
+        if (huaweiBreakerBlocksSelectedSource || googleCircuitBreaker.isOpen(startedAt)) {
             lease.release(owner)
             return Result.success(
                 workDataOf("reason" to "circuit_breaker_open")
@@ -147,6 +154,27 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
     }
 
     private suspend fun runSingleAttempt(): SyncAttemptOutcome {
+        val googleManager = appContainer.googleHealthManager
+        val selectedSource = appContainer.dataSourcePrefs.selected()
+        val googlePermissionsOk = googleManager.hasAllPermissions()
+
+        if (selectedSource == HealthDataSource.GOOGLE_FIT) {
+            AppLogger.i(TAG, "Sync preflight: source=GOOGLE_FIT googlePermissions=$googlePermissionsOk")
+            if (!googlePermissionsOk) {
+                AppLogger.e(TAG, "Health Connect permissions missing; Google Fit refresh degraded to no-op")
+                return SyncAttemptOutcome.GracefulNoop
+            }
+
+            val freshSnapshot = refreshDashboardCacheAfterWrite(googleManager)
+                ?: return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE)
+            updateAchievements(freshSnapshot)
+            AppLogger.i(
+                TAG,
+                "Google Fit source selected; Huawei import skipped, dashboard cache refreshed"
+            )
+            return SyncAttemptOutcome.Success
+        }
+
         if (!HmsCoreHelper.isInstalled(applicationContext)) {
             AppLogger.e(TAG, "HMS Core is missing; sync degraded to no-op")
             return SyncAttemptOutcome.GracefulNoop
@@ -157,15 +185,13 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
             return SyncAttemptOutcome.GracefulNoop
         }
 
-        val googleManager = appContainer.googleHealthManager
         val huaweiManager = appContainer.huaweiHealthManager
-
-        val googlePermissionsOk = googleManager.hasAllPermissions()
         val localHuaweiAuthorized = huaweiManager.isAuthorized()
 
         AppLogger.i(
             TAG,
-            "Sync preflight: googlePermissions=$googlePermissionsOk localHuaweiAuthorized=$localHuaweiAuthorized"
+            "Sync preflight: source=HUAWEI_HEALTH googlePermissions=$googlePermissionsOk " +
+                "localHuaweiAuthorized=$localHuaweiAuthorized"
         )
 
         if (!googlePermissionsOk) {

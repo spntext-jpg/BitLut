@@ -1,4 +1,6 @@
 package com.openhealth.sync.ui
+import com.openhealth.sync.config.DataSourcePrefs
+import com.openhealth.sync.config.HealthDataSource
 import com.openhealth.sync.data.HuaweiHealthReader
 import com.openhealth.sync.data.HuaweiAuthFailureReason
 import com.openhealth.sync.data.HealthConnectManager
@@ -24,6 +26,7 @@ data class SyncUiState(
     val needsPermissionRefresh: Boolean = false,
     val isHuaweiAuthorized: Boolean = false,
     val lastHuaweiAuthFailureReason: HuaweiAuthFailureReason? = null,
+    val selectedDataSource: HealthDataSource = HealthDataSource.HUAWEI_HEALTH,
     val isSyncing: Boolean = false,
     val syncStatus: String = "sync_status_idle",
     val lastSyncTime: String = "sync_no_data"
@@ -32,7 +35,8 @@ data class SyncUiState(
 class SyncViewModel(
     val googleManager: HealthConnectManager,
     val huaweiHealthManager: HuaweiHealthReader,
-    private val prefs: android.content.SharedPreferences
+    private val prefs: android.content.SharedPreferences,
+    private val dataSourcePrefs: DataSourcePrefs
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SyncUiState())
@@ -52,6 +56,7 @@ class SyncViewModel(
                     needsPermissionRefresh = isAvailable && !hasPerms,
                     isHuaweiAuthorized = huaweiHealthManager.isAuthorized(),
                     lastHuaweiAuthFailureReason = huaweiHealthManager.lastAuthFailureReason(),
+                    selectedDataSource = dataSourcePrefs.selected(),
                     lastSyncTime = savedTime
                 )
             }
@@ -71,6 +76,11 @@ class SyncViewModel(
     fun showImportScreen() { _uiState.update { it.copy(showImportScreen = true) } }
     fun hideImportScreen() { _uiState.update { it.copy(showImportScreen = false) } }
 
+    fun setDataSource(source: HealthDataSource) {
+        dataSourcePrefs.setSelected(source)
+        _uiState.update { it.copy(selectedDataSource = source) }
+    }
+
     fun markSyncStarted() {
         _uiState.update { it.copy(isSyncing = true, syncStatus = "sync_status_syncing") }
     }
@@ -87,12 +97,13 @@ class SyncViewModel(
         fun provideFactory(
             googleManager: HealthConnectManager,
             huaweiHealthManager: HuaweiHealthReader,
-            context: Context
+            context: Context,
+            dataSourcePrefs: DataSourcePrefs
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
-                return SyncViewModel(googleManager, huaweiHealthManager, prefs) as T
+                return SyncViewModel(googleManager, huaweiHealthManager, prefs, dataSourcePrefs) as T
             }
         }
     }

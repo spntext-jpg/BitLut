@@ -2,6 +2,7 @@ package com.openhealth.sync.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.openhealth.sync.config.DataSourcePrefs
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.util.AppLogger
 import org.json.JSONArray
@@ -25,7 +26,10 @@ private const val TAG = "DashboardSnapshotCache"
  * ([HuaweiConfig.PREFS_NAME]) to avoid introducing a new dependency (Room/
  * DataStore) for what is fundamentally a single small JSON blob.
  */
-class DashboardSnapshotCache(context: Context) {
+class DashboardSnapshotCache(
+    context: Context,
+    private val dataSourcePrefs: DataSourcePrefs = DataSourcePrefs(context)
+) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(
         HuaweiConfig.PREFS_NAME,
@@ -37,8 +41,8 @@ class DashboardSnapshotCache(context: Context) {
         try {
             val json = snapshotToJson(snapshot)
             prefs.edit()
-                .putString(KEY_SNAPSHOT_JSON, json.toString())
-                .putLong(KEY_SNAPSHOT_SAVED_AT_MS, System.currentTimeMillis())
+                .putString(sourceKey(KEY_SNAPSHOT_JSON), json.toString())
+                .putLong(sourceKey(KEY_SNAPSHOT_SAVED_AT_MS), System.currentTimeMillis())
                 .apply()
             AppLogger.d(TAG, "Dashboard snapshot cached (stepsToday=${snapshot.stepsToday})")
         } catch (e: Exception) {
@@ -50,8 +54,8 @@ class DashboardSnapshotCache(context: Context) {
 
     /** Returns the last cached snapshot, or null if none was ever saved or it is corrupt. */
     fun load(): CachedSnapshot? {
-        val raw = prefs.getString(KEY_SNAPSHOT_JSON, null) ?: return null
-        val savedAtMs = prefs.getLong(KEY_SNAPSHOT_SAVED_AT_MS, 0L)
+        val raw = prefs.getString(sourceKey(KEY_SNAPSHOT_JSON), null) ?: return null
+        val savedAtMs = prefs.getLong(sourceKey(KEY_SNAPSHOT_SAVED_AT_MS), 0L)
         return try {
             val snapshot = snapshotFromJson(JSONObject(raw))
             CachedSnapshot(snapshot = snapshot, savedAtMs = savedAtMs)
@@ -63,10 +67,13 @@ class DashboardSnapshotCache(context: Context) {
 
     fun clear() {
         prefs.edit()
-            .remove(KEY_SNAPSHOT_JSON)
-            .remove(KEY_SNAPSHOT_SAVED_AT_MS)
+            .remove(sourceKey(KEY_SNAPSHOT_JSON))
+            .remove(sourceKey(KEY_SNAPSHOT_SAVED_AT_MS))
             .apply()
     }
+
+    private fun sourceKey(base: String): String =
+        "${base}_${dataSourcePrefs.selected().storageValue}"
 
     private fun snapshotToJson(s: GoogleDashboardSnapshot): JSONObject = JSONObject().apply {
         put("stepsToday", s.stepsToday)

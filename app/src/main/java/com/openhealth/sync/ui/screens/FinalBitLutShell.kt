@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -77,6 +79,7 @@ import com.openhealth.sync.data.StreakState
 import com.openhealth.sync.data.WeekComparison
 import com.openhealth.sync.config.DashboardWidget
 import com.openhealth.sync.config.GoalPrefs
+import com.openhealth.sync.config.HealthDataSource
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardUiState
 import com.openhealth.sync.ui.DashboardViewModel
@@ -140,6 +143,7 @@ fun FinalBitLutShell(
     onDistanceGoalChanged: (Double) -> Unit = {},
     onActiveMinutesGoalChanged: (Int) -> Unit = {},
     onCaloriesGoalChanged: (Double) -> Unit = {},
+    onDataSourceSelected: (HealthDataSource) -> Unit = {},
     hasSeenPermissionsOnboarding: Boolean = true,
     onPermissionsOnboardingSeen: () -> Unit = {},
     importViewModel: ImportViewModel) {
@@ -199,7 +203,8 @@ fun FinalBitLutShell(
                     onStepsGoalChanged = onStepsGoalChanged,
                     onDistanceGoalChanged = onDistanceGoalChanged,
                     onActiveMinutesGoalChanged = onActiveMinutesGoalChanged,
-                    onCaloriesGoalChanged = onCaloriesGoalChanged)
+                    onCaloriesGoalChanged = onCaloriesGoalChanged,
+                    onDataSourceSelected = onDataSourceSelected)
             }
         }
     }
@@ -896,7 +901,8 @@ private fun SettingsScreen(
     onStepsGoalChanged: (Long) -> Unit,
     onDistanceGoalChanged: (Double) -> Unit,
     onActiveMinutesGoalChanged: (Int) -> Unit,
-    onCaloriesGoalChanged: (Double) -> Unit
+    onCaloriesGoalChanged: (Double) -> Unit,
+    onDataSourceSelected: (HealthDataSource) -> Unit
 ) {
     var showDataScopes by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
@@ -910,6 +916,7 @@ private fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -917,6 +924,40 @@ private fun SettingsScreen(
             palette = palette,
             title = stringResource(R.string.tab_settings)
         )
+
+        Text(
+            text = stringResource(R.string.data_source_section_title),
+            color = palette.text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 18.sp
+        )
+        SoftCard(palette = palette, accent = HealthAccent.violet, hero = false, tintWithAccent = true) {
+            Text(
+                text = stringResource(R.string.data_source_section_body),
+                color = palette.secondaryText,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                lineHeight = 18.sp
+            )
+            Spacer(Modifier.height(10.dp))
+            DataSourceToggleRow(
+                palette = palette,
+                title = stringResource(R.string.data_source_huawei_title),
+                subtitle = stringResource(R.string.data_source_huawei_body),
+                accent = HealthAccent.activity,
+                selected = syncState.selectedDataSource == HealthDataSource.HUAWEI_HEALTH,
+                onSelect = { onDataSourceSelected(HealthDataSource.HUAWEI_HEALTH) }
+            )
+            DataSourceToggleRow(
+                palette = palette,
+                title = stringResource(R.string.data_source_google_fit_title),
+                subtitle = stringResource(R.string.data_source_google_fit_body),
+                accent = HealthAccent.mind,
+                selected = syncState.selectedDataSource == HealthDataSource.GOOGLE_FIT,
+                onSelect = { onDataSourceSelected(HealthDataSource.GOOGLE_FIT) },
+                isLast = true
+            )
+        }
 
         Text(
             text = stringResource(R.string.goals_section_title),
@@ -1122,6 +1163,57 @@ private fun HuaweiAuthIssueCard(palette: BitPalette, reason: HuaweiAuthFailureRe
             }
         }
     }
+}
+
+/** One row in the exclusive source selector. A selected switch cannot
+ *  be turned off by itself, which guarantees there is never a zero-source
+ *  state; enabling the other row atomically deselects this one. */
+@Composable
+private fun DataSourceToggleRow(
+    palette: BitPalette,
+    title: String,
+    subtitle: String,
+    accent: Color,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    isLast: Boolean = false
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(
+                text = title,
+                color = palette.text,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+            Text(
+                text = subtitle,
+                color = palette.secondaryText,
+                fontWeight = FontWeight.Medium,
+                fontSize = 12.sp,
+                lineHeight = 16.sp
+            )
+        }
+        Switch(
+            checked = selected,
+            onCheckedChange = { checked ->
+                // Ignore an attempt to switch off the currently-selected row;
+                // selecting the other row is the only valid transition.
+                if (checked || !selected) onSelect()
+            },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = accent,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = palette.stroke
+            )
+        )
+    }
+    if (!isLast) Spacer(Modifier.height(10.dp))
 }
 
 /** Single toggle row inside the Widgets settings card: label + Switch. [isLast]

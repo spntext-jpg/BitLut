@@ -99,6 +99,16 @@ class DashboardViewModel(
 
     fun refresh() { load() }
 
+    /** Rebuilds state from the newly selected source's own cache and achievement
+     *  namespace before starting a live Health Connect read. This prevents even
+     *  a single frame of Huawei totals/workouts being shown after switching to
+     *  Google Fit, or vice versa. */
+    fun onDataSourceChanged() {
+        loadJob?.cancel()
+        _state.value = buildInitialState()
+        load()
+    }
+
     /** Called from the Settings widget-visibility toggles. Persists immediately and
      *  updates the in-memory state so Summary reflects the change without a
      *  full reload (no Health Connect calls needed — this is purely a display
@@ -281,7 +291,7 @@ class DashboardViewModel(
             caloriesKcal    = snapshot.caloriesKcal,
             workoutMinutesToday = snapshot.workoutMinutesToday,
             activeHoursToday = snapshot.activeHoursToday,
-            recentWorkouts  = snapshot.recentWorkouts.ifEmpty { recentWorkouts }
+            recentWorkouts  = snapshot.recentWorkouts
         )
 
     companion object {

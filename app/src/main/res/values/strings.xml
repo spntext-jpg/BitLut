@@ -200,6 +200,12 @@
     <string name="insights_streak_best">best</string>
     <string name="insights_streak_days_one">%1$d day streak</string>
     <string name="insights_streak_days_other">%1$d days streak</string>
+    <string name="data_source_section_title">Data source</string>
+    <string name="data_source_section_body">Choose one source for the Dashboard. The other source is excluded so steps and distance are not counted twice.</string>
+    <string name="data_source_huawei_title">Huawei Health</string>
+    <string name="data_source_huawei_body">Imported by BitLut; the Dashboard shows only BitLut records.</string>
+    <string name="data_source_google_fit_title">Google Fit</string>
+    <string name="data_source_google_fit_body">The Dashboard reads only Google Fit records from Health Connect.</string>
     <string name="goals_section_title">Daily goals</string>
     <string name="goal_steps_label">Steps</string>
     <string name="goal_distance_label">Distance</string>

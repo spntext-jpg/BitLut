@@ -1,6 +1,7 @@
 package com.openhealth.sync.di
 
 import android.content.Context
+import com.openhealth.sync.config.DataSourcePrefs
 import com.openhealth.sync.config.GoalPrefs
 import com.openhealth.sync.data.AchievementsStore
 import com.openhealth.sync.data.DashboardSnapshotCache
@@ -11,7 +12,10 @@ import com.openhealth.sync.data.HuaweiHealthReader
 import com.openhealth.sync.data.worker.SyncRunLease
 
 class AppContainer(private val context: Context) {
-    val googleHealthManager: HealthConnectManager by lazy { GoogleHealthManager(context) }
+    val dataSourcePrefs: DataSourcePrefs by lazy { DataSourcePrefs(context) }
+    val googleHealthManager: HealthConnectManager by lazy {
+        GoogleHealthManager(context, dataSourcePrefs)
+    }
     val huaweiHealthManager: HuaweiHealthReader by lazy { HuaweiHealthManager(context) }
 
     /**
@@ -40,10 +44,14 @@ class AppContainer(private val context: Context) {
      * three call sites each re-deriving "which SharedPreferences file does
      * this live in".
      */
-    val dashboardSnapshotCache: DashboardSnapshotCache by lazy { DashboardSnapshotCache(context) }
+    val dashboardSnapshotCache: DashboardSnapshotCache by lazy {
+        DashboardSnapshotCache(context, dataSourcePrefs)
+    }
 
     /** Shared activity-only personal records + streak store (v1.9.12). */
-    val achievementsStore: AchievementsStore by lazy { AchievementsStore(context) }
+    val achievementsStore: AchievementsStore by lazy {
+        AchievementsStore(context, dataSourcePrefs)
+    }
 
     /** Shared user-configurable activity goals (v1.9.12). */
     val goalPrefs: GoalPrefs by lazy { GoalPrefs(context) }
