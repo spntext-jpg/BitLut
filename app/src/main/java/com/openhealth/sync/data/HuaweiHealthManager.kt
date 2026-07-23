@@ -25,6 +25,11 @@ import com.huawei.hms.support.api.entity.auth.Scope
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.util.AppLogger
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -271,7 +276,7 @@ class HuaweiHealthManager(
                 }
             }
 
-            val steps = readCategory("steps") { readSteps(startTimeMs, endTimeMs) }
+            val steps = readCategory("steps") { readDailyStepTotals(endTimeMs) }
             val distances = readCategory("distance") { readDistance(startTimeMs, endTimeMs) }
             val floors = readCategory("floors") { readFloors(startTimeMs, endTimeMs) }
             val elevations = readCategory("elevation") { readElevation(startTimeMs, endTimeMs) }
@@ -336,28 +341,80 @@ class HuaweiHealthManager(
         }
     }
 
-    private suspend fun readSteps(startTimeMs: Long, endTimeMs: Long): List<StepData> {
-        // DT_CONTINUOUS_STEPS_DELTA stores the incremental count in
-        // FIELD_STEPS_DELTA. FIELD_STEPS belongs to the daily total type and
-        // made valid Huawei points map to zero on affected SDK/device builds.
-        val stepFields = fields("FIELD_STEPS_DELTA", "FIELD_STEPS")
+    private suspend fun readDailyStepTotals(endTimeMs: Long): List<StepData> {
+        // Raw DT_CONTINUOUS_STEPS_DELTA samples are not the number shown by
+        // Huawei Health. Huawei documents that wearable/Huawei Health workout
+        // steps can exist only in daily/activity statistics and have no delta
+        // samples at all. Query the official daily summation instead so BitLut
+        // exports the same deduplicated total that Huawei Health displays.
+        val stepFields = fields("FIELD_STEPS", "FIELD_STEPS_DELTA")
         if (stepFields.isEmpty()) {
-            return emptyListWithLog("steps", "Huawei SDK exposes no supported step field")
+            return emptyListWithLog("daily steps", "Huawei SDK exposes no supported step-total field")
         }
 
-        return readPoints(
-            DataType.DT_CONTINUOUS_STEPS_DELTA,
-            startTimeMs,
-            endTimeMs,
-            "steps",
-            dedupFields = stepFields
-        ).mapNotNull { point ->
-            val value = point.firstNumericValue(stepFields)?.toLong() ?: return@mapNotNull null
-            val start = point.getStartTime(TimeUnit.MILLISECONDS)
-            val end = point.getEndTime(TimeUnit.MILLISECONDS)
+        val zone = ZoneId.systemDefault()
+        val today = Instant.ofEpochMilli(endTimeMs).atZone(zone).toLocalDate()
+        val firstDay = today.minusDays(ACTIVITY_HISTORY_WINDOW_DAYS - 1L)
+        val startDate = firstDay.format(DateTimeFormatter.BASIC_ISO_DATE).toInt()
+        val endDate = today.format(DateTimeFormatter.BASIC_ISO_DATE).toInt()
 
-            if (value > 0L && start < end) StepData(start, end, value) else null
+        AppLogger.i(
+            TAG,
+            "Querying Huawei daily step summation: startDate=$startDate endDate=$endDate"
+        )
+
+        val sampleSet = try {
+            dataController
+                .readDailySummation(DataType.DT_CONTINUOUS_STEPS_DELTA, startDate, endDate)
+                .awaitTask()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SecurityException) {
+            AppLogger.e(TAG, "Huawei daily steps read denied", e)
+            throw e
+        } catch (e: Exception) {
+            // Do not fall back to raw deltas here: mixing an incomplete delta
+            // view with daily totals would recreate the dashboard mismatch.
+            // Preserve the last correct Health Connect total and retry later.
+            AppLogger.e(TAG, "Huawei daily step summation failed; preserving previous totals: ${e.message}", e)
+            return emptyList()
         }
+
+        val totalsByDay = linkedMapOf<LocalDate, Long>()
+        for (point in sampleSet.samplePoints) {
+            val count = point.firstNumericValue(stepFields)?.toLong() ?: continue
+            val pointStart = point.getStartTime(TimeUnit.MILLISECONDS)
+            if (count <= 0L || pointStart <= 0L) continue
+
+            val day = Instant.ofEpochMilli(pointStart).atZone(zone).toLocalDate()
+            if (day.isBefore(firstDay) || day.isAfter(today)) continue
+
+            // readDailySummation returns statistical totals. If an OEM build
+            // exposes duplicate collectors for the same day, choosing the max
+            // avoids summing already-aggregated totals twice.
+            totalsByDay[day] = maxOf(totalsByDay[day] ?: 0L, count)
+        }
+
+        val result = totalsByDay.entries
+            .sortedBy { it.key }
+            .map { (day, count) ->
+                val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
+                val nextMidnight = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                val end = if (day == today) minOf(endTimeMs, nextMidnight) else nextMidnight
+                StepData(
+                    startTimeMs = start,
+                    endTimeMs = end,
+                    count = count,
+                    sourceId = day.format(DateTimeFormatter.BASIC_ISO_DATE)
+                )
+            }
+            .filter { it.startTimeMs < it.endTimeMs }
+
+        AppLogger.i(
+            TAG,
+            "Huawei daily step totals read: days=${result.size} today=${result.lastOrNull { it.sourceId == endDate.toString() }?.count ?: 0L} sevenDayTotal=${result.sumOf { it.count }}"
+        )
+        return result
     }
 
     private suspend fun readDistance(startTimeMs: Long, endTimeMs: Long): List<DistanceData> {
@@ -464,11 +521,8 @@ class HuaweiHealthManager(
         val options = ActivityRecordReadOptions.Builder()
             .setTimeInterval(startTimeMs, endTimeMs, TimeUnit.MILLISECONDS)
             .readActivityRecordsFromAllApps()
-            // Huawei's own Health Kit guide warns that an activity-record
-            // request without a carried DataType may return no records from
-            // Huawei Health. Steps delta is already inside BitLut's approved
-            // basic scope and is used here only to request associated detail;
-            // readActivityRecordsFromAllApps still controls the record list.
+            // Carrying an approved detail type is required on some Huawei
+            // Health builds for the record list to be returned at all.
             .read(DataType.DT_CONTINUOUS_STEPS_DELTA)
             .build()
 
@@ -485,26 +539,32 @@ class HuaweiHealthManager(
         AppLogger.i(TAG, "Huawei activity records read: ${records.size}")
 
         return records.mapNotNull { record ->
-            // ActivityRecord's accessor naming has changed across HMS SDK
-            // generations (activityType vs activityTypeId). Reflect only the
-            // model accessors while keeping the controller/options API typed.
             val start = activityRecordTime(record, "getStartTime") ?: return@mapNotNull null
             val end = activityRecordTime(record, "getEndTime") ?: return@mapNotNull null
             if (start <= 0L || end <= start) return@mapNotNull null
 
+            val recordId = activityRecordString(record, "getId")
             val rawType = activityRecordString(record, "getActivityTypeId", "getActivityType")
-            val title = activityRecordString(record, "getName")
-                ?.takeIf { it.isNotBlank() }
-                ?: rawType?.replace('_', ' ')?.takeIf { it.isNotBlank() }
-                ?: "Huawei workout"
+            val rawName = activityRecordString(record, "getName")
+            val canonicalType = canonicalHuaweiActivityName(rawType)
+            val title = rawName
+                ?.trim()
+                ?.takeIf { it.isNotBlank() && !isSyntheticHuaweiActivityName(it, recordId) }
+                ?: canonicalType
+
+            val exerciseType = mapHuaweiExerciseType(canonicalType)
+            AppLogger.i(
+                TAG,
+                "Huawei activity mapped: type=${rawType ?: "unknown"} name=${rawName ?: "-"} canonical=$canonicalType start=$start end=$end"
+            )
 
             ActivitySessionData(
                 startTimeMs = start,
                 endTimeMs = end,
                 title = title,
-                exerciseType = mapHuaweiExerciseType(rawType)
+                exerciseType = exerciseType
             )
-        }.distinctBy { Triple(it.startTimeMs, it.endTimeMs, it.title) }
+        }.distinctBy { Pair(it.startTimeMs, it.endTimeMs) }
     }
 
     private fun activityRecordTime(record: Any, methodName: String): Long? =
@@ -529,21 +589,114 @@ class HuaweiHealthManager(
         return null
     }
 
-    private fun mapHuaweiExerciseType(rawType: String?): Int {
-        // Resolve Health Connect constants by name so this activity-only app
-        // remains source-compatible across the alpha Health Connect client it
-        // currently ships with. WALKING is the safe compile-time fallback.
-        val normalized = rawType.orEmpty().lowercase()
+    private fun isSyntheticHuaweiActivityName(name: String, recordId: String?): Boolean {
+        val trimmed = name.trim()
+        return trimmed.equals(recordId, ignoreCase = true) ||
+            SYNTHETIC_HUAWEI_ACTIVITY_NAME.matches(trimmed)
+    }
+
+    private fun canonicalHuaweiActivityName(rawType: String?): String {
+        val normalized = rawType.orEmpty().trim().lowercase(Locale.ROOT)
+        val numericType = normalized.toIntOrNull()
+
+        return when (numericType) {
+            1 -> "aerobics"
+            3 -> "badminton"
+            4 -> "baseball"
+            5 -> "basketball"
+            6 -> "boxing"
+            7 -> "calisthenics"
+            8 -> "circuit training"
+            12 -> "cycling"
+            13 -> "dancing"
+            16 -> "elliptical"
+            20 -> "american football"
+            22 -> "football"
+            25 -> "golf"
+            26 -> "gymnastics"
+            28 -> "hiit"
+            29 -> "hiking"
+            33 -> "ice skating"
+            35 -> "interval training"
+            36 -> "jumping rope"
+            37 -> "kayaking"
+            38 -> "kettlebell training"
+            48 -> "pilates"
+            51 -> "rock climbing"
+            52 -> "rowing"
+            53 -> "rowing machine"
+            56 -> "running"
+            57 -> "indoor running"
+            62 -> "skiing"
+            64 -> "snowboarding"
+            74 -> "stair climbing"
+            75 -> "stair climbing machine"
+            78 -> "strength training"
+            80 -> "swimming"
+            81 -> "open water swimming"
+            82 -> "pool swimming"
+            83 -> "table tennis"
+            85 -> "tennis"
+            88 -> "volleyball"
+            90 -> "walking"
+            92 -> "weightlifting"
+            95 -> "yoga"
+            97 -> "indoor cycling"
+            109 -> "spinning"
+            111 -> "crossfit"
+            112 -> "functional training"
+            113 -> "physical training"
+            118 -> "core training"
+            126 -> "indoor walking"
+            127 -> "indoor running"
+            128 -> "mountain climbing"
+            129 -> "trail running"
+            130 -> "roller skating"
+            153 -> "freediving"
+            161 -> "marathon"
+            0, null -> normalized
+                .takeIf { it.isNotBlank() && it != "unknown" }
+                ?.replace('_', ' ')
+                ?.replace('.', ' ')
+                ?: "workout"
+            else -> normalized
+                .takeIf { it.isNotBlank() }
+                ?.replace('_', ' ')
+                ?.replace('.', ' ')
+                ?: "workout"
+        }
+    }
+
+    private fun mapHuaweiExerciseType(canonicalType: String): Int {
         val constantName = when {
-            "run" in normalized || "jog" in normalized -> "EXERCISE_TYPE_RUNNING"
-            "cycl" in normalized || "bike" in normalized -> "EXERCISE_TYPE_BIKING"
-            "swim" in normalized -> "EXERCISE_TYPE_SWIMMING_POOL"
-            "hik" in normalized || "climb" in normalized -> "EXERCISE_TYPE_HIKING"
-            "row" in normalized -> "EXERCISE_TYPE_ROWING_MACHINE"
-            "ellipt" in normalized -> "EXERCISE_TYPE_ELLIPTICAL"
-            "strength" in normalized || "weight" in normalized -> "EXERCISE_TYPE_STRENGTH_TRAINING"
-            "yoga" in normalized -> "EXERCISE_TYPE_YOGA"
-            "walk" in normalized -> "EXERCISE_TYPE_WALKING"
+            "american football" in canonicalType -> "EXERCISE_TYPE_FOOTBALL_AMERICAN"
+            "australian football" in canonicalType -> "EXERCISE_TYPE_FOOTBALL_AUSTRALIAN"
+            "football" in canonicalType || "soccer" in canonicalType -> "EXERCISE_TYPE_SOCCER"
+            "run" in canonicalType || "marathon" in canonicalType -> "EXERCISE_TYPE_RUNNING"
+            "cycl" in canonicalType || "bike" in canonicalType || "spinning" in canonicalType -> "EXERCISE_TYPE_BIKING"
+            "open water" in canonicalType -> "EXERCISE_TYPE_SWIMMING_OPEN_WATER"
+            "swim" in canonicalType -> "EXERCISE_TYPE_SWIMMING_POOL"
+            "hik" in canonicalType || "mountain climb" in canonicalType -> "EXERCISE_TYPE_HIKING"
+            "rowing machine" in canonicalType -> "EXERCISE_TYPE_ROWING_MACHINE"
+            "row" in canonicalType -> "EXERCISE_TYPE_ROWING"
+            "ellipt" in canonicalType -> "EXERCISE_TYPE_ELLIPTICAL"
+            "strength" in canonicalType || "weight" in canonicalType || "kettlebell" in canonicalType -> "EXERCISE_TYPE_STRENGTH_TRAINING"
+            "yoga" in canonicalType -> "EXERCISE_TYPE_YOGA"
+            "walk" in canonicalType -> "EXERCISE_TYPE_WALKING"
+            "skiing" in canonicalType -> "EXERCISE_TYPE_SKIING"
+            "snowboard" in canonicalType -> "EXERCISE_TYPE_SNOWBOARDING"
+            "skating" in canonicalType -> "EXERCISE_TYPE_SKATING"
+            "tennis" == canonicalType -> "EXERCISE_TYPE_TENNIS"
+            "table tennis" in canonicalType -> "EXERCISE_TYPE_TABLE_TENNIS"
+            "basketball" in canonicalType -> "EXERCISE_TYPE_BASKETBALL"
+            "volleyball" in canonicalType -> "EXERCISE_TYPE_VOLLEYBALL"
+            "badminton" in canonicalType -> "EXERCISE_TYPE_BADMINTON"
+            "baseball" in canonicalType -> "EXERCISE_TYPE_BASEBALL"
+            "boxing" in canonicalType -> "EXERCISE_TYPE_BOXING"
+            "dancing" in canonicalType || "aerobics" in canonicalType -> "EXERCISE_TYPE_DANCING"
+            "hiit" in canonicalType || "interval" in canonicalType -> "EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING"
+            "pilates" in canonicalType -> "EXERCISE_TYPE_PILATES"
+            "golf" in canonicalType -> "EXERCISE_TYPE_GOLF"
             else -> "EXERCISE_TYPE_OTHER_WORKOUT"
         }
 
@@ -552,7 +705,7 @@ class HuaweiHealthManager(
                 .getField(constantName)
                 .getInt(null)
         } catch (_: Exception) {
-            androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_WALKING
+            androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
         }
     }
 
@@ -788,6 +941,10 @@ class HuaweiHealthManager(
     private companion object {
         private const val HUAWEI_READ_CHUNK_MS: Long = 24L * 60L * 60L * 1000L
         private const val ACTIVITY_HISTORY_WINDOW_DAYS = 7L
+        private val SYNTHETIC_HUAWEI_ACTIVITY_NAME = Regex(
+            "^sporthealth\\d+$",
+            RegexOption.IGNORE_CASE
+        )
 
         const val KEY_HUAWEI_PENDING_APPROVAL = "huawei_pending_approval"
         const val KEY_HUAWEI_APPGALLERY_VERIFICATION_REQUIRED = "huawei_appgallery_verification_required"

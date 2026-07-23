@@ -41,6 +41,7 @@ private const val TRANSIENT_PERMISSION_RETRY_DELAY_MS = 400L
 /** Sprint 2026-07-10: how long a permission-check result is trusted before
  *  a fresh one is required -- see [GoogleHealthManager.grantedPermissionsOrEmpty]. */
 private const val PERMISSION_CACHE_TTL_MS = 3_000L
+private val SYNTHETIC_WORKOUT_TITLE = Regex("^sporthealth\\d+$", RegexOption.IGNORE_CASE)
 
 private val HC_PACKAGES = listOf(
     "com.google.android.apps.healthdata",
@@ -54,7 +55,12 @@ enum class HealthConnectStatus {
     NOT_SUPPORTED
 }
 
-data class StepData(val startTimeMs: Long, val endTimeMs: Long, val count: Long)
+data class StepData(
+    val startTimeMs: Long,
+    val endTimeMs: Long,
+    val count: Long,
+    val sourceId: String? = null
+)
 data class DistanceData(val startTimeMs: Long, val endTimeMs: Long, val meters: Double)
 data class FloorsData(val startTimeMs: Long, val endTimeMs: Long, val floors: Double)
 data class ElevationData(val startTimeMs: Long, val endTimeMs: Long, val meters: Double)
@@ -311,22 +317,68 @@ class GoogleHealthManager(
     }
 
     suspend fun writeStepsBatch(records: List<StepData>): Boolean {
-        val valid = records
+        val validSourceRecords = records
             .filter { it.count > 0 && it.startTimeMs < it.endTimeMs }
-            .map {
-                val start = Instant.ofEpochMilli(it.startTimeMs)
-                val end = Instant.ofEpochMilli(it.endTimeMs)
-                StepsRecord(
-                    count = it.count,
-                    startTime = start,
-                    endTime = end,
-                    startZoneOffset = offset(start),
-                    endZoneOffset = offset(end),
-                    metadata = bitlutMetadata("steps", start.toEpochMilli(), end.toEpochMilli())
-                )
-            }
+        val version = System.currentTimeMillis()
+        val valid = validSourceRecords.map {
+            val start = Instant.ofEpochMilli(it.startTimeMs)
+            val end = Instant.ofEpochMilli(it.endTimeMs)
+            StepsRecord(
+                count = it.count,
+                startTime = start,
+                endTime = end,
+                startZoneOffset = offset(start),
+                endZoneOffset = offset(end),
+                metadata = if (it.sourceId != null) {
+                    bitlutDailyStepMetadata(it.sourceId, version)
+                } else {
+                    bitlutMetadata("steps", start.toEpochMilli(), end.toEpochMilli(), version = version)
+                }
+            )
+        }
 
-        return replaceRecords("steps", valid, StepsRecord::class)
+        if (valid.isEmpty()) {
+            AppLogger.i(TAG, "No steps records to write")
+            return true
+        }
+
+        val isCompleteDailySummation = validSourceRecords.all { it.sourceId != null }
+        if (!isCompleteDailySummation) {
+            return replaceRecords("steps", valid, StepsRecord::class)
+        }
+
+        val client = resolveClient() ?: run {
+            AppLogger.e(TAG, "write steps: no Health Connect client")
+            return false
+        }
+        val deleteStart = valid.minOf { it.startTime }
+        val deleteEnd = valid.maxOf { it.endTime }
+
+        return try {
+            // Time-range deletion is automatically restricted by Health
+            // Connect to records owned by BitLut. This removes legacy raw
+            // delta records before writing one authoritative Huawei daily
+            // total per date, preventing old+new double counting.
+            client.deleteRecords(
+                StepsRecord::class,
+                TimeRangeFilter.between(deleteStart, deleteEnd)
+            )
+            valid.chunked(WRITE_BATCH_SIZE).forEach { client.insertRecords(it) }
+            AppLogger.i(
+                TAG,
+                "Reconciled Huawei daily steps in Health Connect: days=${valid.size} today=${valid.last().count} range=$deleteStart..$deleteEnd"
+            )
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SecurityException) {
+            AppLogger.e(TAG, "write steps denied by Health Connect permission policy: ${e.message}", e)
+            invalidateClientCache()
+            throw e
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "daily steps reconciliation failed: ${e.message}", e)
+            false
+        }
     }
 
     private suspend fun writeDistanceBatch(records: List<DistanceData>): Boolean {
@@ -406,6 +458,10 @@ class GoogleHealthManager(
     }
 
     private suspend fun writeActivitySessionsBatch(records: List<ActivitySessionData>): Boolean {
+        // Huawei may revise workout metadata after the initial sync. A
+        // timestamp version ensures the same stable clientRecordId upserts the
+        // real type/title over records written by older BitLut builds.
+        val version = System.currentTimeMillis()
         val valid = records
             .filter { it.startTimeMs < it.endTimeMs }
             .map {
@@ -418,7 +474,12 @@ class GoogleHealthManager(
                     endZoneOffset = offset(end),
                     exerciseType = it.exerciseType,
                     title = it.title,
-                    metadata = bitlutMetadata("exercise", start.toEpochMilli(), end.toEpochMilli())
+                    metadata = bitlutMetadata(
+                        "exercise",
+                        start.toEpochMilli(),
+                        end.toEpochMilli(),
+                        version = version
+                    )
                 )
             }
 
@@ -679,7 +740,7 @@ class GoogleHealthManager(
                     ActivitySessionData(
                         startTimeMs = it.startTime.toEpochMilli(),
                         endTimeMs = it.endTime.toEpochMilli(),
-                        title = it.title ?: exerciseTypeName(it.exerciseType),
+                        title = workoutDisplayName(it.title, it.exerciseType),
                         exerciseType = it.exerciseType
                     )
                 }
@@ -794,6 +855,17 @@ class GoogleHealthManager(
         }
     }
 
+    private fun workoutDisplayName(rawTitle: String?, exerciseType: Int): String {
+        val cleaned = rawTitle?.trim()
+        if (cleaned.isNullOrBlank() || SYNTHETIC_WORKOUT_TITLE.matches(cleaned)) {
+            return exerciseTypeName(exerciseType)
+        }
+
+        return localizeWorkoutName(
+            cleaned.replace('_', ' ').replace('.', ' ')
+        )
+    }
+
     private fun exerciseTypeName(type: Int): String {
         val raw = when (type) {
             ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "walking"
@@ -840,8 +912,13 @@ class GoogleHealthManager(
 
         return when (normalized) {
             "walking", "walk" -> "Ходьба"
+            "indoor walking" -> "Ходьба в помещении"
             "running", "run" -> "Бег"
+            "indoor running", "running machine", "treadmill running" -> "Беговая дорожка"
+            "trail running" -> "Трейлраннинг"
+            "marathon" -> "Марафон"
             "cycling", "biking", "bike" -> "Велосипед"
+            "indoor cycling", "spinning" -> "Велотренировка"
             "open water swimming" -> "Плавание в открытой воде"
             "pool swimming", "swimming", "swim" -> "Плавание"
             "strength training" -> "Силовая тренировка"
@@ -856,7 +933,14 @@ class GoogleHealthManager(
             "golf" -> "Гольф"
             "hiking" -> "Поход"
             "rowing" -> "Гребля"
-            "skating" -> "Катание на коньках"
+            "rowing machine" -> "Гребной тренажёр"
+            "jumping rope" -> "Скакалка"
+            "rock climbing", "mountain climbing" -> "Скалолазание"
+            "crossfit" -> "Кроссфит"
+            "functional training" -> "Функциональная тренировка"
+            "physical training" -> "Физическая тренировка"
+            "core training" -> "Тренировка корпуса"
+            "skating", "ice skating", "roller skating" -> "Катание на коньках"
             "skiing" -> "Лыжи"
             "snowboarding" -> "Сноуборд"
             "volleyball" -> "Волейбол"
@@ -886,16 +970,25 @@ class GoogleHealthManager(
         return "bitlut_${type}_${startTimeMs}_${endTimeMs}${suffix}"
     }
 
+    private fun bitlutDailyStepMetadata(sourceId: String, version: Long): Metadata {
+        val safeSourceId = sourceId
+            .replace(Regex("[^A-Za-z0-9_-]"), "_")
+            .take(64)
+        return Metadata(
+            clientRecordId = "bitlut_steps_daily_$safeSourceId",
+            clientRecordVersion = version
+        )
+    }
+
     private fun bitlutMetadata(
         type: String,
         startTimeMs: Long,
         endTimeMs: Long,
-        discriminator: String = ""
+        discriminator: String = "",
+        version: Long = 1L
     ): Metadata = Metadata(
         clientRecordId = generateRecordId(type, startTimeMs, endTimeMs, discriminator),
-        // Version 1 supersedes records written by older BitLut builds, whose
-        // implicit version was 0, while preserving deterministic idempotency.
-        clientRecordVersion = 1L
+        clientRecordVersion = version
     )
 
     private fun offset(instant: Instant): ZoneOffset = zoneRules.getOffset(instant)
