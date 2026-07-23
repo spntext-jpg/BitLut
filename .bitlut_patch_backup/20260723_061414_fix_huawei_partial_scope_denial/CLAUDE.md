@@ -19,36 +19,24 @@ happens on-device.
 
 ## Current status
 
-- **HUAWEI Health Kit scope: APPROVED at the app level, AND real device
-  authorization has now succeeded at least once** (App ID 117824685,
-  approval received 2026-07-18; a device log from 2026-07-22 showed
-  `localHuaweiAuthorized=true` with real steps/distance data successfully
-  read from Huawei Health). This is the first confirmed evidence in this
-  project's history of a real device completing authorization -- the
-  "waiting on Huawei, nothing to do but wait" framing from earlier is now
-  superseded. Read the next bullet: sync is not yet fully reliable even so.
-- **Huawei can approve scopes incrementally, and the app didn't originally
-  handle that -- fixed 2026-07-22 (Gotcha 14).** The same 2026-07-22 log
-  that proved authorization works also showed `activeCalories` specifically
-  still returning 50005 while steps/distance/elevation succeeded in the
-  same attempt -- a partial scope rollout, not a full re-authorization
-  need. Before the fix, that one denied category discarded the whole sync
-  attempt's data and incorrectly reset `isAuthorized` back to `false` (see
-  Gotcha 14 for the exact mechanism); now a single denied category is
-  skipped without affecting the rest. If this or a similar report comes up
-  again, check whether it's actually this same already-fixed pattern before
-  assuming something new is wrong.
+- **HUAWEI Health Kit scope: APPROVED at the app level** (Huawei's own
+  approval notification for App ID 117824685, received 2026-07-18). This
+  does **not** mean sync is live yet -- read the next bullet before
+  assuming it "just works" now.
 - **`localHuaweiAuthorized` is a LOCAL, per-device cached flag from the
   last real OAuth attempt -- fully decoupled from the server-side app-level
-  scope approval above.** Confirmed still relevant background even though
-  authorization has now succeeded once: Huawei's approval notification
-  arrives outside the app entirely (e.g. by email), and BitLut has no way
-  to detect it on its own -- `SyncWorker` deliberately never launches the
-  OAuth flow itself (it needs a live foreground Activity). If a *future*
-  device ever shows `localHuaweiAuthorized=false`/50005 again after
-  previously working, the "Try connecting again" button (Gotcha 12) is the
-  right next step, same as before -- this bullet's advice didn't change,
-  only the fact that it's now been exercised successfully once.
+  scope approval above.** A real device log taken *after* the approval
+  notification still showed `localHuaweiAuthorized=false` and error `50005`
+  on every sync -- this is expected, not a sign the approval didn't take,
+  because nothing has re-triggered the authorization intent since. Huawei's
+  approval arrives outside the app entirely (e.g. by email); BitLut has no
+  way to detect it on its own. `SyncWorker` deliberately never launches the
+  OAuth flow itself (it needs a live foreground Activity) -- **the next
+  required action is an explicit tap on "Connect Huawei Health" / the new
+  "Try connecting again" button** (see Gotcha 12) on a real device, to
+  actually pick up the approval. If that still 50005s after ~24-48h (a
+  known HMS propagation lag), suspect a certificate/config mismatch instead
+  -- see Gotcha 12 and the AppGallery review note below.
 - **One AppGallery review rejection so far (2026-07-18), root-caused and
   fixed in code.** Rejection reason: "does not collect to Huawei Health
   successfully." The test evidence the reviewer quoted was BitLut's own
@@ -150,9 +138,7 @@ happens on-device.
 
 12. **`isAuthorized()`/`isPendingApproval()` are per-device cached flags from the *last local OAuth attempt* -- not a live reflection of Huawei's server-side app-level scope approval, and a single generic failure message cannot distinguish the 5 different reasons an attempt can fail.** Both lessons came from the same real incident: an AppGallery review rejection quoted BitLut's own generic `toast_huawei_pending` toast as evidence of a broken app, when the toast was shown identically for `HUAWEI_SCOPE_UNAUTHORIZED` (50005, pending review), `HUAWEI_PRIVACY_NOT_ACCEPTED` (50011), `HUAWEI_CERT_MISMATCH`/`HUAWEI_CERT_VERIFY_FAILED` (907135702/6003), `HUAWEI_INVALID_ARGS` (907135000), and unknown/no-result cases -- giving no way to tell which was actually happening. Fixed with a `HuaweiAuthFailureReason` enum, classified and persisted per attempt (`HuaweiHealthManager.classifyFailure()`), surfaced via a reason-specific `HuaweiAuthIssueCard` in Settings instead of the old boolean-only pending-approval card. Relatedly: after Huawei approved BitLut's scope application, real device logs *still* showed `localHuaweiAuthorized=false`/50005 -- expected, since that approval is a separate, server-side, app-level fact that doesn't retroactively flip any device's locally cached grant; only a fresh, real (Activity-launched) authorization attempt updates it, which is exactly what the new "Try connecting again" retry button on the card exists to prompt (shown only for `SCOPE_PENDING_APPROVAL`/`PRIVACY_NOT_ACCEPTED`, where a retry can plausibly help -- not for `CERTIFICATE_MISMATCH`/`INVALID_CONFIGURATION`, which need an AppGallery Connect-side fix first).
 
-13. **If Huawei's own "App Signing" re-signing feature is enabled for this app, the certificate fingerprint that matters for Health Kit is the App Signing certificate's SHA-256, not the local upload-keystore's SHA-256.** Flagged as a possible cause of a `CERTIFICATE_MISMATCH` (907135702/6003) failure specifically for builds that go through AppGallery review/distribution (as opposed to a developer's own locally-signed test builds, which may use a different certificate and could work fine while a reviewer's build fails). As of 2026-07-22 this is confirmed NOT the current blocker -- a real device log showed `localHuaweiAuthorized=true` with real steps/distance data successfully read, so basic authorization genuinely works; the remaining issue is Gotcha 14 below, a specific-category 50005 (`activeCalories`), which reads as a scope still being rolled out incrementally rather than a certificate problem. Still worth checking this if `CERTIFICATE_MISMATCH` ever actually appears in `lastAuthFailureReason()`.
-
-14. **Huawei can approve Health Kit scopes incrementally -- some data categories authorized while others still return 50005 in the very same sync attempt -- and `readSnapshot()`/`SyncWorker` did not originally handle that.** A real device log (2026-07-22) showed `steps`/`distance`/`elevation` all read successfully with real data, while `activeCalories` alone failed with `HUAWEI_SCOPE_UNAUTHORIZED` (50005) in the same `readSnapshot()` call. Before the fix, that one denied category threw all the way out of `readSnapshot()` (a data class constructor's arguments evaluate eagerly, so the already-successfully-read categories were discarded the moment a later one threw), and `SyncWorker`'s catch block called `markAppGalleryVerificationRequired()` unconditionally on ANY 50005 -- wiping the correctly-obtained `isAuthorized=true` flag back to `false`, so every subsequent sync attempt regressed to a full graceful no-op without even trying to read data again. Fixed: `readSnapshot()` now catches a `SecurityException` per category independently (steps/distance/floors/elevation/activeCalories/activitySessions each isolated) and only re-throws (triggering the existing "fully unauthorized" handling) if EVERY category came back denied with zero successes -- a partial denial now just skips that one category and proceeds normally with whatever data IS authorized, matching the same graceful-degradation shape already used for floors on SDKs that don't expose a floors DataType at all. If a future report mentions a specific data category (not "everything") failing with 50005 while others work, that's this exact pattern -- check `deniedCategories` in the log rather than assuming a full re-authorization is needed.
+13. **If Huawei's own "App Signing" re-signing feature is enabled for this app, the certificate fingerprint that matters for Health Kit is the App Signing certificate's SHA-256, not the local upload-keystore's SHA-256.** Not yet confirmed as an actual cause of anything in this project (the working theory as of 2026-07-18 is still that Gotcha 12's "local cache is stale" explanation fully accounts for the observed pending state), but flagged here because it's a very common, easy-to-miss source of a `CERTIFICATE_MISMATCH` (907135702/6003) failure specifically for builds that go through AppGallery review/distribution (as opposed to a developer's own locally-signed test builds, which may use a different certificate and could work fine while a reviewer's build fails). Check AppGallery Connect -> Distribution -> App information -> "App signing certificate fingerprint" against what's registered in Health Kit's config if `CERTIFICATE_MISMATCH` ever actually appears in `lastAuthFailureReason()`.
 
 ## Patch script conventions (follow exactly, for consistency with prior sessions)
 

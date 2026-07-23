@@ -212,82 +212,14 @@ class HuaweiHealthManager(
 
             AppLogger.i(TAG, "Reading real Huawei Health data from $startTimeMs to $endTimeMs")
 
-            // Sprint (2026-07-22): each category is read independently now, and
-            // a SecurityException (50005) from ANY ONE of them no longer
-            // aborts the whole snapshot. A real device log showed Huawei can
-            // approve scopes incrementally: steps/distance/elevation
-            // succeeded with real data while activeCalories alone still
-            // returned 50005 in the very same sync attempt. Before this fix,
-            // that one denied category threw all the way out of this
-            // function (a data class constructor's arguments are evaluated
-            // eagerly, left-to-right, so the already-successfully-read
-            // steps/distance/elevation were discarded the moment a later
-            // argument threw), and SyncWorker's catch block treated it
-            // identically to a fully-unauthorized app -- wiping the
-            // correctly-obtained isAuthorized=true flag back to false via
-            // markAppGalleryVerificationRequired(). That regressed every
-            // subsequent sync attempt back to a full graceful no-op, never
-            // even trying to read data again, despite steps/distance
-            // genuinely working. Now: a category-specific 50005 is caught
-            // right here, logged, and that category alone is skipped (the
-            // same graceful-degradation shape already used for floors on
-            // SDKs that don't expose a floors DataType at all) --
-            // authorization is only treated as fully denied if EVERY
-            // category comes back denied with zero successes, which
-            // re-throws below so SyncWorker's existing 50005 handling still
-            // fires correctly for that genuine case. See CLAUDE.md Gotcha 14.
-            var anySucceeded = false
-            var anyScopeDenied = false
-            val deniedCategories = mutableListOf<String>()
-
-            suspend fun <T> readCategory(label: String, block: suspend () -> List<T>): List<T> {
-                return try {
-                    val result = block()
-                    anySucceeded = true
-                    result
-                } catch (e: SecurityException) {
-                    anyScopeDenied = true
-                    deniedCategories.add(label)
-                    AppLogger.w(
-                        TAG,
-                        "Huawei $label is not yet authorized for this account/app (50005) -- skipping just this category, not the whole sync."
-                    )
-                    emptyList()
-                }
-            }
-
-            val steps = readCategory("steps") { readSteps(startTimeMs, endTimeMs) }
-            val distances = readCategory("distance") { readDistance(startTimeMs, endTimeMs) }
-            val floors = readCategory("floors") { readFloors(startTimeMs, endTimeMs) }
-            val elevations = readCategory("elevation") { readElevation(startTimeMs, endTimeMs) }
-            val activeCalories = readCategory("activeCalories") { readActiveCalories(startTimeMs, endTimeMs) }
-            val activities = readCategory("activitySessions") { readActivitySessions(startTimeMs, endTimeMs) }
-
-            if (anyScopeDenied && !anySucceeded) {
-                // Every category was scope-denied -- genuinely not authorized
-                // at all yet, not a partial rollout. Re-throw so SyncWorker's
-                // existing SecurityException/50005 handling fires exactly as
-                // it did before this fix.
-                throw SecurityException(
-                    "$HUAWEI_SCOPE_UNAUTHORIZED: no Huawei Health category is authorized yet ($deniedCategories)"
-                )
-            }
-
             val snapshot = HuaweiHealthSnapshot(
-                steps = steps,
-                distances = distances,
-                floors = floors,
-                elevations = elevations,
-                activeCalories = activeCalories,
-                activities = activities
+                steps = readSteps(startTimeMs, endTimeMs),
+                distances = readDistance(startTimeMs, endTimeMs),
+                floors = readFloors(startTimeMs, endTimeMs),
+                elevations = readElevation(startTimeMs, endTimeMs),
+                activeCalories = readActiveCalories(startTimeMs, endTimeMs),
+                activities = readActivitySessions(startTimeMs, endTimeMs)
             )
-
-            if (anyScopeDenied) {
-                AppLogger.w(
-                    TAG,
-                    "Huawei read partially scope-denied (still pending approval for: $deniedCategories) -- proceeding with the categories that ARE authorized."
-                )
-            }
 
             AppLogger.i(
                 TAG,
@@ -574,10 +506,7 @@ class HuaweiHealthManager(
             val chunkEnd = minOf(chunkStart + HUAWEI_READ_CHUNK_MS, endTimeMs)
             AppLogger.d(TAG, "readPoints chunk #$chunkIndex: $chunkStart..$chunkEnd")
 
-            // SecurityException / 50005 must propagate out of readPointsRaw
-            // -- readSnapshot() is what decides (since 2026-07-22) whether a
-            // single denied category is skipped or the whole read is
-            // genuinely unauthorized; this function must not swallow it.
+            // SecurityException / 50005 must propagate to SyncWorker.
             merged.addAll(readPointsRaw(type, chunkStart, chunkEnd, label))
 
             chunkStart = chunkEnd

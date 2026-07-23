@@ -1,45 +1,5 @@
 # Changelog
 
-## 2026-07-22 -- partial Huawei scope denial no longer discards the whole sync
-
-Real device log evidence this time: `localHuaweiAuthorized=true`, with
-steps (176 points) and distance (232 points) both read and deduplicated
-successfully -- the first confirmed real-device authorization success in
-this project's history. In the same sync attempt, `activeCalories` alone
-failed with `HUAWEI_SCOPE_UNAUTHORIZED` (50005), while steps/distance/
-elevation succeeded -- Huawei approves scopes incrementally, and the code
-did not handle that.
-
-- Root cause: `HuaweiHealthManager.readSnapshot()` built its
-  `HuaweiHealthSnapshot` by evaluating all 6 category reads as constructor
-  arguments in one expression. A `SecurityException` from any one of them
-  (deliberately re-thrown by `readPointsRaw()`, "propagate to caller") threw
-  out of the whole function, discarding every already-successfully-read
-  category. `SyncWorker`'s catch block then called
-  `huaweiManager.markAppGalleryVerificationRequired()` unconditionally on
-  ANY 50005 -- which sets `isAuthorized=false`/`pendingApproval=true` --
-  incorrectly resetting a *correctly obtained* authorization state back to
-  "not authorized," so every subsequent sync attempt regressed to a full
-  graceful no-op without even trying to read data again.
-- Fix: `readSnapshot()` now reads each of the 6 categories (steps,
-  distance, floors, elevation, activeCalories, activitySessions)
-  independently, catching `SecurityException` per category and simply
-  skipping that one (same graceful-degradation shape already used for
-  floors on SDKs without a floors DataType). Authorization is only treated
-  as fully denied -- re-throwing to trigger `SyncWorker`'s existing 50005
-  handling exactly as before -- if EVERY category comes back denied with
-  zero successes. A partial denial now proceeds normally with whatever
-  categories ARE authorized, and no longer touches the persisted
-  authorization state at all.
-- Updated the stale comment on `readPointsRaw()`'s `SecurityException`
-  re-throw (previously said "must propagate to SyncWorker" -- it now
-  propagates to `readSnapshot()`, which decides skip-one-category vs.
-  fully-unauthorized, not directly to `SyncWorker` for a single-category
-  failure).
-- Updated CLAUDE.md: refreshed "Current status" (first confirmed real
-  device auth success; this fix), corrected Gotcha 13's now-stale "working
-  theory" framing, added Gotcha 14 documenting the exact bug and fix.
-
 ## 2026-07-18 -- Huawei auth failure reasons + retry button (post-AppGallery-rejection)
 
 Triggered by a real AppGallery review rejection: "does not collect to
