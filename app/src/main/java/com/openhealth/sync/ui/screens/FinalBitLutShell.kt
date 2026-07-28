@@ -73,6 +73,8 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.data.ActivitySessionData
+import com.openhealth.sync.data.WorkoutMetric
+import com.openhealth.sync.data.WorkoutMetricKey
 import com.openhealth.sync.data.HuaweiAuthFailureReason
 import com.openhealth.sync.data.PersonalRecord
 import com.openhealth.sync.data.StreakState
@@ -102,8 +104,43 @@ import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material.icons.rounded.AccessibilityNew
+import androidx.compose.material.icons.rounded.DirectionsBike
+import androidx.compose.material.icons.rounded.DirectionsBoat
+import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.DirectionsRun
+import androidx.compose.material.icons.rounded.DirectionsWalk
+import androidx.compose.material.icons.rounded.DownhillSkiing
 import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.Hiking
+import androidx.compose.material.icons.rounded.IceSkating
+import androidx.compose.material.icons.rounded.Kayaking
+import androidx.compose.material.icons.rounded.Paragliding
+import androidx.compose.material.icons.rounded.Pool
+import androidx.compose.material.icons.rounded.Rowing
+import androidx.compose.material.icons.rounded.Sailing
+import androidx.compose.material.icons.rounded.SelfImprovement
+import androidx.compose.material.icons.rounded.Skateboarding
+import androidx.compose.material.icons.rounded.Snowboarding
+import androidx.compose.material.icons.rounded.Sports
+import androidx.compose.material.icons.rounded.SportsBaseball
+import androidx.compose.material.icons.rounded.SportsBasketball
+import androidx.compose.material.icons.rounded.SportsCricket
+import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.SportsFootball
+import androidx.compose.material.icons.rounded.SportsGolf
+import androidx.compose.material.icons.rounded.SportsGymnastics
+import androidx.compose.material.icons.rounded.SportsHandball
+import androidx.compose.material.icons.rounded.SportsHockey
+import androidx.compose.material.icons.rounded.SportsKabaddi
+import androidx.compose.material.icons.rounded.SportsMartialArts
+import androidx.compose.material.icons.rounded.SportsMma
+import androidx.compose.material.icons.rounded.SportsRugby
+import androidx.compose.material.icons.rounded.SportsSoccer
+import androidx.compose.material.icons.rounded.SportsTennis
+import androidx.compose.material.icons.rounded.SportsVolleyball
+import androidx.compose.material.icons.rounded.Surfing
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.Icon
@@ -551,10 +588,10 @@ private fun SummaryScreen(
 }
 
 /**
- * Premium summary of one of the two most recent exercise sessions. Health
- * Connect exposes the session title/type and start/end timestamps here; the
- * card deliberately does not invent distance or calories that are not linked
- * to the session by the current data model.
+ * Premium summary of one of the two most recent exercise sessions. Huawei's
+ * ActivityRecord summary is persisted locally alongside the Health Connect
+ * session, so every value shown here is imported data (or a transparent
+ * duration/distance derivation), never a placeholder.
  */
 @Composable
 private fun WorkoutRecencyCard(
@@ -576,91 +613,281 @@ private fun WorkoutRecencyCard(
         tintWithAccent = true,
         pressLift = true
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(accent.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Rounded.DirectionsRun,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = label.uppercase(Locale.getDefault()),
-                        color = palette.secondaryText,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(accent.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = workoutIcon(
+                            activityKey = session?.activityKey ?: "workout",
+                            title = session?.title
+                        ),
+                        contentDescription = session?.title,
+                        tint = accent,
+                        modifier = Modifier.size(25.dp)
                     )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(accent.copy(alpha = 0.14f))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = "#$position",
-                            color = accent,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 10.sp
-                        )
-                    }
                 }
-                Spacer(Modifier.height(7.dp))
-                Text(
-                    text = session?.title ?: stringResource(R.string.no_workouts),
-                    color = palette.text,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 17.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(5.dp))
-                if (session != null && durationMinutes != null) {
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = formatWorkoutDateTime(session.startTimeMs),
+                            text = label.uppercase(Locale.getDefault()),
                             color = palette.secondaryText,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(accent.copy(alpha = 0.14f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "#$position",
+                                color = accent,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        text = session?.title ?: stringResource(R.string.no_workouts),
+                        color = palette.text,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 17.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    if (session != null && durationMinutes != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = formatWorkoutDateTime(session.startTimeMs),
+                                color = palette.secondaryText,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(R.string.workout_total_minutes, durationMinutes),
+                                color = accent,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 12.sp,
+                                maxLines = 1
+                            )
+                        }
+                    } else {
                         Text(
-                            text = stringResource(R.string.workout_total_minutes, durationMinutes),
-                            color = accent,
-                            fontWeight = FontWeight.Black,
+                            text = emptyText,
+                            color = palette.secondaryText,
+                            fontWeight = FontWeight.Medium,
                             fontSize = 12.sp,
-                            maxLines = 1
+                            lineHeight = 17.sp
                         )
                     }
-                } else {
-                    Text(
-                        text = emptyText,
-                        color = palette.secondaryText,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 12.sp,
-                        lineHeight = 17.sp
+                }
+            }
+
+            if (session != null && session.metrics.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                WorkoutMetricsGrid(
+                    metrics = session.metrics,
+                    palette = palette,
+                    accent = accent
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkoutMetricsGrid(
+    metrics: List<WorkoutMetric>,
+    palette: BitPalette,
+    accent: Color
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        metrics.chunked(2).forEach { rowMetrics ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowMetrics.forEach { metric ->
+                    WorkoutMetricChip(
+                        metric = metric,
+                        palette = palette,
+                        accent = accent,
+                        modifier = Modifier.weight(1f)
                     )
+                }
+                if (rowMetrics.size == 1) {
+                    Spacer(Modifier.weight(1f))
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun WorkoutMetricChip(
+    metric: WorkoutMetric,
+    palette: BitPalette,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(accent.copy(alpha = if (palette.dark) 0.13f else 0.09f))
+            .border(
+                width = 1.dp,
+                color = accent.copy(alpha = if (palette.dark) 0.20f else 0.12f),
+                shape = RoundedCornerShape(14.dp)
+            )
+            .padding(horizontal = 11.dp, vertical = 9.dp)
+    ) {
+        Text(
+            text = workoutMetricLabel(metric.key),
+            color = palette.secondaryText,
+            fontWeight = FontWeight.Bold,
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = workoutMetricValue(metric),
+            color = palette.text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun workoutMetricLabel(key: String): String = when (key) {
+    WorkoutMetricKey.DISTANCE_METERS -> stringResource(R.string.workout_metric_distance)
+    WorkoutMetricKey.ACTIVE_CALORIES_KCAL -> stringResource(R.string.workout_metric_calories)
+    WorkoutMetricKey.STEPS -> stringResource(R.string.workout_metric_steps)
+    WorkoutMetricKey.AVG_PACE_SECONDS_PER_KM -> stringResource(R.string.workout_metric_avg_pace)
+    WorkoutMetricKey.BEST_PACE_SECONDS_PER_KM -> stringResource(R.string.workout_metric_best_pace)
+    WorkoutMetricKey.AVG_SPEED_MPS -> stringResource(R.string.workout_metric_avg_speed)
+    WorkoutMetricKey.MAX_SPEED_MPS -> stringResource(R.string.workout_metric_max_speed)
+    WorkoutMetricKey.AVG_CADENCE_PER_MIN -> stringResource(R.string.workout_metric_avg_cadence)
+    WorkoutMetricKey.MAX_CADENCE_PER_MIN -> stringResource(R.string.workout_metric_max_cadence)
+    WorkoutMetricKey.ASCENT_METERS -> stringResource(R.string.workout_metric_ascent)
+    WorkoutMetricKey.DESCENT_METERS -> stringResource(R.string.workout_metric_descent)
+    WorkoutMetricKey.AVG_POWER_WATTS -> stringResource(R.string.workout_metric_avg_power)
+    WorkoutMetricKey.MAX_POWER_WATTS -> stringResource(R.string.workout_metric_max_power)
+    WorkoutMetricKey.AVG_RESISTANCE -> stringResource(R.string.workout_metric_resistance)
+    WorkoutMetricKey.STROKES -> stringResource(R.string.workout_metric_strokes)
+    WorkoutMetricKey.AVG_STROKE_RATE -> stringResource(R.string.workout_metric_stroke_rate)
+    WorkoutMetricKey.SWOLF -> stringResource(R.string.workout_metric_swolf)
+    WorkoutMetricKey.JUMPS -> stringResource(R.string.workout_metric_jumps)
+    WorkoutMetricKey.AVG_JUMP_RATE -> stringResource(R.string.workout_metric_jump_rate)
+    WorkoutMetricKey.GROUND_CONTACT_MS -> stringResource(R.string.workout_metric_ground_contact)
+    WorkoutMetricKey.IMPACT_ACCELERATION -> stringResource(R.string.workout_metric_impact)
+    WorkoutMetricKey.SWING_ANGLE_DEGREES -> stringResource(R.string.workout_metric_swing_angle)
+    WorkoutMetricKey.EVERSION_DEGREES -> stringResource(R.string.workout_metric_eversion)
+    else -> stringResource(R.string.workout_metric_other)
+}
+
+@Composable
+private fun workoutMetricValue(metric: WorkoutMetric): String = when (metric.key) {
+    WorkoutMetricKey.DISTANCE_METERS -> if (metric.value >= 1000.0) {
+        stringResource(R.string.workout_value_km, metric.value / 1000.0)
+    } else {
+        stringResource(R.string.workout_value_meters, metric.value)
+    }
+    WorkoutMetricKey.ACTIVE_CALORIES_KCAL -> stringResource(R.string.workout_value_kcal, metric.value)
+    WorkoutMetricKey.STEPS, WorkoutMetricKey.STROKES, WorkoutMetricKey.JUMPS ->
+        java.text.NumberFormat.getIntegerInstance().format(metric.value.toLong())
+    WorkoutMetricKey.AVG_PACE_SECONDS_PER_KM,
+    WorkoutMetricKey.BEST_PACE_SECONDS_PER_KM -> formatPace(metric.value)
+    WorkoutMetricKey.AVG_SPEED_MPS,
+    WorkoutMetricKey.MAX_SPEED_MPS -> stringResource(R.string.workout_value_kmh, metric.value * 3.6)
+    WorkoutMetricKey.AVG_CADENCE_PER_MIN,
+    WorkoutMetricKey.MAX_CADENCE_PER_MIN,
+    WorkoutMetricKey.AVG_STROKE_RATE,
+    WorkoutMetricKey.AVG_JUMP_RATE -> stringResource(R.string.workout_value_per_min, metric.value)
+    WorkoutMetricKey.ASCENT_METERS,
+    WorkoutMetricKey.DESCENT_METERS -> stringResource(R.string.workout_value_meters, metric.value)
+    WorkoutMetricKey.AVG_POWER_WATTS,
+    WorkoutMetricKey.MAX_POWER_WATTS -> stringResource(R.string.workout_value_watts, metric.value)
+    WorkoutMetricKey.GROUND_CONTACT_MS -> stringResource(R.string.workout_value_ms, metric.value)
+    WorkoutMetricKey.SWING_ANGLE_DEGREES,
+    WorkoutMetricKey.EVERSION_DEGREES -> stringResource(R.string.workout_value_degrees, metric.value)
+    WorkoutMetricKey.IMPACT_ACCELERATION -> stringResource(R.string.workout_value_acceleration, metric.value)
+    else -> java.text.NumberFormat.getNumberInstance().format(metric.value)
+}
+
+private fun formatPace(secondsPerKm: Double): String {
+    val totalSeconds = secondsPerKm.toLong().coerceAtLeast(0L)
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return String.format(Locale.getDefault(), "%d:%02d /km", minutes, seconds)
+}
+
+private fun workoutIcon(activityKey: String, title: String? = null): ImageVector {
+    val key = "$activityKey ${title.orEmpty()}"
+        .lowercase(Locale.ROOT)
+        .replace('_', ' ')
+        .replace('.', ' ')
+    return when {
+        key.contains("cycling") || key.contains("bmx") || key.contains("spinning") -> Icons.Rounded.DirectionsBike
+        key.contains("running") || key.contains("marathon") || key.contains("trail run") -> Icons.Rounded.DirectionsRun
+        key.contains("walking") || key == "on foot" -> Icons.Rounded.DirectionsWalk
+        key.contains("hiking") || key.contains("outdoor adventure") || key.contains("climbing") -> Icons.Rounded.Hiking
+        key.contains("swimming") || key.contains("diving") || key.contains("freediv") || key.contains("apnea") || key.contains("water polo") -> Icons.Rounded.Pool
+        key.contains("rowing machine") -> Icons.Rounded.Rowing
+        key.contains("rowing") || key.contains("dragon boat") -> Icons.Rounded.Rowing
+        key.contains("kayak") -> Icons.Rounded.Kayaking
+        key.contains("sailing") || key.contains("motorboat") -> Icons.Rounded.Sailing
+        key.contains("surf") || key.contains("paddle") || key.contains("wakeboard") || key.contains("windsurf") || key.contains("kitesurf") -> Icons.Rounded.Surfing
+        key.contains("skiing") || key.contains("biathlon") -> Icons.Rounded.DownhillSkiing
+        key.contains("snowboard") -> Icons.Rounded.Snowboarding
+        key.contains("hockey") -> Icons.Rounded.SportsHockey
+        key.contains("ice skating") || key == "skating" || key.contains("curling") -> Icons.Rounded.IceSkating
+        key.contains("skateboard") || key.contains("roller skating") || key.contains("scooter") -> Icons.Rounded.Skateboarding
+        key.contains("paraglid") || key.contains("parachute") || key.contains("bungee") -> Icons.Rounded.Paragliding
+        key.contains("football american") || key.contains("american football") -> Icons.Rounded.SportsFootball
+        key.contains("football") || key.contains("soccer") -> Icons.Rounded.SportsSoccer
+        key.contains("basketball") -> Icons.Rounded.SportsBasketball
+        key.contains("baseball") || key.contains("softball") -> Icons.Rounded.SportsBaseball
+        key.contains("volleyball") -> Icons.Rounded.SportsVolleyball
+        key.contains("tennis") || key.contains("badminton") || key.contains("squash") || key.contains("racquet") || key.contains("padel") -> Icons.Rounded.SportsTennis
+        key.contains("rugby") -> Icons.Rounded.SportsRugby
+        key.contains("cricket") -> Icons.Rounded.SportsCricket
+        key.contains("golf") -> Icons.Rounded.SportsGolf
+        key.contains("handball") -> Icons.Rounded.SportsHandball
+        key.contains("boxing") || key.contains("kickboxing") || key.contains("mixed martial") || key.contains("body combat") -> Icons.Rounded.SportsMma
+        key.contains("martial") || key.contains("karate") || key.contains("taekwondo") || key.contains("kendo") || key.contains("free sparring") -> Icons.Rounded.SportsMartialArts
+        key.contains("gymnastics") || key.contains("calisthenics") || key.contains("aerobics") || key.contains("dance") || key.contains("zumba") -> Icons.Rounded.SportsGymnastics
+        key.contains("strength") || key.contains("weight") || key.contains("kettlebell") || key.contains("crossfit") || key.contains("physical training") || key.contains("functional") || key.contains("core training") || key.contains("circuit") || key.contains("interval") || key.contains("hiit") || key.contains("p90x") || key.contains("ergometer") || key.contains("elliptical") -> Icons.Rounded.FitnessCenter
+        key.contains("yoga") || key.contains("pilates") || key.contains("meditation") || key.contains("tai chi") -> Icons.Rounded.SelfImprovement
+        key.contains("horse") || key.contains("polo") || key.contains("team sport") -> Icons.Rounded.SportsKabaddi
+        key.contains("wheelchair") -> Icons.Rounded.AccessibilityNew
+        key.contains("e sports") || key.contains("esports") -> Icons.Rounded.SportsEsports
+        key.contains("vehicle") || key.contains("racing car") -> Icons.Rounded.DirectionsCar
+        key.contains("boat") -> Icons.Rounded.DirectionsBoat
+        else -> Icons.Rounded.Sports
     }
 }
 

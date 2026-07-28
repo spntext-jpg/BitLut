@@ -19,6 +19,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Length
 import com.openhealth.sync.config.DataSourcePrefs
+import com.openhealth.sync.config.HealthDataSource
 import com.openhealth.sync.config.HealthPermissionPolicy
 import com.openhealth.sync.util.AppLogger
 import java.time.Instant
@@ -66,11 +67,44 @@ data class FloorsData(val startTimeMs: Long, val endTimeMs: Long, val floors: Do
 data class ElevationData(val startTimeMs: Long, val endTimeMs: Long, val meters: Double)
 data class ActiveCaloriesData(val startTimeMs: Long, val endTimeMs: Long, val kilocalories: Double)
 
+object WorkoutMetricKey {
+    const val DISTANCE_METERS = "distance_meters"
+    const val ACTIVE_CALORIES_KCAL = "active_calories_kcal"
+    const val STEPS = "steps"
+    const val AVG_PACE_SECONDS_PER_KM = "avg_pace_seconds_per_km"
+    const val BEST_PACE_SECONDS_PER_KM = "best_pace_seconds_per_km"
+    const val AVG_SPEED_MPS = "avg_speed_mps"
+    const val MAX_SPEED_MPS = "max_speed_mps"
+    const val AVG_CADENCE_PER_MIN = "avg_cadence_per_min"
+    const val MAX_CADENCE_PER_MIN = "max_cadence_per_min"
+    const val ASCENT_METERS = "ascent_meters"
+    const val DESCENT_METERS = "descent_meters"
+    const val AVG_POWER_WATTS = "avg_power_watts"
+    const val MAX_POWER_WATTS = "max_power_watts"
+    const val AVG_RESISTANCE = "avg_resistance"
+    const val STROKES = "strokes"
+    const val AVG_STROKE_RATE = "avg_stroke_rate"
+    const val SWOLF = "swolf"
+    const val JUMPS = "jumps"
+    const val AVG_JUMP_RATE = "avg_jump_rate"
+    const val GROUND_CONTACT_MS = "ground_contact_ms"
+    const val IMPACT_ACCELERATION = "impact_acceleration"
+    const val SWING_ANGLE_DEGREES = "swing_angle_degrees"
+    const val EVERSION_DEGREES = "eversion_degrees"
+}
+
+data class WorkoutMetric(
+    val key: String,
+    val value: Double
+)
+
 data class ActivitySessionData(
     val startTimeMs: Long,
     val endTimeMs: Long,
     val title: String = "Huawei activity",
-    val exerciseType: Int = ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
+    val exerciseType: Int = ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT,
+    val activityKey: String = "workout",
+    val metrics: List<WorkoutMetric> = emptyList()
 )
 
 /** One row of the CSV export (sprint 2026-07-14): a single calendar day's
@@ -98,7 +132,10 @@ class GoogleHealthManager(
     private val dataSourcePrefs: DataSourcePrefs = DataSourcePrefs(context)
 ) : HealthConnectManager {
 
-    private val zoneRules by lazy { ZoneId.systemDefault().rules }
+    private val zoneRules by lazy {
+        ZoneId.systemDefault().rules
+    }
+    private val workoutDetailsStore = WorkoutDetailsStore(context)
 
     private fun selectedDataOrigins(): Set<DataOrigin> = setOf(
         DataOrigin(dataSourcePrefs.selectedOriginPackage(context.packageName))
@@ -483,7 +520,11 @@ class GoogleHealthManager(
                 )
             }
 
-        return replaceRecords("activitySessions", valid, ExerciseSessionRecord::class)
+        val success = replaceRecords("activitySessions", valid, ExerciseSessionRecord::class)
+        if (success) {
+            workoutDetailsStore.saveAll(records)
+        }
+        return success
     }
 
     private suspend fun replaceRecords(
@@ -727,6 +768,7 @@ class GoogleHealthManager(
         val client = resolveClient() ?: return emptyList()
         return try {
             val start = LocalDate.now().minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val isHuaweiSource = dataSourcePrefs.selected() == HealthDataSource.HUAWEI_HEALTH
             client.readRecords(
                 ReadRecordsRequest(
                     recordType = ExerciseSessionRecord::class,
@@ -737,12 +779,14 @@ class GoogleHealthManager(
                 .sortedByDescending { it.startTime }
                 .take(limit)
                 .map {
-                    ActivitySessionData(
+                    val session = ActivitySessionData(
                         startTimeMs = it.startTime.toEpochMilli(),
                         endTimeMs = it.endTime.toEpochMilli(),
                         title = workoutDisplayName(it.title, it.exerciseType),
-                        exerciseType = it.exerciseType
+                        exerciseType = it.exerciseType,
+                        activityKey = workoutActivityKey(it.title, it.exerciseType)
                     )
+                    if (isHuaweiSource) workoutDetailsStore.enrich(session) else session
                 }
         } catch (e: CancellationException) {
             throw e
@@ -853,6 +897,51 @@ class GoogleHealthManager(
             AppLogger.e(TAG, "readActiveHoursToday failed: ${e.message}", e)
             0
         }
+    }
+
+    private fun workoutActivityKey(rawTitle: String?, exerciseType: Int): String {
+        val typed = exerciseTypeKey(exerciseType)
+        if (typed != "workout") return typed
+
+        return rawTitle
+            ?.trim()
+            ?.takeIf { it.isNotBlank() && !SYNTHETIC_WORKOUT_TITLE.matches(it) }
+            ?.lowercase(Locale.ROOT)
+            ?.replace('_', ' ')
+            ?.replace('.', ' ')
+            ?: "workout"
+    }
+
+    private fun exerciseTypeKey(type: Int): String = when (type) {
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "walking"
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> "running"
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> "cycling"
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> "open water swimming"
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> "pool swimming"
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "strength training"
+        ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> "yoga"
+        ExerciseSessionRecord.EXERCISE_TYPE_TENNIS -> "tennis"
+        ExerciseSessionRecord.EXERCISE_TYPE_BASKETBALL -> "basketball"
+        ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AMERICAN -> "american football"
+        ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AUSTRALIAN -> "australian football"
+        ExerciseSessionRecord.EXERCISE_TYPE_SOCCER -> "football"
+        ExerciseSessionRecord.EXERCISE_TYPE_GOLF -> "golf"
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> "hiking"
+        ExerciseSessionRecord.EXERCISE_TYPE_ROWING -> "rowing"
+        ExerciseSessionRecord.EXERCISE_TYPE_SKATING -> "skating"
+        ExerciseSessionRecord.EXERCISE_TYPE_SKIING -> "skiing"
+        ExerciseSessionRecord.EXERCISE_TYPE_SNOWBOARDING -> "snowboarding"
+        ExerciseSessionRecord.EXERCISE_TYPE_VOLLEYBALL -> "volleyball"
+        ExerciseSessionRecord.EXERCISE_TYPE_BADMINTON -> "badminton"
+        ExerciseSessionRecord.EXERCISE_TYPE_BASEBALL -> "baseball"
+        ExerciseSessionRecord.EXERCISE_TYPE_BOXING -> "boxing"
+        ExerciseSessionRecord.EXERCISE_TYPE_DANCING -> "dancing"
+        ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL -> "elliptical"
+        ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> "hiit"
+        ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> "pilates"
+        ExerciseSessionRecord.EXERCISE_TYPE_TABLE_TENNIS -> "table tennis"
+        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> "weightlifting"
+        else -> "workout"
     }
 
     private fun workoutDisplayName(rawTitle: String?, exerciseType: Int): String {

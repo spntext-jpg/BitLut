@@ -558,14 +558,178 @@ class HuaweiHealthManager(
                 "Huawei activity mapped: type=${rawType ?: "unknown"} name=${rawName ?: "-"} canonical=$canonicalType start=$start end=$end"
             )
 
+            val metrics = extractWorkoutMetrics(record, start, end)
+            AppLogger.i(
+                TAG,
+                "Huawei activity details: canonical=$canonicalType metrics=${metrics.joinToString { "${it.key}=${it.value}" }}"
+            )
+
             ActivitySessionData(
                 startTimeMs = start,
                 endTimeMs = end,
                 title = title,
-                exerciseType = exerciseType
+                exerciseType = exerciseType,
+                activityKey = canonicalType,
+                metrics = metrics
             )
         }.distinctBy { Pair(it.startTimeMs, it.endTimeMs) }
     }
+
+    private fun extractWorkoutMetrics(
+        record: Any,
+        startTimeMs: Long,
+        endTimeMs: Long
+    ): List<WorkoutMetric> {
+        val summary = invokeNoArg(record, "getActivitySummary") ?: return emptyList()
+        val values = linkedMapOf<String, Double>()
+
+        val dataSummary = invokeNoArg(summary, "getDataSummary")
+        val points = when (dataSummary) {
+            is Iterable<*> -> dataSummary.filterIsInstance<SamplePoint>()
+            is Array<*> -> dataSummary.filterIsInstance<SamplePoint>()
+            else -> emptyList()
+        }
+
+        for (point in points) {
+            val typeName = samplePointDataTypeName(point)
+            if (typeName.contains("heart_rate", ignoreCase = true)) continue
+            if (typeName.contains("resting_calories", ignoreCase = true)) continue
+
+            for (field in samplePointFields(point)) {
+                val fieldName = activityFieldName(field)
+                val value = point.firstNumericValue(listOf(field)) ?: continue
+                val key = workoutMetricKey(typeName, fieldName) ?: continue
+                if (!value.isFinite() || value <= 0.0) continue
+                values[key] = maxOf(values[key] ?: 0.0, value)
+            }
+        }
+
+        val paceSummary = invokeNoArg(summary, "getPaceSummary")
+        numberFromNoArg(paceSummary, "getAvgPace")
+            ?.takeIf { it.isFinite() && it > 0.0 }
+            ?.let { values[WorkoutMetricKey.AVG_PACE_SECONDS_PER_KM] = it }
+        numberFromNoArg(paceSummary, "getBestPace")
+            ?.takeIf { it.isFinite() && it > 0.0 }
+            ?.let { values[WorkoutMetricKey.BEST_PACE_SECONDS_PER_KM] = it }
+
+        val distanceMeters = values[WorkoutMetricKey.DISTANCE_METERS]
+        val durationSeconds = (endTimeMs - startTimeMs).coerceAtLeast(0L) / 1000.0
+        if (distanceMeters != null && distanceMeters > 0.0 && durationSeconds > 0.0) {
+            values.putIfAbsent(
+                WorkoutMetricKey.AVG_SPEED_MPS,
+                distanceMeters / durationSeconds
+            )
+            values.putIfAbsent(
+                WorkoutMetricKey.AVG_PACE_SECONDS_PER_KM,
+                durationSeconds / (distanceMeters / 1000.0)
+            )
+        }
+
+        val priority = listOf(
+            WorkoutMetricKey.DISTANCE_METERS,
+            WorkoutMetricKey.ACTIVE_CALORIES_KCAL,
+            WorkoutMetricKey.STEPS,
+            WorkoutMetricKey.AVG_PACE_SECONDS_PER_KM,
+            WorkoutMetricKey.BEST_PACE_SECONDS_PER_KM,
+            WorkoutMetricKey.AVG_SPEED_MPS,
+            WorkoutMetricKey.MAX_SPEED_MPS,
+            WorkoutMetricKey.AVG_CADENCE_PER_MIN,
+            WorkoutMetricKey.MAX_CADENCE_PER_MIN,
+            WorkoutMetricKey.ASCENT_METERS,
+            WorkoutMetricKey.DESCENT_METERS,
+            WorkoutMetricKey.AVG_POWER_WATTS,
+            WorkoutMetricKey.MAX_POWER_WATTS,
+            WorkoutMetricKey.AVG_RESISTANCE,
+            WorkoutMetricKey.STROKES,
+            WorkoutMetricKey.AVG_STROKE_RATE,
+            WorkoutMetricKey.SWOLF,
+            WorkoutMetricKey.JUMPS,
+            WorkoutMetricKey.AVG_JUMP_RATE,
+            WorkoutMetricKey.GROUND_CONTACT_MS,
+            WorkoutMetricKey.IMPACT_ACCELERATION,
+            WorkoutMetricKey.SWING_ANGLE_DEGREES,
+            WorkoutMetricKey.EVERSION_DEGREES
+        )
+
+        return priority.mapNotNull { key ->
+            values[key]?.let { WorkoutMetric(key, it) }
+        }
+    }
+
+    private fun workoutMetricKey(typeName: String, fieldName: String): String? {
+        val type = typeName.lowercase(Locale.ROOT)
+        val field = fieldName.lowercase(Locale.ROOT)
+
+        return when {
+            "distance.total" in type && "distance" in field -> WorkoutMetricKey.DISTANCE_METERS
+            "calories.burnt.total" in type && "calorie" in field -> WorkoutMetricKey.ACTIVE_CALORIES_KCAL
+            "steps.total" in type && "step" in field -> WorkoutMetricKey.STEPS
+
+            "speed.statistics" in type && field == "avg" -> WorkoutMetricKey.AVG_SPEED_MPS
+            "speed.statistics" in type && field == "max" -> WorkoutMetricKey.MAX_SPEED_MPS
+
+            ("steps.rate.statistics" in type || "pedaling_rate.statistics" in type) && field == "avg" ->
+                WorkoutMetricKey.AVG_CADENCE_PER_MIN
+            ("steps.rate.statistics" in type || "pedaling_rate.statistics" in type) && field == "max" ->
+                WorkoutMetricKey.MAX_CADENCE_PER_MIN
+
+            "altitude.statistics" in type && ("ascent_total" in field || "ascend_total" in field) ->
+                WorkoutMetricKey.ASCENT_METERS
+            "altitude.statistics" in type && "descent_total" in field -> WorkoutMetricKey.DESCENT_METERS
+
+            "power.statistics" in type && field == "avg" -> WorkoutMetricKey.AVG_POWER_WATTS
+            "power.statistics" in type && field == "max" -> WorkoutMetricKey.MAX_POWER_WATTS
+            "resistance.statistics" in type && field == "avg" -> WorkoutMetricKey.AVG_RESISTANCE
+
+            ("swim" in type || "stroke" in type) && "swolf" in field -> WorkoutMetricKey.SWOLF
+            ("swim" in type || "stroke" in type) && field == "avg" -> WorkoutMetricKey.AVG_STROKE_RATE
+            ("swim" in type || "stroke" in type) && ("count" in field || "stroke" in field) ->
+                WorkoutMetricKey.STROKES
+
+            "jump" in type && field == "avg" -> WorkoutMetricKey.AVG_JUMP_RATE
+            "jump" in type && ("count" in field || "jump" in field) -> WorkoutMetricKey.JUMPS
+
+            "run.posture.statistics" in type && "ground_contact_time" in field ->
+                WorkoutMetricKey.GROUND_CONTACT_MS
+            "run.posture.statistics" in type && "impact_acceleration" in field ->
+                WorkoutMetricKey.IMPACT_ACCELERATION
+            "run.posture.statistics" in type && "swing_angle" in field ->
+                WorkoutMetricKey.SWING_ANGLE_DEGREES
+            "run.posture.statistics" in type && "eversion" in field ->
+                WorkoutMetricKey.EVERSION_DEGREES
+            else -> null
+        }
+    }
+
+    private fun samplePointDataTypeName(point: SamplePoint): String {
+        val dataType = invokeNoArg(point, "getDataType") ?: return ""
+        return invokeNoArg(dataType, "getName")?.toString() ?: dataType.toString()
+    }
+
+    private fun samplePointFields(point: SamplePoint): List<Field> {
+        val dataType = invokeNoArg(point, "getDataType") ?: return emptyList()
+        val raw = invokeNoArg(dataType, "getFields")
+        return when (raw) {
+            is Iterable<*> -> raw.filterIsInstance<Field>()
+            is Array<*> -> raw.filterIsInstance<Field>()
+            else -> emptyList()
+        }
+    }
+
+    private fun activityFieldName(field: Field): String =
+        invokeNoArg(field, "getName")?.toString() ?: field.toString()
+
+    private fun invokeNoArg(target: Any?, methodName: String): Any? {
+        if (target == null) return null
+        return try {
+            target.javaClass.getMethod(methodName).invoke(target)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun numberFromNoArg(target: Any?, methodName: String): Double? =
+        (invokeNoArg(target, methodName) as? Number)?.toDouble()
 
     private fun activityRecordTime(record: Any, methodName: String): Long? =
         try {

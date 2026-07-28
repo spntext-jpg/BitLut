@@ -101,6 +101,15 @@ class DashboardSnapshotCache(
                 put("endTimeMs", w.endTimeMs)
                 put("title", w.title)
                 put("exerciseType", w.exerciseType)
+                put("activityKey", w.activityKey)
+                put("metrics", JSONArray().apply {
+                    w.metrics.forEach { metric ->
+                        put(JSONObject().apply {
+                            put("key", metric.key)
+                            put("value", metric.value)
+                        })
+                    }
+                })
             })
         }
         return arr
@@ -111,6 +120,19 @@ class DashboardSnapshotCache(
         val out = ArrayList<ActivitySessionData>(arr.length())
         for (i in 0 until arr.length()) {
             val item = arr.optJSONObject(i) ?: continue
+            val metricsJson = item.optJSONArray("metrics")
+            val metrics = ArrayList<WorkoutMetric>(metricsJson?.length() ?: 0)
+            if (metricsJson != null) {
+                for (metricIndex in 0 until metricsJson.length()) {
+                    val metric = metricsJson.optJSONObject(metricIndex) ?: continue
+                    val key = metric.optString("key", "")
+                    val value = metric.optDouble("value", Double.NaN)
+                    if (key.isNotBlank() && value.isFinite() && value > 0.0) {
+                        metrics.add(WorkoutMetric(key, value))
+                    }
+                }
+            }
+
             out.add(
                 ActivitySessionData(
                     startTimeMs = item.optLong("startTimeMs", 0L),
@@ -119,7 +141,9 @@ class DashboardSnapshotCache(
                     exerciseType = item.optInt(
                         "exerciseType",
                         androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
-                    )
+                    ),
+                    activityKey = item.optString("activityKey", "workout"),
+                    metrics = metrics
                 )
             )
         }
