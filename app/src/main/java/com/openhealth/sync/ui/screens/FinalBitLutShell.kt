@@ -885,7 +885,7 @@ private fun PersonalRecordsCard(
                     RecordStat(
                         modifier = Modifier.weight(1f),
                         palette = palette,
-                        label = stringResource(R.string.steps_today),
+                        label = stringResource(R.string.record_steps_per_day),
                         value = formatNumber(bestStepsDay.value.toLong()),
                         date = bestStepsDay.date
                     )
@@ -1514,7 +1514,7 @@ private fun MinimalMetricCard(
             }
             if (progress != null) {
                 ProgressRingChip(progress = progress, accent = accent, size = 52.dp)
-            } else {
+            } else if (icon != null) {
                 Box(
                     modifier = Modifier
                         .size(52.dp)
@@ -1522,11 +1522,7 @@ private fun MinimalMetricCard(
                         .background(accent.copy(alpha = 0.16f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (icon != null) {
-                        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
-                    } else {
-                        Text("●", color = accent, fontSize = 17.sp, fontWeight = FontWeight.Black)
-                    }
+                    Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
                 }
             }
         }

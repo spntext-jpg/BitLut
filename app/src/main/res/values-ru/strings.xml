@@ -243,4 +243,5 @@
     <string name="widget_tap_to_sync">Нажмите для синхронизации</string>
     <string name="widget_description">Шаги за сегодня и время последней синхронизации, нажатие запускает синк</string>
     <string name="onboarding_continue_button">Продолжить</string>
+    <string name="record_steps_per_day">Шаги за день</string>
 </resources>

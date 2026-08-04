@@ -245,4 +245,5 @@
     <string name="insights_streak_days_ru_one">%1$d день подряд</string>
     <string name="insights_streak_days_ru_few">%1$d дня подряд</string>
     <string name="insights_streak_days_ru_many">%1$d дней подряд</string>
+    <string name="record_steps_per_day">Steps per day</string>
 </resources>
