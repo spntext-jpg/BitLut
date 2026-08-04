@@ -121,6 +121,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
+import com.openhealth.sync.data.AchievementSummary
 
 internal enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
@@ -189,7 +190,7 @@ fun FinalBitLutShell(
                     onBack = { showArchiveImport = false; onRefresh() }
                 )
             } else when (selected) {
-                MainTab.Today -> SummaryScreen(palette, dashboardState, onRefresh, wrappedOnRequestGoogle)
+                MainTab.Today -> SummaryScreen(palette, dashboardState, syncState.selectedDataSource, syncState.lastSyncTime, onRefresh, wrappedOnRequestGoogle)
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
                     onExportCsv = onExportCsv,
@@ -464,13 +465,11 @@ private fun DataScopesScreen(palette: BitPalette, onClose: () -> Unit) {
 private fun SummaryScreen(
     palette: BitPalette,
     state: DashboardUiState,
+    dataSource: HealthDataSource,
+    lastSyncTime: String,
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit
 ) {
-    // The dashboard is intentionally a short, stable hierarchy: today's
-    // movement, the two most recent workouts, then all-time records. A
-    // LazyColumn keeps the premium spacing intact on smaller devices and with
-    // larger accessibility fonts instead of squeezing cards into one viewport.
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 28.dp),
@@ -480,7 +479,7 @@ private fun SummaryScreen(
             MinimalHeader(
                 palette = palette,
                 title = stringResource(R.string.summary_short_title),
-                subtitle = formatUpdatedAgo(state.lastUpdatedAtMs, state.isFromCache)
+                trailing = formatDashboardSourceStatus(dataSource, lastSyncTime)
             )
         }
 
@@ -536,18 +535,139 @@ private fun SummaryScreen(
                     )
                 }
 
+                item { ElevationSummaryCard(palette = palette, state = state) }
+                item { LastSevenDaysCard(palette = palette, state = state) }
                 item {
                     PersonalRecordsCard(
                         palette = palette,
                         bestStepsDay = state.bestStepsDay,
                         bestDistanceDay = state.bestDistanceDay,
+                        bestCaloriesDay = state.bestCaloriesDay,
+                        bestElevationDay = state.bestElevationDay,
+                        bestWorkoutDuration = state.bestWorkoutDuration,
                         isStepsRecordToday = state.isStepsRecordToday
                     )
                 }
+                item { AchievementsCard(palette = palette, summary = state.achievementSummary) }
             }
         }
     }
 }
+
+@Composable
+private fun ElevationSummaryCard(palette: BitPalette, state: DashboardUiState) {
+    SoftCard(palette = palette, accent = HealthAccent.violet, tintWithAccent = true, pressLift = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.TrendingUp, contentDescription = null, tint = HealthAccent.violet, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.dashboard_elevation_title),
+                color = palette.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 16.sp
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        InsightValueRow(
+            palette = palette,
+            label = stringResource(R.string.dashboard_today_short),
+            value = elevationAndFloorsText(state.elevationMetersToday, state.floorsToday),
+            accent = HealthAccent.violet
+        )
+        Spacer(Modifier.height(10.dp))
+        InsightValueRow(
+            palette = palette,
+            label = stringResource(R.string.dashboard_last_7_days_short),
+            value = elevationAndFloorsText(state.elevationMeters7d, state.floors7d),
+            accent = HealthAccent.violet
+        )
+    }
+}
+
+@Composable
+private fun elevationAndFloorsText(elevationMeters: Double, floors: Double): String {
+    val parts = mutableListOf<String>()
+    if (elevationMeters > 0.0) {
+        parts += stringResource(R.string.dashboard_elevation_value, formatOneDecimal(elevationMeters))
+    }
+    if (floors > 0.0) {
+        parts += stringResource(R.string.dashboard_floors_value, formatOneDecimal(floors))
+    }
+    return if (parts.isEmpty()) stringResource(R.string.no_data_short) else parts.joinToString(" · ")
+}
+
+@Composable
+private fun InsightValueRow(palette: BitPalette, label: String, value: String, accent: Color) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Text(value, color = accent, fontWeight = FontWeight.Black, fontSize = 15.sp)
+    }
+}
+
+@Composable
+private fun LastSevenDaysCard(palette: BitPalette, state: DashboardUiState) {
+    SoftCard(palette = palette, accent = HealthAccent.mind, tintWithAccent = true, pressLift = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Schedule, contentDescription = null, tint = HealthAccent.mind, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.dashboard_last_7_days_title),
+                color = palette.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 16.sp
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SevenDayStat(
+                modifier = Modifier.weight(1f),
+                palette = palette,
+                label = stringResource(R.string.dashboard_average_steps),
+                value = formatNumber(state.averageSteps7d),
+                detail = stringResource(R.string.steps_unit),
+                accent = HealthAccent.mind
+            )
+            SevenDayStat(
+                modifier = Modifier.weight(1f),
+                palette = palette,
+                label = stringResource(R.string.dashboard_best_day),
+                value = state.bestStepsDay7d?.let { formatNumber(it.value.toLong()) } ?: stringResource(R.string.no_data_short),
+                detail = state.bestStepsDay7d?.let { formatRecordDate(it.date) } ?: "",
+                accent = HealthAccent.activity
+            )
+            val change = state.stepsChangeVsPrevious7d
+            SevenDayStat(
+                modifier = Modifier.weight(1f),
+                palette = palette,
+                label = stringResource(R.string.dashboard_vs_previous_7_days),
+                value = change?.let { "${if (it >= 0) "+" else ""}$it%" } ?: stringResource(R.string.no_data_short),
+                detail = if (change == null) stringResource(R.string.dashboard_no_baseline) else "",
+                accent = if ((change ?: 0) >= 0) HealthAccent.mind else palette.secondaryText
+            )
+        }
+    }
+}
+
+@Composable
+private fun SevenDayStat(
+    palette: BitPalette,
+    label: String,
+    value: String,
+    detail: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 10.sp, maxLines = 2, lineHeight = 13.sp)
+        Spacer(Modifier.height(5.dp))
+        Text(value, color = accent, fontWeight = FontWeight.Black, fontSize = 18.sp, maxLines = 1)
+        if (detail.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(detail, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
 
 /**
  * Premium summary of one of the two most recent exercise sessions. Health
@@ -621,7 +741,7 @@ private fun WorkoutRecencyCard(
                 }
                 Spacer(Modifier.height(7.dp))
                 Text(
-                    text = session?.title ?: stringResource(R.string.no_workouts),
+                    text = session?.let { cleanWorkoutCardTitle(it.title) } ?: stringResource(R.string.no_workouts),
                     color = palette.text,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 17.sp,
@@ -672,6 +792,24 @@ private fun formatWorkoutDateTime(epochMs: Long): String =
                 Locale.getDefault()
             )
         )
+
+private val workoutCadenceLabel = Regex(
+    pattern = "(?i)(макс(?:имальный)?\\.?\\s*каденс|max(?:imum)?\\.?\\s*cadence)"
+)
+
+private fun cleanWorkoutCardTitle(raw: String): String {
+    val normalized = raw.replace('\r', '\n').trim()
+    val match = workoutCadenceLabel.find(normalized)
+    val cleaned = if (match != null) normalized.substring(0, match.range.first) else normalized
+    return cleaned
+        .trim(' ', '\n', '\t', '·', '•', '|', ';', ':', '-')
+        .ifBlank {
+            normalized.lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.isNotBlank() && !workoutCadenceLabel.containsMatchIn(it) }
+                ?: normalized
+        }
+}
 
 @Composable
 private fun DashboardWidgetGrid(
@@ -816,13 +954,60 @@ private fun WeekChangeStat(
  * when today's live number has already met or beaten the stored best, ahead
  * of the next sync actually persisting it.
  */
+private data class PersonalRecordDisplay(
+    val label: String,
+    val value: String,
+    val record: PersonalRecord
+)
+
 @Composable
 private fun PersonalRecordsCard(
     palette: BitPalette,
     bestStepsDay: PersonalRecord?,
     bestDistanceDay: PersonalRecord?,
+    bestCaloriesDay: PersonalRecord?,
+    bestElevationDay: PersonalRecord?,
+    bestWorkoutDuration: PersonalRecord?,
     isStepsRecordToday: Boolean
 ) {
+    val records = listOfNotNull(
+        bestStepsDay?.let {
+            PersonalRecordDisplay(
+                label = stringResource(R.string.record_steps_per_day),
+                value = formatNumber(it.value.toLong()),
+                record = it
+            )
+        },
+        bestDistanceDay?.let {
+            PersonalRecordDisplay(
+                label = stringResource(R.string.distance_short_title),
+                value = stringResource(R.string.distance_today_value, formatOneDecimal(it.value / 1000.0)),
+                record = it
+            )
+        },
+        bestCaloriesDay?.let {
+            PersonalRecordDisplay(
+                label = stringResource(R.string.dashboard_record_calories),
+                value = "${it.value.toLong()} ${stringResource(R.string.kcal_unit)}",
+                record = it
+            )
+        },
+        bestElevationDay?.let {
+            PersonalRecordDisplay(
+                label = stringResource(R.string.dashboard_record_elevation),
+                value = stringResource(R.string.dashboard_elevation_value, formatOneDecimal(it.value)),
+                record = it
+            )
+        },
+        bestWorkoutDuration?.let {
+            PersonalRecordDisplay(
+                label = stringResource(R.string.dashboard_record_workout),
+                value = stringResource(R.string.dashboard_workout_minutes_value, it.value.toLong()),
+                record = it
+            )
+        }
+    )
+
     SoftCard(
         palette = palette,
         accent = HealthAccent.activity,
@@ -837,12 +1022,7 @@ private fun PersonalRecordsCard(
                     .background(HealthAccent.activity.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Rounded.EmojiEvents,
-                    contentDescription = null,
-                    tint = HealthAccent.activity,
-                    modifier = Modifier.size(20.dp)
-                )
+                Icon(Icons.Rounded.EmojiEvents, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(10.dp))
             Text(
@@ -858,17 +1038,12 @@ private fun PersonalRecordsCard(
                         .background(HealthAccent.activity.copy(alpha = 0.18f), shape = RoundedCornerShape(20.dp))
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
-                    Text(
-                        stringResource(R.string.insights_new_record_badge),
-                        color = HealthAccent.activity,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 10.sp
-                    )
+                    Text(stringResource(R.string.insights_new_record_badge), color = HealthAccent.activity, fontWeight = FontWeight.Black, fontSize = 10.sp)
                 }
             }
         }
         Spacer(Modifier.height(14.dp))
-        if (bestStepsDay == null && bestDistanceDay == null) {
+        if (records.isEmpty()) {
             Text(
                 text = stringResource(R.string.dashboard_records_empty),
                 color = palette.secondaryText,
@@ -877,49 +1052,109 @@ private fun PersonalRecordsCard(
                 lineHeight = 18.sp
             )
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (bestStepsDay != null) {
-                    RecordStat(
-                        modifier = Modifier.weight(1f),
-                        palette = palette,
-                        label = stringResource(R.string.record_steps_per_day),
-                        value = formatNumber(bestStepsDay.value.toLong()),
-                        date = bestStepsDay.date
-                    )
-                }
-                if (bestDistanceDay != null) {
-                    RecordStat(
-                        modifier = Modifier.weight(1f),
-                        palette = palette,
-                        label = stringResource(R.string.distance_short_title),
-                        value = stringResource(R.string.distance_today_value, formatOneDecimal(bestDistanceDay.value / 1000.0)),
-                        date = bestDistanceDay.date
-                    )
-                }
+            records.forEachIndexed { index, item ->
+                if (index > 0) Spacer(Modifier.height(10.dp))
+                PersonalRecordRow(palette = palette, item = item)
             }
         }
     }
 }
 
 @Composable
-private fun RecordStat(
-    palette: BitPalette,
-    label: String,
-    value: String,
-    date: java.time.LocalDate,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(4.dp))
-        Text(value, color = palette.text, fontWeight = FontWeight.Black, fontSize = 18.sp)
-        Spacer(Modifier.height(2.dp))
-        Text(formatRecordDate(date), color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 10.sp)
+private fun PersonalRecordRow(palette: BitPalette, item: PersonalRecordDisplay) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = item.label,
+            color = palette.secondaryText,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(item.value, color = palette.text, fontWeight = FontWeight.Black, fontSize = 15.sp)
+            Text(formatRecordDate(item.record.date), color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 10.sp)
+        }
     }
 }
+
+@Composable
+private fun AchievementsCard(palette: BitPalette, summary: AchievementSummary) {
+    val distanceKm = summary.totalDistanceMeters / 1000.0
+    val items = listOf(
+        AchievementDisplay(
+            label = stringResource(R.string.achievement_distance_100),
+            progress = (distanceKm / 100.0).toFloat(),
+            value = stringResource(R.string.achievement_distance_progress, formatOneDecimal(distanceKm), "100")
+        ),
+        AchievementDisplay(
+            label = stringResource(R.string.achievement_distance_500),
+            progress = (distanceKm / 500.0).toFloat(),
+            value = stringResource(R.string.achievement_distance_progress, formatOneDecimal(distanceKm), "500")
+        ),
+        AchievementDisplay(
+            label = stringResource(R.string.achievement_steps_million),
+            progress = summary.totalSteps.toFloat() / 1_000_000f,
+            value = stringResource(R.string.achievement_steps_progress, formatNumber(summary.totalSteps), formatNumber(1_000_000L))
+        ),
+        AchievementDisplay(
+            label = stringResource(R.string.achievement_active_streak_10),
+            progress = summary.longestActiveStreakDays.toFloat() / 10f,
+            value = stringResource(R.string.achievement_days_progress, summary.longestActiveStreakDays, 10)
+        ),
+        AchievementDisplay(
+            label = stringResource(R.string.achievement_workouts_50),
+            progress = summary.totalWorkouts.toFloat() / 50f,
+            value = stringResource(R.string.achievement_workouts_progress, summary.totalWorkouts, 50)
+        )
+    )
+
+    SoftCard(palette = palette, accent = HealthAccent.mind, tintWithAccent = true, pressLift = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.EmojiEvents, contentDescription = null, tint = HealthAccent.mind, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text(stringResource(R.string.dashboard_achievements_title), color = palette.text, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                Text(stringResource(R.string.dashboard_achievements_subtitle), color = palette.secondaryText, fontWeight = FontWeight.Medium, fontSize = 10.sp)
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        items.forEachIndexed { index, item ->
+            if (index > 0) Spacer(Modifier.height(12.dp))
+            AchievementRow(palette = palette, item = item)
+        }
+    }
+}
+
+private data class AchievementDisplay(val label: String, val progress: Float, val value: String)
+
+@Composable
+private fun AchievementRow(palette: BitPalette, item: AchievementDisplay) {
+    val progress = item.progress.coerceIn(0f, 1f)
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(item.label, color = palette.text, fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(if (progress >= 1f) "✓" else item.value, color = if (progress >= 1f) HealthAccent.mind else palette.secondaryText, fontWeight = FontWeight.Black, fontSize = 10.sp)
+            }
+            Spacer(Modifier.height(5.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(palette.secondaryText.copy(alpha = 0.14f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress)
+                        .fillMaxHeight()
+                        .background(HealthAccent.mind)
+                )
+            }
+        }
+    }
+}
+
 
 /**
  * Streak card (v1.9.12, sprint 4). Shows the current consecutive-day streak
@@ -1413,16 +1648,30 @@ private fun MinimalTopBar(
 private fun MinimalHeader(
     palette: BitPalette,
     title: String,
-    subtitle: String? = null
+    subtitle: String? = null,
+    trailing: String? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = title,
-            color = palette.text,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 30.sp,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                color = palette.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 30.sp,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            if (trailing != null) {
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = trailing,
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    maxLines = 1
+                )
+            }
+        }
         if (subtitle != null) {
             Spacer(Modifier.height(4.dp))
             Text(
@@ -1434,6 +1683,17 @@ private fun MinimalHeader(
             )
         }
     }
+}
+
+@Composable
+private fun formatDashboardSourceStatus(source: HealthDataSource, lastSyncTime: String): String {
+    val sourceName = when (source) {
+        HealthDataSource.HUAWEI_HEALTH -> stringResource(R.string.data_source_huawei_title)
+        HealthDataSource.GOOGLE_FIT -> stringResource(R.string.data_source_google_fit_title)
+    }
+    val whenText = lastSyncTime.takeIf { it.isNotBlank() && it != "sync_no_data" }
+        ?: stringResource(R.string.no_data_short)
+    return "$sourceName · $whenText"
 }
 
 @Composable

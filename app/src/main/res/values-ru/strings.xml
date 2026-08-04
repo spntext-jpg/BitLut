@@ -244,4 +244,30 @@
     <string name="widget_description">Шаги за сегодня и время последней синхронизации, нажатие запускает синк</string>
     <string name="onboarding_continue_button">Продолжить</string>
     <string name="record_steps_per_day">Шаги за день</string>
+
+    <string name="dashboard_elevation_title">Подъём</string>
+    <string name="dashboard_today_short">Сегодня</string>
+    <string name="dashboard_last_7_days_short">7 дней</string>
+    <string name="dashboard_elevation_value">%1$s м</string>
+    <string name="dashboard_floors_value">%1$s эт.</string>
+    <string name="dashboard_last_7_days_title">Последние 7 дней</string>
+    <string name="dashboard_average_steps">Средние шаги</string>
+    <string name="dashboard_best_day">Лучший день</string>
+    <string name="dashboard_vs_previous_7_days">К прошлым 7 дням</string>
+    <string name="dashboard_no_baseline">Нет базы</string>
+    <string name="dashboard_record_calories">Калории за день</string>
+    <string name="dashboard_record_elevation">Подъём за день</string>
+    <string name="dashboard_record_workout">Самая долгая тренировка</string>
+    <string name="dashboard_workout_minutes_value">%1$d мин</string>
+    <string name="dashboard_achievements_title">Достижения</string>
+    <string name="dashboard_achievements_subtitle">По данным, накопленным BitLut</string>
+    <string name="achievement_distance_100">100 км</string>
+    <string name="achievement_distance_500">500 км</string>
+    <string name="achievement_steps_million">1 миллион шагов</string>
+    <string name="achievement_active_streak_10">10 активных дней подряд</string>
+    <string name="achievement_workouts_50">50 тренировок</string>
+    <string name="achievement_distance_progress">%1$s / %2$s км</string>
+    <string name="achievement_steps_progress">%1$s / %2$s шагов</string>
+    <string name="achievement_days_progress">%1$d / %2$d дней</string>
+    <string name="achievement_workouts_progress">%1$d / %2$d тренировок</string>
 </resources>

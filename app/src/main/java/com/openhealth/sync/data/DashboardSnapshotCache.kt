@@ -82,6 +82,7 @@ class DashboardSnapshotCache(
         put("workoutMinutesToday", s.workoutMinutesToday)
         put("activeHoursToday", s.activeHoursToday)
         put("recentWorkouts", workoutsToJson(s.recentWorkouts))
+        put("dailyActivity", dailyActivityToJson(s.dailyActivity))
     }
 
     private fun snapshotFromJson(o: JSONObject): GoogleDashboardSnapshot = GoogleDashboardSnapshot(
@@ -90,8 +91,54 @@ class DashboardSnapshotCache(
         caloriesKcal = o.optDouble("caloriesKcal", 0.0),
         workoutMinutesToday = o.optLong("workoutMinutesToday", 0L),
         activeHoursToday = o.optInt("activeHoursToday", 0),
-        recentWorkouts = workoutsFromJson(o.optJSONArray("recentWorkouts"))
+        recentWorkouts = workoutsFromJson(o.optJSONArray("recentWorkouts")),
+        dailyActivity = dailyActivityFromJson(o.optJSONArray("dailyActivity"))
     )
+
+    private fun dailyActivityToJson(days: List<DailyActivitySummary>): JSONArray {
+        val arr = JSONArray()
+        days.forEach { day ->
+            arr.put(JSONObject().apply {
+                put("date", day.date.toString())
+                put("steps", day.steps)
+                put("distanceMeters", day.distanceMeters)
+                put("caloriesKcal", day.caloriesKcal)
+                put("elevationMeters", day.elevationMeters)
+                put("floors", day.floors)
+                put("workoutMinutes", day.workoutMinutes)
+                put("workoutCount", day.workoutCount)
+                put("longestWorkoutMinutes", day.longestWorkoutMinutes)
+            })
+        }
+        return arr
+    }
+
+    private fun dailyActivityFromJson(arr: JSONArray?): List<DailyActivitySummary> {
+        if (arr == null) return emptyList()
+        val out = ArrayList<DailyActivitySummary>(arr.length())
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONObject(i) ?: continue
+            val date = try {
+                java.time.LocalDate.parse(item.optString("date"))
+            } catch (_: Exception) {
+                continue
+            }
+            out.add(
+                DailyActivitySummary(
+                    date = date,
+                    steps = item.optLong("steps", 0L),
+                    distanceMeters = item.optDouble("distanceMeters", 0.0),
+                    caloriesKcal = item.optDouble("caloriesKcal", 0.0),
+                    elevationMeters = item.optDouble("elevationMeters", 0.0),
+                    floors = item.optDouble("floors", 0.0),
+                    workoutMinutes = item.optLong("workoutMinutes", 0L),
+                    workoutCount = item.optInt("workoutCount", 0),
+                    longestWorkoutMinutes = item.optLong("longestWorkoutMinutes", 0L)
+                )
+            )
+        }
+        return out.sortedBy { it.date }
+    }
 
     private fun workoutsToJson(workouts: List<ActivitySessionData>): JSONArray {
         val arr = JSONArray()

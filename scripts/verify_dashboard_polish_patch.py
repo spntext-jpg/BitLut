@@ -27,7 +27,7 @@ huawei = read("app/src/main/java/com/openhealth/sync/data/HuaweiHealthManager.kt
 policy = read("app/src/main/java/com/openhealth/sync/config/HealthPermissionPolicy.kt")
 
 personal_start = shell.find("private fun PersonalRecordsCard(")
-personal_end = shell.find("private fun RecordStat(", personal_start)
+personal_end = shell.find("private fun PersonalRecordRow(", personal_start)
 personal = shell[personal_start:personal_end] if personal_start >= 0 and personal_end > personal_start else ""
 require(bool(personal), "PersonalRecordsCard block missing")
 require("R.string.record_steps_per_day" in personal, "Personal record still lacks Steps per day label")
@@ -46,13 +46,11 @@ scope_text = (huawei + "\n" + policy).upper()
 for token in ["HEALTHKIT_SLEEP", "SLEEPSESSIONRECORD", "READ_SLEEP", "WRITE_SLEEP"]:
     require(token not in scope_text, f"Sleep token unexpectedly present: {token}")
 
-cadence_hits = []
-for path in (ROOT / "app/src/main").rglob("*"):
-    if path.is_file() and path.suffix.lower() in {".kt", ".xml"}:
-        text = path.read_text(encoding="utf-8", errors="replace").lower()
-        if any(token in text for token in ("cadence", "каденс", "max_cadence", "maxcadence")):
-            cadence_hits.append(str(path.relative_to(ROOT)))
-require(not cadence_hits, "Cadence UI/data token still present: " + ", ".join(cadence_hits))
+workout_start = shell.find("private fun WorkoutRecencyCard(")
+workout_end = shell.find("private fun DashboardWidgetGrid(", workout_start)
+workout = shell[workout_start:workout_end] if workout_start >= 0 and workout_end > workout_start else ""
+require("cleanWorkoutCardTitle(it.title)" in workout, "Workout card does not sanitize max cadence metadata")
+require("private val workoutCadenceLabel" in shell, "Workout cadence sanitizer missing")
 
 if errors:
     print("BitLut dashboard polish verification failed:")

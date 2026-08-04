@@ -35,6 +35,7 @@ import kotlin.reflect.KClass
 
 private const val TAG = "GoogleHealthManager"
 private const val WRITE_BATCH_SIZE = 400
+private const val DASHBOARD_HISTORY_DAYS = 30
 /** Sprint 2026-07-08: single quick retry delay for a transient permission-
  *  check failure -- see [GoogleHealthManager.grantedPermissionsOrEmpty]. */
 private const val TRANSIENT_PERMISSION_RETRY_DELAY_MS = 400L
@@ -84,13 +85,31 @@ data class DailyTotal(
     val caloriesKcal: Double
 )
 
+/**
+ * One calendar day's activity totals used by the dashboard insights cards.
+ * The same activity-only records BitLut already reads are regrouped locally;
+ * no new Huawei or Health Connect permission is required.
+ */
+data class DailyActivitySummary(
+    val date: LocalDate,
+    val steps: Long = 0L,
+    val distanceMeters: Double = 0.0,
+    val caloriesKcal: Double = 0.0,
+    val elevationMeters: Double = 0.0,
+    val floors: Double = 0.0,
+    val workoutMinutes: Long = 0L,
+    val workoutCount: Int = 0,
+    val longestWorkoutMinutes: Long = 0L
+)
+
 data class GoogleDashboardSnapshot(
     val stepsToday: Long,
     val distanceMeters: Double,
     val caloriesKcal: Double,
     val workoutMinutesToday: Long,
     val activeHoursToday: Int,
-    val recentWorkouts: List<ActivitySessionData>
+    val recentWorkouts: List<ActivitySessionData>,
+    val dailyActivity: List<DailyActivitySummary> = emptyList()
 )
 
 class GoogleHealthManager(
@@ -529,68 +548,31 @@ class GoogleHealthManager(
     override suspend fun readDashboardSnapshot(): GoogleDashboardSnapshot? {
         val client = resolveClient() ?: return null
         return try {
-            val startOfToday = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val now = Instant.now()
             AppLogger.i(
                 TAG,
                 "Reading dashboard source=${dataSourcePrefs.selected()} origins=${selectedDataOrigins()}"
             )
 
-            // Sprint (2026-07-10): stepsToday/distanceMeters/caloriesKcal used
-            // Health Connect's aggregate() API, which is a provider-side cache
-            // that is only eventually consistent with recent writes -- it is
-            // not guaranteed to reflect a just-inserted record immediately.
-            // That is exactly why the dashboard looked stale until some
-            // *other* app (e.g. Google Fit) happened to touch Health Connect
-            // and force that cache to catch up: BitLut's own write was
-            // landing correctly the whole time, but this read was trusting a
-            // cache that hadn't caught up to it yet. readWorkoutMinutesToday()
-            // / readActiveHoursToday() never had this problem because they
-            // already read raw records and sum in-app instead of trusting the
-            // aggregate cache -- these three now follow that exact same,
-            // already-proven pattern.
-            val stepsToday = client.readRecords(
-                ReadRecordsRequest(
-                    recordType = StepsRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now),
-                    dataOriginFilter = selectedDataOrigins()
-                )
-            ).records.sumOf { it.count }
+            // Read one compact activity window and regroup it locally by day.
+            // This keeps all insight cards consistent with the raw records that
+            // were just written, avoiding Health Connect aggregate-cache lag.
+            val recentWorkouts = readRecentWorkouts(200)
+            val dailyActivity = readDailyActivitySummaries(
+                client = client,
+                daysBack = DASHBOARD_HISTORY_DAYS,
+                workouts = recentWorkouts
+            )
+            val today = LocalDate.now()
+            val todayActivity = dailyActivity.firstOrNull { it.date == today }
 
-            val distanceMeters = client.readRecords(
-                ReadRecordsRequest(
-                    recordType = DistanceRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now),
-                    dataOriginFilter = selectedDataOrigins()
-                )
-            ).records.sumOf { it.distance.inMeters }
-
-            val caloriesKcal = client.readRecords(
-                ReadRecordsRequest(
-                    recordType = ActiveCaloriesBurnedRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfToday, now),
-                    dataOriginFilter = selectedDataOrigins()
-                )
-            ).records.sumOf { it.energy.inKilocalories }
-
-            // Sprint (2026-07-14): sleep/heart-rate/SpO2/stress and the
-            // History-only stepsBars/workoutSummaries fields were removed
-            // from GoogleDashboardSnapshot entirely (not just hardcoded to
-            // empty/null) -- Huawei's individual-developer tier can't supply
-            // the former, and History itself was removed from the bottom nav
-            // in an earlier sprint, so both were dead weight kept only for
-            // source compatibility. See CLAUDE.md for the platform-tier
-            // rationale on sleep/HR/SpO2/stress specifically.
             GoogleDashboardSnapshot(
-                stepsToday = stepsToday,
-                distanceMeters = distanceMeters,
-                caloriesKcal = caloriesKcal,
-                // These two totals no longer have reachable Dashboard cards.
-                // Keep the serialized fields for backward compatibility, but do
-                // not spend two Health Connect reads on invisible information.
-                workoutMinutesToday = 0L,
+                stepsToday = todayActivity?.steps ?: 0L,
+                distanceMeters = todayActivity?.distanceMeters ?: 0.0,
+                caloriesKcal = todayActivity?.caloriesKcal ?: 0.0,
+                workoutMinutesToday = todayActivity?.workoutMinutes ?: 0L,
                 activeHoursToday = 0,
-                recentWorkouts = readRecentWorkouts(2)
+                recentWorkouts = recentWorkouts.take(2),
+                dailyActivity = dailyActivity
             )
         } catch (e: CancellationException) {
             throw e
@@ -601,6 +583,122 @@ class GoogleHealthManager(
         } catch (e: Exception) {
             AppLogger.e(TAG, "readDashboardSnapshot failed; preserving previous UI snapshot: ${e.message}", e)
             null
+        }
+    }
+
+    /**
+     * Reads the already-approved activity records once for a bounded window
+     * and groups them by local calendar day. Records crossing midnight are
+     * attributed to their start day, matching the existing CSV/dashboard
+     * convention and Huawei's normal daily record shape.
+     */
+    private suspend fun readDailyActivitySummaries(
+        client: HealthConnectClient,
+        daysBack: Int,
+        workouts: List<ActivitySessionData>
+    ): List<DailyActivitySummary> {
+        val safeDays = daysBack.coerceIn(14, 60)
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now()
+        val firstDay = today.minusDays((safeDays - 1).toLong())
+        val dates = (0 until safeDays).map { firstDay.plusDays(it.toLong()) }
+        val start = firstDay.atStartOfDay(zone).toInstant()
+        val end = Instant.now()
+        val range = TimeRangeFilter.between(start, end)
+        val origins = selectedDataOrigins()
+
+        val stepsByDay = dates.associateWith { 0L }.toMutableMap()
+        val distanceByDay = dates.associateWith { 0.0 }.toMutableMap()
+        val caloriesByDay = dates.associateWith { 0.0 }.toMutableMap()
+        val elevationByDay = dates.associateWith { 0.0 }.toMutableMap()
+        val floorsByDay = dates.associateWith { 0.0 }.toMutableMap()
+        val workoutMinutesByDay = dates.associateWith { 0L }.toMutableMap()
+        val workoutCountByDay = dates.associateWith { 0 }.toMutableMap()
+        val longestWorkoutByDay = dates.associateWith { 0L }.toMutableMap()
+
+        fun dateOf(epochMs: Long): LocalDate =
+            Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate()
+
+        client.readRecords(
+            ReadRecordsRequest(
+                recordType = StepsRecord::class,
+                timeRangeFilter = range,
+                dataOriginFilter = origins
+            )
+        ).records.forEach { record ->
+            val date = record.startTime.atZone(zone).toLocalDate()
+            if (date in stepsByDay) stepsByDay[date] = (stepsByDay[date] ?: 0L) + record.count
+        }
+
+        client.readRecords(
+            ReadRecordsRequest(
+                recordType = DistanceRecord::class,
+                timeRangeFilter = range,
+                dataOriginFilter = origins
+            )
+        ).records.forEach { record ->
+            val date = record.startTime.atZone(zone).toLocalDate()
+            if (date in distanceByDay) distanceByDay[date] = (distanceByDay[date] ?: 0.0) + record.distance.inMeters
+        }
+
+        client.readRecords(
+            ReadRecordsRequest(
+                recordType = ActiveCaloriesBurnedRecord::class,
+                timeRangeFilter = range,
+                dataOriginFilter = origins
+            )
+        ).records.forEach { record ->
+            val date = record.startTime.atZone(zone).toLocalDate()
+            if (date in caloriesByDay) caloriesByDay[date] = (caloriesByDay[date] ?: 0.0) + record.energy.inKilocalories
+        }
+
+        client.readRecords(
+            ReadRecordsRequest(
+                recordType = ElevationGainedRecord::class,
+                timeRangeFilter = range,
+                dataOriginFilter = origins
+            )
+        ).records.forEach { record ->
+            val date = record.startTime.atZone(zone).toLocalDate()
+            if (date in elevationByDay) elevationByDay[date] = (elevationByDay[date] ?: 0.0) + record.elevation.inMeters
+        }
+
+        client.readRecords(
+            ReadRecordsRequest(
+                recordType = FloorsClimbedRecord::class,
+                timeRangeFilter = range,
+                dataOriginFilter = origins
+            )
+        ).records.forEach { record ->
+            val date = record.startTime.atZone(zone).toLocalDate()
+            if (date in floorsByDay) floorsByDay[date] = (floorsByDay[date] ?: 0.0) + record.floors
+        }
+
+        val rangeStartMs = start.toEpochMilli()
+        workouts.asSequence()
+            .filter { it.startTimeMs >= rangeStartMs && it.endTimeMs > it.startTimeMs }
+            .distinctBy { Pair(it.startTimeMs, it.endTimeMs) }
+            .forEach { workout ->
+                val date = dateOf(workout.startTimeMs)
+                if (date !in workoutMinutesByDay) return@forEach
+                val duration = ((workout.endTimeMs - workout.startTimeMs) / 60_000L).coerceAtLeast(1L)
+                workoutMinutesByDay[date] = (workoutMinutesByDay[date] ?: 0L) + duration
+                workoutCountByDay[date] = (workoutCountByDay[date] ?: 0) + 1
+                longestWorkoutByDay[date] = maxOf(longestWorkoutByDay[date] ?: 0L, duration)
+            }
+
+        return dates.map { date ->
+            DailyActivitySummary(
+                date = date,
+                steps = stepsByDay[date] ?: 0L,
+                distanceMeters = distanceByDay[date] ?: 0.0,
+                caloriesKcal = caloriesByDay[date] ?: 0.0,
+                elevationMeters = elevationByDay[date] ?: 0.0,
+                floors = floorsByDay[date] ?: 0.0,
+                workoutMinutes = workoutMinutesByDay[date] ?: 0L,
+                workoutCount = workoutCountByDay[date] ?: 0,
+                longestWorkoutMinutes = longestWorkoutByDay[date] ?: 0L
+            )
         }
     }
 

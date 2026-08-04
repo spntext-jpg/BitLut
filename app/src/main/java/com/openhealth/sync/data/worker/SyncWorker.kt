@@ -80,6 +80,14 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
 
             when (outcome) {
                 SyncAttemptOutcome.Success -> {
+                    applicationContext.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString(
+                            "last_sync_time",
+                            java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                                .format(java.util.Date())
+                        )
+                        .apply()
                     huaweiCircuitBreaker.recordSuccess()
                     googleCircuitBreaker.recordSuccess()
                     Result.success(workDataOf("reason" to "sync_success"))
@@ -419,11 +427,16 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
 
         try {
             val today = java.time.LocalDate.now()
-            val newRecords = achievementsStore.recordDailyTotals(
-                date = today,
-                stepsToday = freshSnapshot.stepsToday,
-                distanceMetersToday = freshSnapshot.distanceMeters
-            )
+            val newRecords = if (freshSnapshot.dailyActivity.isNotEmpty()) {
+                achievementsStore.mergeDailyActivity(freshSnapshot.dailyActivity)
+            } else {
+                achievementsStore.recordDailyTotals(
+                    date = today,
+                    stepsToday = freshSnapshot.stepsToday,
+                    distanceMetersToday = freshSnapshot.distanceMeters,
+                    caloriesKcalToday = freshSnapshot.caloriesKcal
+                )
+            }
             if (newRecords.isNotEmpty()) {
                 AppLogger.i(TAG, "New personal record(s) today: ${newRecords.joinToString()}")
                 SyncDiagnosticLog.record(prefs, "new_personal_record", newRecords.joinToString())

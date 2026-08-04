@@ -246,4 +246,30 @@
     <string name="insights_streak_days_ru_few">%1$d дня подряд</string>
     <string name="insights_streak_days_ru_many">%1$d дней подряд</string>
     <string name="record_steps_per_day">Steps per day</string>
+
+    <string name="dashboard_elevation_title">Elevation</string>
+    <string name="dashboard_today_short">Today</string>
+    <string name="dashboard_last_7_days_short">Last 7 days</string>
+    <string name="dashboard_elevation_value">%1$s m</string>
+    <string name="dashboard_floors_value">%1$s floors</string>
+    <string name="dashboard_last_7_days_title">Last 7 days</string>
+    <string name="dashboard_average_steps">Average steps</string>
+    <string name="dashboard_best_day">Best day</string>
+    <string name="dashboard_vs_previous_7_days">vs previous 7 days</string>
+    <string name="dashboard_no_baseline">No baseline</string>
+    <string name="dashboard_record_calories">Calories per day</string>
+    <string name="dashboard_record_elevation">Elevation per day</string>
+    <string name="dashboard_record_workout">Longest workout</string>
+    <string name="dashboard_workout_minutes_value">%1$d min</string>
+    <string name="dashboard_achievements_title">Achievements</string>
+    <string name="dashboard_achievements_subtitle">Based on data accumulated by BitLut</string>
+    <string name="achievement_distance_100">100 km</string>
+    <string name="achievement_distance_500">500 km</string>
+    <string name="achievement_steps_million">1 million steps</string>
+    <string name="achievement_active_streak_10">10 active days in a row</string>
+    <string name="achievement_workouts_50">50 workouts</string>
+    <string name="achievement_distance_progress">%1$s / %2$s km</string>
+    <string name="achievement_steps_progress">%1$s / %2$s steps</string>
+    <string name="achievement_days_progress">%1$d / %2$d days</string>
+    <string name="achievement_workouts_progress">%1$d / %2$d workouts</string>
 </resources>

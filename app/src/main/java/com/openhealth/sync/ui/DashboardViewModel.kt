@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import com.openhealth.sync.data.AchievementSummary
 
 private const val TAG = "DashboardViewModel"
 
@@ -59,6 +60,17 @@ data class DashboardUiState(
     val weekComparison: WeekComparison? = null,
     val bestStepsDay: PersonalRecord? = null,
     val bestDistanceDay: PersonalRecord? = null,
+    val bestCaloriesDay: PersonalRecord? = null,
+    val bestElevationDay: PersonalRecord? = null,
+    val bestWorkoutDuration: PersonalRecord? = null,
+    val achievementSummary: AchievementSummary = AchievementSummary(),
+    val elevationMetersToday: Double = 0.0,
+    val floorsToday: Double = 0.0,
+    val elevationMeters7d: Double = 0.0,
+    val floors7d: Double = 0.0,
+    val averageSteps7d: Long = 0L,
+    val bestStepsDay7d: PersonalRecord? = null,
+    val stepsChangeVsPrevious7d: Int? = null,
     val streak: StreakState = StreakState(currentStreakDays = 0, longestStreakDays = 0, lastCountedDate = null)
 ) {
     val stepsProgress: Float get() = (stepsToday.toFloat() / stepsGoal.toFloat()).coerceIn(0f, 1f)
@@ -183,6 +195,10 @@ class DashboardViewModel(
         state.copy(
             bestStepsDay = achievementsStore.bestStepsDay(),
             bestDistanceDay = achievementsStore.bestDistanceMetersDay(),
+            bestCaloriesDay = achievementsStore.bestCaloriesDay(),
+            bestElevationDay = achievementsStore.bestElevationMetersDay(),
+            bestWorkoutDuration = achievementsStore.bestWorkoutDurationMinutes(),
+            achievementSummary = achievementsStore.achievementSummary(),
             streak = achievementsStore.readStreak()
         )
     } catch (e: Exception) {
@@ -270,11 +286,16 @@ class DashboardViewModel(
     private fun updateAchievementsFor(snapshot: GoogleDashboardSnapshot) {
         try {
             val today = LocalDate.now()
-            achievementsStore.recordDailyTotals(
-                date = today,
-                stepsToday = snapshot.stepsToday,
-                distanceMetersToday = snapshot.distanceMeters
-            )
+            if (snapshot.dailyActivity.isNotEmpty()) {
+                achievementsStore.mergeDailyActivity(snapshot.dailyActivity)
+            } else {
+                achievementsStore.recordDailyTotals(
+                    date = today,
+                    stepsToday = snapshot.stepsToday,
+                    distanceMetersToday = snapshot.distanceMeters,
+                    caloriesKcalToday = snapshot.caloriesKcal
+                )
+            }
             val goalMet = _state.value.stepsGoal > 0 && snapshot.stepsToday >= _state.value.stepsGoal
             achievementsStore.updateStreak(today, goalMet)
         } catch (e: Exception) {
@@ -282,17 +303,44 @@ class DashboardViewModel(
         }
     }
 
-    private fun DashboardUiState.withSnapshot(snapshot: GoogleDashboardSnapshot): DashboardUiState =
-        copy(
-            isLoading       = false,
-            hasPermissions  = true,
-            stepsToday      = snapshot.stepsToday,
-            distanceMeters  = snapshot.distanceMeters,
-            caloriesKcal    = snapshot.caloriesKcal,
+    private fun DashboardUiState.withSnapshot(snapshot: GoogleDashboardSnapshot): DashboardUiState {
+        val today = LocalDate.now()
+        val currentStart = today.minusDays(6)
+        val previousStart = today.minusDays(13)
+        val previousEnd = today.minusDays(7)
+        val currentDays = snapshot.dailyActivity.filter { !it.date.isBefore(currentStart) && !it.date.isAfter(today) }
+        val previousDays = snapshot.dailyActivity.filter { !it.date.isBefore(previousStart) && !it.date.isAfter(previousEnd) }
+        val currentSteps = currentDays.sumOf { it.steps }
+        val previousSteps = previousDays.sumOf { it.steps }
+        val change = if (previousSteps > 0L) {
+            (((currentSteps - previousSteps).toDouble() / previousSteps.toDouble()) * 100.0).toInt()
+        } else {
+            null
+        }
+        val bestCurrentDay = currentDays
+            .filter { it.steps > 0L }
+            .maxByOrNull { it.steps }
+            ?.let { PersonalRecord(it.steps.toDouble(), it.date) }
+        val todayActivity = snapshot.dailyActivity.firstOrNull { it.date == today }
+
+        return copy(
+            isLoading = false,
+            hasPermissions = true,
+            stepsToday = snapshot.stepsToday,
+            distanceMeters = snapshot.distanceMeters,
+            caloriesKcal = snapshot.caloriesKcal,
             workoutMinutesToday = snapshot.workoutMinutesToday,
             activeHoursToday = snapshot.activeHoursToday,
-            recentWorkouts  = snapshot.recentWorkouts
+            recentWorkouts = snapshot.recentWorkouts,
+            elevationMetersToday = todayActivity?.elevationMeters ?: 0.0,
+            floorsToday = todayActivity?.floors ?: 0.0,
+            elevationMeters7d = currentDays.sumOf { it.elevationMeters },
+            floors7d = currentDays.sumOf { it.floors },
+            averageSteps7d = currentSteps / 7L,
+            bestStepsDay7d = bestCurrentDay,
+            stepsChangeVsPrevious7d = change
         )
+    }
 
     companion object {
         fun provideFactory(
