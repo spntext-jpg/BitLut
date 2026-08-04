@@ -240,3 +240,43 @@ or not yet even reviewed.
   early if any widget-related issue comes up.
 - No other known open bugs as of the last device log referenced in this
   session.
+
+<!-- BITLUT_FINAL_STATE_2026_08_04_START -->
+
+## Handoff update — 2026-08-04
+
+The current `main` branch has a successful debug build after the synchronization,
+Huawei import and dashboard insight work.
+
+### Completed in the latest session
+
+- Hardened immediate WorkManager synchronization and observer cleanup.
+- Hardened Huawei archive import and partial-result reporting.
+- Removed obsolete Huawei heart-rate scope configuration.
+- Removed `.env.signing.local` from Git tracking and added it to `.gitignore`.
+- Removed the decorative empty circle from the top steps card.
+- Renamed the personal-record label to “Шаги за день”.
+- Removed “Макс. каденс” from workout-card presentation.
+- Added elevation/floors, seven-day trends, expanded records and achievements.
+- Added source and last-successful-sync information beside the summary heading.
+- Confirmed that sleep is not requested or imported; no sleep UI was added.
+
+### Source-of-truth rule
+
+Start future work from the current `main` branch, a fresh Repomix export and a
+fresh successful build. Do not reconstruct current behavior from archived patch
+backups or old verifier assumptions.
+
+### User workflow
+
+The user works in GitHub Codespaces and expects standalone, idempotent Python
+patch scripts plus exact apply, build, commit and push commands. Do not ask them
+to paste manual Kotlin diffs.
+
+### Next safe product opportunities
+
+Use only already imported activity data unless the user explicitly approves new
+permissions. Suitable additions include richer trend visualization, activity
+calendar views, export improvements and clearer synchronization diagnostics.
+
+<!-- BITLUT_FINAL_STATE_2026_08_04_END -->

@@ -298,3 +298,57 @@ while the first Health Connect read is still in progress.
 * The existing 30-minute periodic background sync (WorkManager) now also
   refreshes this local cache after each successful sync, so data stays fresh
   even when the app isn't open.
+
+<!-- BITLUT_FINAL_STATE_2026_08_04_START -->
+
+## Current state — 2026-08-04
+
+BitLut is an activity-only Android bridge between Huawei Health and Android
+Health Connect. The current build is verified with `:app:assembleDebug`.
+
+### Current data scope
+
+- Steps
+- Distance
+- Floors climbed and elevation gain
+- Active calories
+- Exercise sessions and workout duration
+
+Sleep, heart rate, SpO2, HRV, stress, blood pressure and other health metrics
+are intentionally not requested, imported or displayed.
+
+### Current reliability behavior
+
+- Manual and background synchronization use WorkManager without observing
+  discarded duplicate requests.
+- Work observers are removed after terminal states.
+- Huawei ZIP/JSON import is bounded and supports the known export layouts.
+- Partial imports report only categories that were actually written.
+- Dashboard snapshots and synchronization metadata are persisted locally.
+- Local signing credentials are ignored by Git and are never committed.
+
+### Current dashboard
+
+- Today's steps, distance, calories and activity.
+- Workout history without the maximum-cadence field.
+- Elevation/floors summary for today and the last seven days.
+- Seven-day average, best day and comparison with the previous seven days.
+- Personal records for steps, distance, calories, elevation and workout duration.
+- Locally accumulated achievements.
+- Last successful synchronization time and selected data source.
+
+### Build command for constrained Codespaces
+
+```bash
+./gradlew :app:assembleDebug   --no-daemon   --max-workers=1   --no-watch-fs   -Dorg.gradle.jvmargs="-Xmx1024m -XX:MaxMetaspaceSize=384m -Dfile.encoding=UTF-8"   -Pkotlin.compiler.execution.strategy=in-process
+```
+
+### Maintenance rules
+
+- Do not add new health permissions without an explicit product decision.
+- Keep changes surgical; do not refactor unrelated working synchronization code.
+- Deliver repository changes as idempotent Python patch scripts.
+- Verify with a real Gradle build before commit and push.
+- Version numbers for releases remain owned by the GitHub Actions release workflow.
+
+<!-- BITLUT_FINAL_STATE_2026_08_04_END -->

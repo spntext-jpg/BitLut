@@ -363,3 +363,43 @@ Explicitly unchanged in this sprint:
 - Activity-only Health Connect scope and the no-fake-data policy.
 
 Verified by `scripts/verify_dashboard_persistence_sprint.py`.
+
+<!-- BITLUT_FINAL_STATE_2026_08_04_START -->
+
+## Active project context — 2026-08-04
+
+### Product boundary
+
+BitLut is activity-only. Approved application behavior is limited to steps,
+distance, floors/elevation, active calories and workouts. Sleep and biometric
+health categories are outside the current scope.
+
+### Architecture anchors
+
+- `HuaweiHealthManager`: reads approved Huawei activity data.
+- `GoogleHealthManager`: reads/writes Health Connect activity records.
+- `SyncOrchestrator`: coordinates manual synchronization.
+- `BackgroundSyncScheduler` and `SyncWorker`: WorkManager scheduling/execution.
+- `HuaweiExportParser`: bounded local Huawei ZIP/JSON import.
+- `DashboardSnapshotCache`: last-known dashboard state.
+- `AchievementsStore`: local records and accumulated achievements.
+- `DashboardViewModel`: dashboard aggregation and trend calculation.
+- `FinalBitLutShell`: Compose application shell and dashboard presentation.
+
+### Current dashboard contract
+
+The dashboard presents activity data already available locally: daily summary,
+workout history, elevation/floors, seven-day comparison, personal records,
+achievements and synchronization transparency. It must not imply that sleep or
+other unsupported health data is available.
+
+### Engineering constraints
+
+- Preserve working sync and import behavior.
+- Avoid unrelated refactors.
+- No new permissions without explicit approval.
+- Keep secrets and generated build artifacts out of Git.
+- Use the low-memory Gradle command documented in README for Codespaces.
+- A successful build is required before commit.
+
+<!-- BITLUT_FINAL_STATE_2026_08_04_END -->

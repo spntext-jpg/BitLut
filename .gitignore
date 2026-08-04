@@ -22,18 +22,9 @@ app/build/outputs/
 build-release.sh
 
 app/agconnect-services.json
-agconnect-services.json
 
-app/agconnect-services.json
-agconnect-services.json
 
 # Local secrets / build artifacts
-.huawei.env
-.signing/
-app/agconnect-services.json
-agconnect-services.json
-*.apk
-*.aab
 compile_errors.log
 *.sh
 *.bak
@@ -43,3 +34,9 @@ bitlut_*_patch.py
 # BitLut generated artifacts / AI patch guardrails
 hotfix.sh
 .env.signing.local
+
+# Local patching, backups and generated files
+.bitlut_patch_backup/
+__pycache__/
+*.pyc
+*.tmp
