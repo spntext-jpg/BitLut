@@ -67,7 +67,6 @@ android {
         buildConfigField("String", "HUAWEI_CLIENT_ID", "\"${escapedBuildConfig("HUAWEI_CLIENT_ID")}\"")
         buildConfigField("String", "HUAWEI_CLIENT_SECRET", "\"${escapedBuildConfig("HUAWEI_CLIENT_SECRET")}\"")
         buildConfigField("String", "HUAWEI_REDIRECT_URI", "\"${escapedBuildConfig("HUAWEI_REDIRECT_URI", "https://com.openhealth.sync/oauth_callback")}\"")
-        buildConfigField("String", "HUAWEI_SCOPES", "\"${escapedBuildConfig("HUAWEI_SCOPES", "https://www.huawei.com/auth/healthkit.step.read+https://www.huawei.com/auth/healthkit.heartrate.read")}\"")
     }
 
     signingConfigs {

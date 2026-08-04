@@ -10,12 +10,15 @@ import com.openhealth.sync.data.StepData
 import com.openhealth.sync.util.AppLogger
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.zip.ZipInputStream
 
 private const val TAG = "HuaweiExportParser"
+private const val MAX_SINGLE_JSON_BYTES = 16 * 1024 * 1024
+private const val MAX_TOTAL_ZIP_JSON_BYTES = 64 * 1024 * 1024
+private const val MAX_ZIP_ENTRIES = 10_000
 
-// Known Huawei Health export file names → data type
 private val STEP_FILES = setOf(
     "motion_path_detail_count.json",
     "sport_health_step_count.json",
@@ -44,6 +47,8 @@ private val ACTIVITY_FILES = setOf(
     "com.huawei.health.activity_record.json"
 )
 
+private enum class ExportKind { STEPS, DISTANCE, CALORIES, ACTIVITY }
+
 data class HuaweiExportSummary(
     val snapshot: HuaweiHealthSnapshot,
     val stepCount: Int,
@@ -60,7 +65,7 @@ class HuaweiExportParser(private val context: Context) {
         val stream = context.contentResolver.openInputStream(uri)
             ?: throw IllegalArgumentException("Cannot open file: $uri")
 
-        return stream.use { parseStream(it, uri.lastPathSegment ?: "") }
+        return stream.use { parseStream(it, uri.lastPathSegment.orEmpty()) }
     }
 
     private fun parseStream(input: InputStream, fileName: String): HuaweiExportSummary {
@@ -71,265 +76,260 @@ class HuaweiExportParser(private val context: Context) {
         val filesFound = mutableListOf<String>()
         val filesSkipped = mutableListOf<String>()
 
-        // Huawei exports as ZIP — if not a zip, try parsing as raw JSON
         if (fileName.endsWith(".zip", ignoreCase = true)) {
-            val zip = ZipInputStream(input.buffered())
-            var entry = zip.nextEntry
-            while (entry != null) {
-                val entryName = entry.name.substringAfterLast("/").lowercase()
-                val content = zip.readBytes().toString(Charsets.UTF_8)
-                zip.closeEntry()
+            var entryCount = 0
+            var totalJsonBytes = 0
 
-                when {
-                    STEP_FILES.any { entryName == it } -> {
-                        filesFound.add(entry.name)
-                        steps += parseStepJson(content, entry.name)
+            ZipInputStream(input.buffered()).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    entryCount += 1
+                    if (entryCount > MAX_ZIP_ENTRIES) {
+                        throw IllegalArgumentException("Huawei archive contains too many entries")
                     }
-                    DISTANCE_FILES.any { entryName == it } -> {
-                        filesFound.add(entry.name)
-                        distances += parseDistanceJson(content, entry.name)
+
+                    val source = entry.name
+                    val shortName = source.substringAfterLast('/').lowercase()
+                    val kind = classify(shortName)
+
+                    if (!entry.isDirectory && kind != null) {
+                        val remainingBudget = MAX_TOTAL_ZIP_JSON_BYTES - totalJsonBytes
+                        if (remainingBudget <= 0) {
+                            throw IllegalArgumentException("Huawei archive JSON data exceeds the safe size limit")
+                        }
+
+                        val bytes = zip.readBytesBounded(minOf(MAX_SINGLE_JSON_BYTES, remainingBudget))
+                        totalJsonBytes += bytes.size
+                        parseRecognized(kind, bytes.toString(Charsets.UTF_8), source, steps, distances, calories, activities)
+                        filesFound += source
+                    } else if (!entry.isDirectory && shortName.endsWith(".json")) {
+                        filesSkipped += source
+                        AppLogger.d(TAG, "Skipped unrecognized JSON without loading it: $source")
                     }
-                    CALORIE_FILES.any { entryName == it } -> {
-                        filesFound.add(entry.name)
-                        calories += parseCalorieJson(content, entry.name)
-                    }
-                    ACTIVITY_FILES.any { entryName == it } -> {
-                        filesFound.add(entry.name)
-                        activities += parseActivityJson(content, entry.name)
-                    }
-                    entryName.endsWith(".json") -> {
-                        filesSkipped.add(entry.name)
-                        AppLogger.d(TAG, "Skipped unrecognized JSON: ${entry.name}")
-                    }
+
+                    zip.closeEntry()
+                    entry = zip.nextEntry
                 }
-                entry = zip.nextEntry
             }
         } else {
-            // Single JSON file selected directly
-            val content = input.readBytes().toString(Charsets.UTF_8)
-            when {
-                STEP_FILES.any { fileName.lowercase() == it } -> {
-                    filesFound.add(fileName)
-                    steps += parseStepJson(content, fileName)
-                }
-                DISTANCE_FILES.any { fileName.lowercase() == it } -> {
-                    filesFound.add(fileName)
-                    distances += parseDistanceJson(content, fileName)
-                }
-                else -> {
-                    // Try steps as fallback for unknown JSON
-                    val parsed = tryParseStepsGeneric(content)
-                    if (parsed.isNotEmpty()) {
-                        filesFound.add(fileName)
-                        steps += parsed
-                    } else {
-                        filesSkipped.add(fileName)
-                    }
-                }
+            val content = input.readBytesBounded(MAX_SINGLE_JSON_BYTES).toString(Charsets.UTF_8)
+            val kind = classify(fileName.substringAfterLast('/').lowercase()) ?: inferKind(content)
+
+            if (kind == null) {
+                filesSkipped += fileName
+            } else {
+                parseRecognized(kind, content, fileName, steps, distances, calories, activities)
+                filesFound += fileName
             }
         }
 
+        val distinctSteps = steps.distinctBy { Triple(it.startTimeMs, it.endTimeMs, it.count) }
+        val distinctDistances = distances.distinctBy { Triple(it.startTimeMs, it.endTimeMs, it.meters) }
+        val distinctCalories = calories.distinctBy { Triple(it.startTimeMs, it.endTimeMs, it.kilocalories) }
+        val distinctActivities = activities.distinctBy { Triple(it.startTimeMs, it.endTimeMs, it.title) }
+
         val snapshot = HuaweiHealthSnapshot(
-            steps = steps,
-            distances = distances,
-            activeCalories = calories,
-            activities = activities
+            steps = distinctSteps,
+            distances = distinctDistances,
+            activeCalories = distinctCalories,
+            activities = distinctActivities
         )
 
         AppLogger.i(
             TAG,
-            "Parse complete: steps=${steps.size} distances=${distances.size} calories=${calories.size} activities=${activities.size} filesFound=${filesFound.size} filesSkipped=${filesSkipped.size}"
+            "Parse complete: steps=${distinctSteps.size} distances=${distinctDistances.size} " +
+                "calories=${distinctCalories.size} activities=${distinctActivities.size} " +
+                "filesFound=${filesFound.size} filesSkipped=${filesSkipped.size}"
         )
 
         return HuaweiExportSummary(
             snapshot = snapshot,
-            stepCount = steps.size,
-            distanceCount = distances.size,
-            calorieCount = calories.size,
-            activityCount = activities.size,
+            stepCount = distinctSteps.size,
+            distanceCount = distinctDistances.size,
+            calorieCount = distinctCalories.size,
+            activityCount = distinctActivities.size,
             filesFound = filesFound,
             filesSkipped = filesSkipped
         )
     }
 
-    // ── Step parsers ──────────────────────────────────────────────────────────
+    private fun classify(fileName: String): ExportKind? = when (fileName) {
+        in STEP_FILES -> ExportKind.STEPS
+        in DISTANCE_FILES -> ExportKind.DISTANCE
+        in CALORIE_FILES -> ExportKind.CALORIES
+        in ACTIVITY_FILES -> ExportKind.ACTIVITY
+        else -> null
+    }
 
-    private fun parseStepJson(content: String, source: String): List<StepData> {
-        return try {
-            val json = JSONObject(content)
-            val results = mutableListOf<StepData>()
-
-            // Format A: { "data": [ { "startTime": ..., "endTime": ..., "value": ... } ] }
-            if (json.has("data")) {
-                val arr = json.getJSONArray("data")
-                for (i in 0 until arr.length()) {
-                    val obj = arr.getJSONObject(i)
-                    val record = parseStepRecord(obj) ?: continue
-                    results += record
-                }
-                AppLogger.i(TAG, "Parsed ${results.size} step records from $source (format A)")
-                return results
-            }
-
-            // Format B: array at root [ { ... } ]
-            AppLogger.w(TAG, "Unknown step JSON format in $source, trying root array")
-            results
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to parse steps from $source: ${e.message}")
-            emptyList()
+    private fun parseRecognized(
+        kind: ExportKind,
+        content: String,
+        source: String,
+        steps: MutableList<StepData>,
+        distances: MutableList<DistanceData>,
+        calories: MutableList<ActiveCaloriesData>,
+        activities: MutableList<ActivitySessionData>
+    ) {
+        when (kind) {
+            ExportKind.STEPS -> steps += parseStepJson(content, source)
+            ExportKind.DISTANCE -> distances += parseDistanceJson(content, source)
+            ExportKind.CALORIES -> calories += parseCalorieJson(content, source)
+            ExportKind.ACTIVITY -> activities += parseActivityJson(content, source)
         }
     }
 
-    private fun tryParseStepsGeneric(content: String): List<StepData> {
-        return try {
-            when (val root = parseJsonRootFlexible(content)) {
-                is JSONArray -> {
-                    (0 until root.length()).mapNotNull { i ->
-                        parseStepRecord(root.getJSONObject(i))
-                    }
-                }
-                is JSONObject -> {
-                    if (root.has("data")) {
-                        val arr = root.getJSONArray("data")
-                        (0 until arr.length()).mapNotNull { i ->
-                            parseStepRecord(arr.getJSONObject(i))
-                        }
-                    } else emptyList()
-                }
-                else -> emptyList()
-            }
-        } catch (e: Exception) {
-            emptyList()
+    private fun parseStepJson(content: String, source: String): List<StepData> =
+        parseRecords(content, source, "steps") { parseStepRecord(it) }
+
+    private fun parseDistanceJson(content: String, source: String): List<DistanceData> =
+        parseRecords(content, source, "distance") { obj ->
+            val start = obj.huaweiTime("startTime") ?: obj.huaweiTime("start_time") ?: return@parseRecords null
+            val end = obj.huaweiTime("endTime") ?: obj.huaweiTime("end_time") ?: return@parseRecords null
+            val meters = obj.positiveDouble("value", "distance", "meters") ?: return@parseRecords null
+            if (start < end) DistanceData(start, end, meters) else null
         }
-    }
+
+    private fun parseCalorieJson(content: String, source: String): List<ActiveCaloriesData> =
+        parseRecords(content, source, "calories") { obj ->
+            val start = obj.huaweiTime("startTime") ?: obj.huaweiTime("start_time") ?: return@parseRecords null
+            val end = obj.huaweiTime("endTime") ?: obj.huaweiTime("end_time") ?: return@parseRecords null
+            val kcal = obj.positiveDouble("value", "calories", "calorie", "kilocalories")
+                ?: return@parseRecords null
+            if (start < end) ActiveCaloriesData(start, end, kcal) else null
+        }
+
+    private fun parseActivityJson(content: String, source: String): List<ActivitySessionData> =
+        parseRecords(content, source, "activities") { obj ->
+            val start = obj.huaweiTime("startTime") ?: obj.huaweiTime("start_time") ?: return@parseRecords null
+            val end = obj.huaweiTime("endTime") ?: obj.huaweiTime("end_time") ?: return@parseRecords null
+            if (end - start < 60_000L) return@parseRecords null
+
+            val title = obj.optString("sportType", "")
+                .ifBlank { obj.optString("type", "") }
+                .ifBlank { obj.optString("name", "") }
+                .ifBlank { "Huawei activity" }
+
+            ActivitySessionData(startTimeMs = start, endTimeMs = end, title = title)
+        }
 
     private fun parseStepRecord(obj: JSONObject): StepData? {
-        return try {
-            val start = obj.huaweiTime("startTime") ?: obj.huaweiTime("start_time") ?: return null
-            val end = obj.huaweiTime("endTime") ?: obj.huaweiTime("end_time") ?: return null
-            val count = obj.optLong("value", -1L)
-                .takeIf { it >= 0 }
-                ?: obj.optLong("steps", -1L)
-                    .takeIf { it >= 0 }
-                ?: return null
-
-            if (count > 0L && start < end) StepData(start, end, count) else null
-        } catch (_: Exception) {
-            null
-        }
+        val start = obj.huaweiTime("startTime") ?: obj.huaweiTime("start_time") ?: return null
+        val end = obj.huaweiTime("endTime") ?: obj.huaweiTime("end_time") ?: return null
+        val count = obj.nonNegativeLong("value", "steps", "count") ?: return null
+        return if (count > 0L && start < end) StepData(start, end, count) else null
     }
 
-    // ── Distance parsers ──────────────────────────────────────────────────────
-
-    private fun parseDistanceJson(content: String, source: String): List<DistanceData> {
+    private inline fun <T> parseRecords(
+        content: String,
+        source: String,
+        label: String,
+        parse: (JSONObject) -> T?
+    ): List<T> {
         return try {
-            val json = JSONObject(content)
-            val results = mutableListOf<DistanceData>()
-
-            if (json.has("data")) {
-                val arr = json.getJSONArray("data")
-                for (i in 0 until arr.length()) {
-                    val obj = arr.getJSONObject(i)
-                    val start = obj.huaweiTime("startTime") ?: continue
-                    val end = obj.huaweiTime("endTime") ?: continue
-                    val meters = obj.optDouble("value", -1.0)
-                        .takeIf { it > 0.0 }
-                        ?: obj.optDouble("distance", -1.0)
-                            .takeIf { it > 0.0 }
-                        ?: continue
-
-                    if (start < end) results += DistanceData(start, end, meters)
-                }
+            val array = recordsArray(content) ?: return emptyList()
+            val results = ArrayList<T>(array.length())
+            for (index in 0 until array.length()) {
+                val obj = array.optJSONObject(index) ?: continue
+                parse(obj)?.let(results::add)
             }
-
-            AppLogger.i(TAG, "Parsed ${results.size} distance records from $source")
+            AppLogger.i(TAG, "Parsed ${results.size} $label records from $source")
             results
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to parse distance from $source: ${e.message}")
+            AppLogger.e(TAG, "Failed to parse $label from $source: ${e.message}")
             emptyList()
         }
     }
 
-    // ── Calorie parsers ───────────────────────────────────────────────────────
+    private fun recordsArray(content: String): JSONArray? = when (val root = parseJsonRootFlexible(content)) {
+        is JSONArray -> root
+        is JSONObject -> sequenceOf("data", "records", "items", "list")
+            .mapNotNull(root::optJSONArray)
+            .firstOrNull()
+        else -> null
+    }
 
-    private fun parseCalorieJson(content: String, source: String): List<ActiveCaloriesData> {
-        return try {
-            val json = JSONObject(content)
-            val results = mutableListOf<ActiveCaloriesData>()
+    private fun inferKind(content: String): ExportKind? {
+        val array = recordsArray(content) ?: return null
+        val sample = (0 until minOf(array.length(), 20))
+            .mapNotNull(array::optJSONObject)
+            .firstOrNull() ?: return null
 
-            if (json.has("data")) {
-                val arr = json.getJSONArray("data")
-                for (i in 0 until arr.length()) {
-                    val obj = arr.getJSONObject(i)
-                    val start = obj.huaweiTime("startTime") ?: continue
-                    val end = obj.huaweiTime("endTime") ?: continue
-                    val kcal = obj.optDouble("value", -1.0)
-                        .takeIf { it > 0.0 }
-                        ?: obj.optDouble("calories", -1.0)
-                            .takeIf { it > 0.0 }
-                        ?: continue
-
-                    if (start < end) results += ActiveCaloriesData(start, end, kcal)
-                }
-            }
-
-            AppLogger.i(TAG, "Parsed ${results.size} calorie records from $source")
-            results
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to parse calories from $source: ${e.message}")
-            emptyList()
+        return when {
+            sample.hasAny("steps", "stepCount", "step_count") -> ExportKind.STEPS
+            sample.hasAny("distance", "meters", "metres") -> ExportKind.DISTANCE
+            sample.hasAny("calories", "calorie", "kilocalories", "kcal") -> ExportKind.CALORIES
+            sample.hasAny("sportType", "sport_type", "workoutType", "activityType") -> ExportKind.ACTIVITY
+            else -> null
         }
     }
 
-    // ── Activity parsers ──────────────────────────────────────────────────────
-
-    private fun parseActivityJson(content: String, source: String): List<ActivitySessionData> {
-        return try {
-            val json = JSONObject(content)
-            val results = mutableListOf<ActivitySessionData>()
-
-            val arr = when {
-                json.has("data") -> json.getJSONArray("data")
-                json.has("records") -> json.getJSONArray("records")
-                else -> return emptyList()
-            }
-
-            for (i in 0 until arr.length()) {
-                val obj = arr.getJSONObject(i)
-                val start = obj.huaweiTime("startTime") ?: obj.huaweiTime("start_time") ?: continue
-                val end = obj.huaweiTime("endTime") ?: obj.huaweiTime("end_time") ?: continue
-                if (end - start < 60_000L) continue
-
-                val title = obj.optString("sportType", "")
-                    .ifBlank { obj.optString("type", "Huawei activity") }
-
-                results += ActivitySessionData(
-                    startTimeMs = start,
-                    endTimeMs = end,
-                    title = title.ifBlank { "Huawei activity" }
-                )
-            }
-
-            AppLogger.i(TAG, "Parsed ${results.size} activity records from $source")
-            results
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to parse activities from $source: ${e.message}")
-            emptyList()
-        }
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    // Huawei exports timestamps in seconds or milliseconds
     private fun JSONObject.huaweiTime(key: String): Long? {
-        val raw = optLong(key, -1L).takeIf { it > 0L } ?: return null
-        // Timestamps < 1e10 are in seconds, convert to ms
+        val value = opt(key) ?: return null
+        val raw = when (value) {
+            is Number -> value.toLong()
+            is String -> value.trim().toLongOrNull()
+            else -> null
+        }?.takeIf { it > 0L } ?: return null
+
         return if (raw < 10_000_000_000L) raw * 1000L else raw
     }
 
-    private fun parseJsonRootFlexible(content: String): Any? {
-        return try { JSONObject(content) } catch (_: Exception) {
-            try { JSONArray(content) } catch (_: Exception) { null }
+    private fun JSONObject.nonNegativeLong(vararg keys: String): Long? {
+        for (key in keys) {
+            val value = opt(key) ?: continue
+            val parsed = when (value) {
+                is Number -> value.toLong()
+                is String -> value.trim().toLongOrNull()
+                else -> null
+            }
+            if (parsed != null && parsed >= 0L) return parsed
         }
+        return null
+    }
+
+    private fun JSONObject.positiveDouble(vararg keys: String): Double? {
+        for (key in keys) {
+            val value = opt(key) ?: continue
+            val parsed = when (value) {
+                is Number -> value.toDouble()
+                is String -> value.trim().replace(',', '.').toDoubleOrNull()
+                else -> null
+            }
+            if (parsed != null && parsed.isFinite() && parsed > 0.0) return parsed
+        }
+        return null
+    }
+
+    private fun JSONObject.hasAny(vararg keys: String): Boolean = keys.any(::has)
+
+    private fun parseJsonRootFlexible(content: String): Any? {
+        val trimmed = content.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
+        return try {
+            JSONObject(trimmed)
+        } catch (_: Exception) {
+            try {
+                JSONArray(trimmed)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    private fun InputStream.readBytesBounded(maxBytes: Int): ByteArray {
+        require(maxBytes > 0) { "Safe read budget is exhausted" }
+        val output = ByteArrayOutputStream(minOf(maxBytes, 64 * 1024))
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+
+        while (true) {
+            val read = read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > maxBytes) {
+                throw IllegalArgumentException("Huawei JSON entry exceeds the safe size limit")
+            }
+            output.write(buffer, 0, read)
+        }
+        return output.toByteArray()
     }
 }

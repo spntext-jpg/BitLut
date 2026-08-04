@@ -135,7 +135,6 @@ fun FinalBitLutShell(
     onRequestGoogle: () -> Unit,
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
-    onImportArchive: () -> Unit = {},
     onExportCsv: () -> Unit = {},
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit = { _, _ -> },
     onDataSourceSelected: (HealthDataSource) -> Unit = {},

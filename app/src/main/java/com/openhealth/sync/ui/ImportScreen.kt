@@ -24,7 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.DirectionsRun
+import androidx.compose.material.icons.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.rounded.LocalFireDepartment
@@ -45,7 +45,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,7 +64,7 @@ fun ImportScreen(
     viewModel: ImportViewModel,
     onBack: () -> Unit
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -264,13 +264,13 @@ private fun PreviewContent(
         Text(stringResource(R.string.import_preview_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         if (summary.stepCount > 0)
-            DataSummaryCard({ Icon(Icons.AutoMirrored.Rounded.DirectionsRun, null, tint = MaterialTheme.colorScheme.primary) }, stringResource(R.string.import_preview_steps), summary.stepCount)
+            DataSummaryCard({ Icon(Icons.Rounded.DirectionsRun, null, tint = MaterialTheme.colorScheme.primary) }, stringResource(R.string.import_preview_steps), summary.stepCount)
         if (summary.distanceCount > 0)
             DataSummaryCard({ Icon(Icons.Rounded.Place, null, tint = MaterialTheme.colorScheme.secondary) }, stringResource(R.string.import_preview_distance), summary.distanceCount)
         if (summary.calorieCount > 0)
             DataSummaryCard({ Icon(Icons.Rounded.LocalFireDepartment, null, tint = MaterialTheme.colorScheme.error) }, stringResource(R.string.import_preview_calories), summary.calorieCount)
         if (summary.activityCount > 0)
-            DataSummaryCard({ Icon(Icons.AutoMirrored.Rounded.DirectionsRun, null, tint = MaterialTheme.colorScheme.tertiary) }, stringResource(R.string.import_preview_activities), summary.activityCount)
+            DataSummaryCard({ Icon(Icons.Rounded.DirectionsRun, null, tint = MaterialTheme.colorScheme.tertiary) }, stringResource(R.string.import_preview_activities), summary.activityCount)
 
         if (summary.filesFound.isNotEmpty()) {
             Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {

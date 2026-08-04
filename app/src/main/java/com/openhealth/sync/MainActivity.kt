@@ -1,6 +1,5 @@
 package com.openhealth.sync
 
-import android.app.Activity
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -64,18 +63,6 @@ class MainActivity : ComponentActivity() {
         SyncOrchestrator(this, syncViewModel.googleManager)
     }
 
-    private val archiveImportLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                val uri = result.data?.data
-                if (uri != null) {
-                    Toast.makeText(this, getString(R.string.import_archive_selected), Toast.LENGTH_LONG).show()
-                    AppLogger.i("MainActivity", "Huawei archive selected: $uri")
-                } else {
-                    Toast.makeText(this, getString(R.string.status_error), Toast.LENGTH_LONG).show()
-                }
-            }
-        }
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -163,7 +150,6 @@ class MainActivity : ComponentActivity() {
                     onRequestGoogle = { requestGoogleHealthPermissions() },
                     onRequestHuawei = { startHuaweiAuthorization() },
                     onSyncNow = { triggerImmediateSync() },
-                    onImportArchive = { openHuaweiArchiveImport() },
                     onExportCsv = { exportCsv() },
                     onWidgetVisibilityChanged = { widget, visible ->
                         dashboardViewModel.setWidgetVisible(widget, visible)
@@ -230,28 +216,6 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             AppLogger.e("MainActivity", "Huawei authorization start failed: ${e.message}", e)
             Toast.makeText(this, getString(R.string.toast_huawei_start_failed), Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun openHuaweiArchiveImport() {
-        try {
-            val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(android.content.Intent.CATEGORY_OPENABLE)
-                type = "*/*"
-                putExtra(
-                    android.content.Intent.EXTRA_MIME_TYPES,
-                    arrayOf(
-                        "application/zip",
-                        "application/json",
-                        "text/*",
-                        "application/octet-stream"
-                    )
-                )
-            }
-            archiveImportLauncher.launch(intent)
-        } catch (t: Throwable) {
-            AppLogger.e("MainActivity", "Archive picker failed: ${t.message}", t)
-            Toast.makeText(this, getString(R.string.status_error), Toast.LENGTH_LONG).show()
         }
     }
 

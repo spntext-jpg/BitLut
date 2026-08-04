@@ -7,7 +7,6 @@ object HuaweiConfig {
     val CLIENT_ID: String get() = BuildConfig.HUAWEI_CLIENT_ID
     val CLIENT_SECRET: String get() = BuildConfig.HUAWEI_CLIENT_SECRET
     val REDIRECT_URI: String get() = BuildConfig.HUAWEI_REDIRECT_URI
-    val SCOPES: String get() = BuildConfig.HUAWEI_SCOPES
 
     const val PREFS_NAME: String = "bitlut_prefs"
     const val KEY_HUAWEI_AUTHORIZED: String = "huawei_authorized"

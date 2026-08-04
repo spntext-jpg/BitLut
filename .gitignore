@@ -42,3 +42,4 @@ bitlut_*_patch.py
 *.orig
 # BitLut generated artifacts / AI patch guardrails
 hotfix.sh
+.env.signing.local

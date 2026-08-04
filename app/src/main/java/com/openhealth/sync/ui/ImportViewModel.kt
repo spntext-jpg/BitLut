@@ -1,14 +1,15 @@
 package com.openhealth.sync.ui
-import com.openhealth.sync.data.HealthConnectManager
 
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.openhealth.sync.data.HealthConnectManager
 import com.openhealth.sync.data.import.HuaweiExportParser
 import com.openhealth.sync.data.import.HuaweiExportSummary
 import com.openhealth.sync.util.AppLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,85 +36,70 @@ sealed class ImportState {
 
 class ImportViewModel(
     private val googleManager: HealthConnectManager,
-    private val context: Context
+    context: Context
 ) : ViewModel() {
-
-    private val parser = HuaweiExportParser(context)
-
+    private val parser = HuaweiExportParser(context.applicationContext)
     private val _state = MutableStateFlow<ImportState>(ImportState.Idle)
     val state: StateFlow<ImportState> = _state.asStateFlow()
 
     fun parseFile(uri: Uri) {
         _state.update { ImportState.Parsing }
-
         viewModelScope.launch {
             try {
                 val summary = withContext(Dispatchers.IO) { parser.parse(uri) }
+                val hasData = summary.stepCount > 0 || summary.distanceCount > 0 ||
+                    summary.calorieCount > 0 || summary.activityCount > 0
 
-                if (summary.stepCount == 0 &&
-                    summary.distanceCount == 0 &&
-                    summary.calorieCount == 0 &&
-                    summary.activityCount == 0
-                ) {
-                    _state.update {
-                        ImportState.Error(
-                            "import_error_no_data|${summary.filesFound.joinToString()}|${summary.filesSkipped.size}"
-                        )
-                    }
-                } else {
+                if (hasData) {
                     _state.update { ImportState.Preview(summary) }
+                } else {
+                    val detail = buildString {
+                        if (summary.filesFound.isNotEmpty()) {
+                            append("Recognized: ")
+                            append(summary.filesFound.joinToString { it.substringAfterLast('/') })
+                        }
+                        if (summary.filesSkipped.isNotEmpty()) {
+                            if (isNotEmpty()) append("; ")
+                            append("Skipped JSON files: ${summary.filesSkipped.size}")
+                        }
+                    }
+                    _state.update { ImportState.Error("import_error_no_data|$detail") }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Failed to parse export file", e)
-                _state.update {
-                    ImportState.Error(
-                        "Не удалось прочитать файл.\n\n${e.message ?: "Неизвестная ошибка"}"
-                    )
-                }
+                _state.update { ImportState.Error("import_error_read_failed|${e.message.orEmpty()}") }
             }
         }
     }
 
     fun confirmImport(summary: HuaweiExportSummary) {
         _state.update { ImportState.Writing }
-
         viewModelScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    googleManager.writeSnapshot(summary.snapshot)
-                }
-
-                // A partial write (e.g. floors unsupported on this Huawei export
-                // but steps/distance/calories all wrote fine) is still reported
-                // as a success to the person -- the categories that matter most
-                // got through, and failing the whole import over one missing
-                // category would be a worse outcome than silently accepting it.
+                val result = withContext(Dispatchers.IO) { googleManager.writeSnapshot(summary.snapshot) }
                 if (result.anySucceeded) {
                     _state.update {
                         ImportState.Success(
-                            stepsWritten = summary.stepCount,
-                            distancesWritten = summary.distanceCount,
-                            caloriesWritten = summary.calorieCount,
-                            activitiesWritten = summary.activityCount
+                            stepsWritten = if ("steps" in result.succeededCategories) summary.stepCount else 0,
+                            distancesWritten = if ("distance" in result.succeededCategories) summary.distanceCount else 0,
+                            caloriesWritten = if ("activeCalories" in result.succeededCategories) summary.calorieCount else 0,
+                            activitiesWritten = if ("activitySessions" in result.succeededCategories) summary.activityCount else 0
                         )
                     }
                     if (!result.allSucceeded) {
                         AppLogger.w(TAG, "Import partially written; failed categories: ${result.failedCategories.joinToString()}")
                     }
-                    AppLogger.i(TAG, "Import complete: steps=${summary.stepCount} distances=${summary.distanceCount} calories=${summary.calorieCount} activities=${summary.activityCount}")
+                    AppLogger.i(TAG, "Import complete; succeeded categories: ${result.succeededCategories.joinToString()}")
                 } else {
-                    _state.update {
-                        ImportState.Error(
-                            "Не удалось записать данные в Google Health Connect.\n\n" +
-                            "Проверьте что разрешения Google Health выданы и попробуйте снова."
-                        )
-                    }
+                    _state.update { ImportState.Error("import_error_write_failed|${result.failedCategories.joinToString()}") }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Failed to write import data", e)
-                _state.update {
-                    ImportState.Error("import_error_write_failed|${e.message ?: ""}")
-                }
+                _state.update { ImportState.Error("import_error_write_failed|${e.message.orEmpty()}") }
             }
         }
     }
