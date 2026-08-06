@@ -261,15 +261,4 @@
     <string name="dashboard_record_elevation">Elevation per day</string>
     <string name="dashboard_record_workout">Longest workout</string>
     <string name="dashboard_workout_minutes_value">%1$d min</string>
-    <string name="dashboard_achievements_title">Achievements</string>
-    <string name="dashboard_achievements_subtitle">Based on data accumulated by BitLut</string>
-    <string name="achievement_distance_100">100 km</string>
-    <string name="achievement_distance_500">500 km</string>
-    <string name="achievement_steps_million">1 million steps</string>
-    <string name="achievement_active_streak_10">10 active days in a row</string>
-    <string name="achievement_workouts_50">50 workouts</string>
-    <string name="achievement_distance_progress">%1$s / %2$s km</string>
-    <string name="achievement_steps_progress">%1$s / %2$s steps</string>
-    <string name="achievement_days_progress">%1$d / %2$d days</string>
-    <string name="achievement_workouts_progress">%1$d / %2$d workouts</string>
 </resources>

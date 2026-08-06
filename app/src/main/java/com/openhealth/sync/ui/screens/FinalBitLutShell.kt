@@ -103,6 +103,12 @@ import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.DirectionsRun
+import androidx.compose.material.icons.rounded.DirectionsWalk
+import androidx.compose.material.icons.rounded.DirectionsBike
+import androidx.compose.material.icons.rounded.Pool
+import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.SelfImprovement
+import androidx.compose.material.icons.rounded.Hiking
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Schedule
@@ -121,7 +127,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
-import com.openhealth.sync.data.AchievementSummary
+import androidx.health.connect.client.records.ExerciseSessionRecord
 
 internal enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
@@ -548,7 +554,6 @@ private fun SummaryScreen(
                         isStepsRecordToday = state.isStepsRecordToday
                     )
                 }
-                item { AchievementsCard(palette = palette, summary = state.achievementSummary) }
             }
         }
     }
@@ -670,6 +675,28 @@ private fun SevenDayStat(
 
 
 /**
+ * Maps a Health Connect exercise type to a representative icon so workout
+ * cards visually distinguish running from cycling, swimming, etc., instead
+ * of showing the same running icon for every session type. Only covers the
+ * exercise types common enough in Huawei Health exports to be worth a
+ * dedicated icon; anything else (including a null/unknown type, e.g. no
+ * recent workout yet) falls back to the generic running icon that was
+ * already the card's default before per-type icons existed.
+ */
+private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
+    ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> Icons.Rounded.DirectionsWalk
+    ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> Icons.Rounded.DirectionsBike
+    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
+    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> Icons.Rounded.Pool
+    ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
+    ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> Icons.Rounded.FitnessCenter
+    ExerciseSessionRecord.EXERCISE_TYPE_YOGA,
+    ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> Icons.Rounded.SelfImprovement
+    ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> Icons.Rounded.Hiking
+    else -> Icons.Rounded.DirectionsRun
+}
+
+/**
  * Premium summary of one of the two most recent exercise sessions. Health
  * Connect exposes the session title/type and start/end timestamps here; the
  * card deliberately does not invent distance or calories that are not linked
@@ -707,7 +734,7 @@ private fun WorkoutRecencyCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Rounded.DirectionsRun,
+                    workoutIcon(session?.exerciseType),
                     contentDescription = null,
                     tint = accent,
                     modifier = Modifier.size(24.dp)
@@ -1076,85 +1103,6 @@ private fun PersonalRecordRow(palette: BitPalette, item: PersonalRecordDisplay) 
         }
     }
 }
-
-@Composable
-private fun AchievementsCard(palette: BitPalette, summary: AchievementSummary) {
-    val distanceKm = summary.totalDistanceMeters / 1000.0
-    val items = listOf(
-        AchievementDisplay(
-            label = stringResource(R.string.achievement_distance_100),
-            progress = (distanceKm / 100.0).toFloat(),
-            value = stringResource(R.string.achievement_distance_progress, formatOneDecimal(distanceKm), "100")
-        ),
-        AchievementDisplay(
-            label = stringResource(R.string.achievement_distance_500),
-            progress = (distanceKm / 500.0).toFloat(),
-            value = stringResource(R.string.achievement_distance_progress, formatOneDecimal(distanceKm), "500")
-        ),
-        AchievementDisplay(
-            label = stringResource(R.string.achievement_steps_million),
-            progress = summary.totalSteps.toFloat() / 1_000_000f,
-            value = stringResource(R.string.achievement_steps_progress, formatNumber(summary.totalSteps), formatNumber(1_000_000L))
-        ),
-        AchievementDisplay(
-            label = stringResource(R.string.achievement_active_streak_10),
-            progress = summary.longestActiveStreakDays.toFloat() / 10f,
-            value = stringResource(R.string.achievement_days_progress, summary.longestActiveStreakDays, 10)
-        ),
-        AchievementDisplay(
-            label = stringResource(R.string.achievement_workouts_50),
-            progress = summary.totalWorkouts.toFloat() / 50f,
-            value = stringResource(R.string.achievement_workouts_progress, summary.totalWorkouts, 50)
-        )
-    )
-
-    SoftCard(palette = palette, accent = HealthAccent.mind, tintWithAccent = true, pressLift = true) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.EmojiEvents, contentDescription = null, tint = HealthAccent.mind, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Column {
-                Text(stringResource(R.string.dashboard_achievements_title), color = palette.text, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-                Text(stringResource(R.string.dashboard_achievements_subtitle), color = palette.secondaryText, fontWeight = FontWeight.Medium, fontSize = 10.sp)
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        items.forEachIndexed { index, item ->
-            if (index > 0) Spacer(Modifier.height(12.dp))
-            AchievementRow(palette = palette, item = item)
-        }
-    }
-}
-
-private data class AchievementDisplay(val label: String, val progress: Float, val value: String)
-
-@Composable
-private fun AchievementRow(palette: BitPalette, item: AchievementDisplay) {
-    val progress = item.progress.coerceIn(0f, 1f)
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(item.label, color = palette.text, fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                Text(if (progress >= 1f) "✓" else item.value, color = if (progress >= 1f) HealthAccent.mind else palette.secondaryText, fontWeight = FontWeight.Black, fontSize = 10.sp)
-            }
-            Spacer(Modifier.height(5.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(palette.secondaryText.copy(alpha = 0.14f))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(progress)
-                        .fillMaxHeight()
-                        .background(HealthAccent.mind)
-                )
-            }
-        }
-    }
-}
-
 
 /**
  * Streak card (v1.9.12, sprint 4). Shows the current consecutive-day streak

@@ -259,15 +259,4 @@
     <string name="dashboard_record_elevation">Подъём за день</string>
     <string name="dashboard_record_workout">Самая долгая тренировка</string>
     <string name="dashboard_workout_minutes_value">%1$d мин</string>
-    <string name="dashboard_achievements_title">Достижения</string>
-    <string name="dashboard_achievements_subtitle">По данным, накопленным BitLut</string>
-    <string name="achievement_distance_100">100 км</string>
-    <string name="achievement_distance_500">500 км</string>
-    <string name="achievement_steps_million">1 миллион шагов</string>
-    <string name="achievement_active_streak_10">10 активных дней подряд</string>
-    <string name="achievement_workouts_50">50 тренировок</string>
-    <string name="achievement_distance_progress">%1$s / %2$s км</string>
-    <string name="achievement_steps_progress">%1$s / %2$s шагов</string>
-    <string name="achievement_days_progress">%1$d / %2$d дней</string>
-    <string name="achievement_workouts_progress">%1$d / %2$d тренировок</string>
 </resources>
