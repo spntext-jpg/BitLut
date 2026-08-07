@@ -29,10 +29,12 @@ private const val TAG = "BackgroundSyncScheduler"
 object BackgroundSyncScheduler {
     const val UNIQUE_SYNC_NOW = "bitlut_sync_now_v2"
     private const val LEGACY_UNIQUE_SYNC_NOW = "bitlut_sync_now"
-    const val UNIQUE_PERIODIC_SYNC = "bitlut_periodic_sync"
+    const val UNIQUE_PERIODIC_SYNC = "bitlut_periodic_sync_v2"
+    private const val LEGACY_UNIQUE_PERIODIC_SYNC = "bitlut_periodic_sync"
     const val UNIQUE_EVENING_REMINDER = "bitlut_evening_reminder"
 
     private const val KEY_MANUAL_QUEUE_V2_MIGRATED = "manual_sync_queue_v2_migrated"
+    private const val KEY_PERIODIC_SYNC_V2_MIGRATED = "periodic_sync_v2_migrated"
     const val SYNC_INTERVAL_MINUTES = 30L
     private const val SYNC_FLEX_MINUTES = 5L
     private const val INITIAL_BACKOFF_MINUTES = 10L
@@ -46,6 +48,7 @@ object BackgroundSyncScheduler {
 
     fun schedulePeriodic(context: Context) {
         clearLegacyManualQueueOnce(context)
+        clearLegacyPeriodicSyncOnce(context)
 
         val request = PeriodicWorkRequestBuilder<SyncWorker>(
             SYNC_INTERVAL_MINUTES,
@@ -58,9 +61,26 @@ object BackgroundSyncScheduler {
             .addTag(HuaweiConfig.SYNC_WORKER_TAG)
             .build()
 
+        // schedulePeriodic() runs on every single cold launch (from
+        // MainActivity.onCreate). ExistingPeriodicWorkPolicy.UPDATE
+        // re-applies the request even when it is byte-for-byte identical to
+        // what's already scheduled -- and WorkManager can cancel a
+        // currently RUNNING instance of that periodic work to do so. A real
+        // device log showed exactly this: "Sync cancelled by
+        // WorkManager/system: Job was cancelled" firing in the same second
+        // as schedulePeriodic()'s own log line, immediately followed by a
+        // retry. KEEP is a true no-op when a non-cancelled
+        // UNIQUE_PERIODIC_SYNC already exists, so it never touches an
+        // in-flight run. clearLegacyPeriodicSyncOnce() above migrates any
+        // existing installs off the old UPDATE-scheduled work once; if
+        // SYNC_INTERVAL_MINUTES/constraints/backoff ever need to change in
+        // a future release, bump UNIQUE_PERIODIC_SYNC to a new name (same
+        // versioned-migration pattern) so existing installs adopt the new
+        // schedule cleanly instead of relying on UPDATE to change a request
+        // mid-run.
         WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
             UNIQUE_PERIODIC_SYNC,
-            ExistingPeriodicWorkPolicy.UPDATE,
+            ExistingPeriodicWorkPolicy.KEEP,
             request
         )
 
@@ -89,6 +109,15 @@ object BackgroundSyncScheduler {
         WorkManager.getInstance(appContext).cancelUniqueWork(LEGACY_UNIQUE_SYNC_NOW)
         prefs.edit().putBoolean(KEY_MANUAL_QUEUE_V2_MIGRATED, true).apply()
         AppLogger.i(TAG, "Cleared legacy manual-sync queue; migrated to $UNIQUE_SYNC_NOW")
+    }
+
+    private fun clearLegacyPeriodicSyncOnce(context: Context) {
+        val appContext = context.applicationContext
+        val prefs = appContext.getSharedPreferences(HuaweiConfig.PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_PERIODIC_SYNC_V2_MIGRATED, false)) return
+        WorkManager.getInstance(appContext).cancelUniqueWork(LEGACY_UNIQUE_PERIODIC_SYNC)
+        prefs.edit().putBoolean(KEY_PERIODIC_SYNC_V2_MIGRATED, true).apply()
+        AppLogger.i(TAG, "Cleared legacy periodic-sync schedule; migrated to $UNIQUE_PERIODIC_SYNC")
     }
 
     private fun computeInitialDelayUntilEveningReminder(): Duration {

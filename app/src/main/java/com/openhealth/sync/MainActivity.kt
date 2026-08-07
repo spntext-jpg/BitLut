@@ -63,9 +63,28 @@ class MainActivity : ComponentActivity() {
         SyncOrchestrator(this, syncViewModel.googleManager)
     }
 
+    /**
+     * onResume() is meant to catch a genuine "person switched back to the
+     * app" event and kick off a fresh sync. A system permission dialog
+     * (POST_NOTIFICATIONS) or a full-screen flow the app itself launched
+     * (Health Connect permissions, Huawei authorization) also triggers
+     * onResume() when it returns -- but that is not the person "coming
+     * back", it's this same screen resuming right where it left off. A
+     * real device log showed several redundant sync triggers firing back
+     * to back right after a cold launch (five separate SyncWorker
+     * executions inside 30 seconds, several of them manual-sync triggers
+     * competing for the sync lease with the periodic one) -- consistent
+     * with onResume() unconditionally re-triggering a sync every time one
+     * of these system screens closes. Set to true right before launching
+     * any of those three flows, reset to false as soon as its result
+     * callback fires (or immediately, if the launch itself failed to
+     * start and no result will ever arrive).
+     */
+    private var awaitingSystemResult = false
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            awaitingSystemResult = false
             AppLogger.i("MainActivity", "POST_NOTIFICATIONS permission result: $granted")
             // No toast either way: this permission is optional polish (goal
             // reminders, streak/record celebrations), not something the core
@@ -76,6 +95,7 @@ class MainActivity : ComponentActivity() {
     private val googlePermissionLauncher = registerForActivityResult(
         PermissionController.createRequestPermissionResultContract()
     ) { granted ->
+        awaitingSystemResult = false
         AppLogger.i("MainActivity", "Health Connect permissions returned: $granted")
         syncViewModel.refreshStatuses()
         dashboardViewModel.refresh()
@@ -87,6 +107,7 @@ class MainActivity : ComponentActivity() {
 
     private val huaweiAuthorizationLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            awaitingSystemResult = false
             val success = syncViewModel.huaweiHealthManager.handleAuthorizationResult(
                 result.resultCode,
                 result.data
@@ -184,7 +205,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshUiStatusOnLaunch()
-        triggerAutomaticSyncOnLaunch()
+        if (awaitingSystemResult) {
+            AppLogger.i("MainActivity", "Skipping onResume auto-sync: a system permission/authorization screen is still in progress")
+        } else {
+            triggerAutomaticSyncOnLaunch()
+        }
     }
 
     private fun refreshUiStatusOnLaunch() {
@@ -193,7 +218,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestGoogleHealthPermissions() {
-        com.openhealth.sync.config.requestGoogleHealthPermissions(
+        awaitingSystemResult = com.openhealth.sync.config.requestGoogleHealthPermissions(
             context = this,
             googleManager = syncViewModel.googleManager,
             launcher = googlePermissionLauncher
@@ -212,8 +237,10 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
+            awaitingSystemResult = true
             huaweiAuthorizationLauncher.launch(syncViewModel.huaweiHealthManager.getAuthorizationIntent())
         } catch (e: Exception) {
+            awaitingSystemResult = false
             AppLogger.e("MainActivity", "Huawei authorization start failed: ${e.message}", e)
             Toast.makeText(this, getString(R.string.toast_huawei_start_failed), Toast.LENGTH_LONG).show()
         }
@@ -284,6 +311,7 @@ class MainActivity : ComponentActivity() {
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
         if (!granted) {
+            awaitingSystemResult = true
             notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
     }

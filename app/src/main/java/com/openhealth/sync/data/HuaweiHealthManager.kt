@@ -2,6 +2,7 @@ package com.openhealth.sync.data
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 import android.app.Activity
@@ -341,6 +342,58 @@ class HuaweiHealthManager(
         }
     }
 
+    /**
+     * The very first Huawei Health Kit call made after a cold app-process
+     * start (or after the underlying HMS client has been idle long enough
+     * to drop its connection) can race the client's own async connection
+     * handshake and fail with a "client is not connected" style error, even
+     * though nothing is actually broken -- a later call, moments later,
+     * succeeds with no special handling at all. A real device log showed
+     * this hitting two different Huawei controllers in the very same sync
+     * attempt: the daily step summation failed with "50011: the client is
+     * not connected", and the activity-records read failed right after it
+     * and was logged as a 50005 scope denial -- but that same category
+     * succeeded about 20 seconds later, in the very next sync attempt, with
+     * no re-authorization happening in between. A genuine scope denial
+     * can't resolve itself in 20 seconds; a connection race that clears up
+     * once the HMS client finishes connecting can, which is a strong sign
+     * that read was hitting the same race, just surfaced as a different
+     * exception type by that particular Huawei controller. That same log
+     * also showed a second sync attempt competing for the sync lease at
+     * almost the same moment, which plausibly added the contention that
+     * caused the race in the first place. This retries up to twice (three
+     * attempts total) before giving up. SecurityException (genuine scope
+     * denial, e.g. 50005) and CancellationException are rethrown
+     * immediately on the very first attempt, untouched -- retrying either
+     * of those would just delay a correct, final outcome, not fix anything.
+     */
+    private suspend fun <T> retryOnConnectionRace(block: suspend () -> T): T {
+        var lastConnectionRaceError: Exception? = null
+        for (attempt in 1..CONNECTION_RACE_MAX_ATTEMPTS) {
+            try {
+                return block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SecurityException) {
+                throw e
+            } catch (e: Exception) {
+                val looksLikeConnectionRace = e.message?.contains("not connected", ignoreCase = true) == true
+                if (!looksLikeConnectionRace) throw e
+                lastConnectionRaceError = e
+                if (attempt < CONNECTION_RACE_MAX_ATTEMPTS) {
+                    AppLogger.w(
+                        TAG,
+                        "Huawei Health Kit call failed with a client-not-connected style error " +
+                            "(attempt $attempt/$CONNECTION_RACE_MAX_ATTEMPTS); " +
+                            "retrying in ${CONNECTION_RACE_RETRY_DELAY_MS}ms: ${e.message}"
+                    )
+                    delay(CONNECTION_RACE_RETRY_DELAY_MS)
+                }
+            }
+        }
+        throw lastConnectionRaceError!!
+    }
+
     private suspend fun readDailyStepTotals(endTimeMs: Long): List<StepData> {
         // Raw DT_CONTINUOUS_STEPS_DELTA samples are not the number shown by
         // Huawei Health. Huawei documents that wearable/Huawei Health workout
@@ -364,9 +417,11 @@ class HuaweiHealthManager(
         )
 
         val sampleSet = try {
-            dataController
-                .readDailySummation(DataType.DT_CONTINUOUS_STEPS_DELTA, startDate, endDate)
-                .awaitTask()
+            retryOnConnectionRace {
+                dataController
+                    .readDailySummation(DataType.DT_CONTINUOUS_STEPS_DELTA, startDate, endDate)
+                    .awaitTask()
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: SecurityException) {
@@ -531,9 +586,11 @@ class HuaweiHealthManager(
             "Querying Huawei activity records with steps-delta detail: start=$startTimeMs end=$endTimeMs"
         )
 
-        val reply = HuaweiHiHealth.getActivityRecordsController(context)
-            .getActivityRecord(options)
-            .awaitTask()
+        val reply = retryOnConnectionRace {
+            HuaweiHiHealth.getActivityRecordsController(context)
+                .getActivityRecord(options)
+                .awaitTask()
+        }
         val records = reply.getActivityRecords().orEmpty()
 
         AppLogger.i(TAG, "Huawei activity records read: ${records.size}")
@@ -941,6 +998,8 @@ class HuaweiHealthManager(
     private companion object {
         private const val HUAWEI_READ_CHUNK_MS: Long = 24L * 60L * 60L * 1000L
         private const val ACTIVITY_HISTORY_WINDOW_DAYS = 7L
+        private const val CONNECTION_RACE_RETRY_DELAY_MS = 2_000L
+        private const val CONNECTION_RACE_MAX_ATTEMPTS = 3
         private val SYNTHETIC_HUAWEI_ACTIVITY_NAME = Regex(
             "^sporthealth\\d+$",
             RegexOption.IGNORE_CASE
