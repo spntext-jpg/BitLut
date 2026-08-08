@@ -71,7 +71,8 @@ data class ActivitySessionData(
     val startTimeMs: Long,
     val endTimeMs: Long,
     val title: String = "Huawei activity",
-    val exerciseType: Int = ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
+    val exerciseType: Int = ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT,
+    val distanceMeters: Double? = null
 )
 
 /** One row of the CSV export (sprint 2026-07-14): a single calendar day's
@@ -114,7 +115,8 @@ data class GoogleDashboardSnapshot(
 
 class GoogleHealthManager(
     private val context: Context,
-    private val dataSourcePrefs: DataSourcePrefs = DataSourcePrefs(context)
+    private val dataSourcePrefs: DataSourcePrefs = DataSourcePrefs(context),
+    private val workoutFilterPrefs: com.openhealth.sync.config.WorkoutFilterPrefs = com.openhealth.sync.config.WorkoutFilterPrefs(context)
 ) : HealthConnectManager {
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
@@ -322,7 +324,7 @@ class GoogleHealthManager(
             "floors" to writeFloorsBatch(snapshot.floors),
             "elevation" to writeElevationBatch(snapshot.elevations),
             "activeCalories" to writeActiveCaloriesBatch(snapshot.activeCalories),
-            "activitySessions" to writeActivitySessionsBatch(snapshot.activities)
+            "activitySessions" to writeActivitySessionsBatch(workoutFilterPrefs.apply(snapshot.activities))
         )
 
         val succeeded = results.filter { it.second }.map { it.first }.toSet()
@@ -825,29 +827,91 @@ class GoogleHealthManager(
         val client = resolveClient() ?: return emptyList()
         return try {
             val start = LocalDate.now().minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant()
-            client.readRecords(
+            val end = Instant.now()
+            val sessions = client.readRecords(
                 ReadRecordsRequest(
                     recordType = ExerciseSessionRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now()),
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
                     dataOriginFilter = selectedDataOrigins()
                 )
             ).records
                 .sortedByDescending { it.startTime }
                 .take(limit)
-                .map {
-                    ActivitySessionData(
-                        startTimeMs = it.startTime.toEpochMilli(),
-                        endTimeMs = it.endTime.toEpochMilli(),
-                        title = workoutDisplayName(it.title, it.exerciseType),
-                        exerciseType = it.exerciseType
-                    )
-                }
+
+            val distanceBySessionId = if (sessions.isEmpty()) emptyMap() else readDistanceForSessions(client, sessions, start, end)
+
+            sessions.map {
+                ActivitySessionData(
+                    startTimeMs = it.startTime.toEpochMilli(),
+                    endTimeMs = it.endTime.toEpochMilli(),
+                    title = workoutDisplayName(it.title, it.exerciseType),
+                    exerciseType = it.exerciseType,
+                    distanceMeters = distanceBySessionId[it.metadata.id]
+                )
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "readRecentWorkouts failed: ${e.message}", e)
             emptyList()
         }
+    }
+
+    /**
+     * Health Connect's ExerciseSessionRecord carries no distance of its own --
+     * only DistanceRecord does, as a separate stream. Computing a per-workout
+     * distance (for the pace shown on the workout card) by querying
+     * DistanceRecord once per session would multiply into up to `limit` extra
+     * Health Connect calls per sync, which risks the rate-limit cascade
+     * documented in CLAUDE.md Gotcha 4. Instead this reads DistanceRecord
+     * ONCE for the whole window and locally attributes each record's meters
+     * to whichever session(s) it overlaps in time, weighted by the fraction
+     * of the record's own duration that falls inside that session. Huawei's
+     * distance is written from a continuous delta stream (see
+     * HuaweiHealthManager.readDistance), not one blob per day, so this
+     * attribution is meaningfully accurate rather than smearing a whole
+     * day's distance onto one short workout.
+     */
+    private suspend fun readDistanceForSessions(
+        client: HealthConnectClient,
+        sessions: List<ExerciseSessionRecord>,
+        start: Instant,
+        end: Instant
+    ): Map<String, Double> {
+        val distanceRecords = try {
+            client.readRecords(
+                ReadRecordsRequest(
+                    recordType = DistanceRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                    dataOriginFilter = selectedDataOrigins()
+                )
+            ).records
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "readDistanceForSessions failed: ${e.message}", e)
+            return emptyMap()
+        }
+
+        if (distanceRecords.isEmpty()) return emptyMap()
+
+        val result = HashMap<String, Double>(sessions.size)
+        for (session in sessions) {
+            var totalMeters = 0.0
+            for (record in distanceRecords) {
+                val overlapStart = maxOf(record.startTime, session.startTime)
+                val overlapEnd = minOf(record.endTime, session.endTime)
+                if (!overlapEnd.isAfter(overlapStart)) continue
+                val recordDurationMs = (record.endTime.toEpochMilli() - record.startTime.toEpochMilli()).coerceAtLeast(1L)
+                val overlapMs = overlapEnd.toEpochMilli() - overlapStart.toEpochMilli()
+                val overlapFraction = overlapMs.toDouble() / recordDurationMs.toDouble()
+                totalMeters += record.distance.inMeters * overlapFraction
+            }
+            if (totalMeters > 0.0) {
+                result[session.metadata.id] = totalMeters
+            }
+        }
+        return result
     }
 
     /**

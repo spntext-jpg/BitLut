@@ -148,6 +148,7 @@ class DashboardSnapshotCache(
                 put("endTimeMs", w.endTimeMs)
                 put("title", w.title)
                 put("exerciseType", w.exerciseType)
+                w.distanceMeters?.let { put("distanceMeters", it) }
             })
         }
         return arr
@@ -166,7 +167,8 @@ class DashboardSnapshotCache(
                     exerciseType = item.optInt(
                         "exerciseType",
                         androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
-                    )
+                    ),
+                    distanceMeters = if (item.has("distanceMeters")) item.optDouble("distanceMeters") else null
                 )
             )
         }

@@ -724,27 +724,26 @@ private fun WorkoutRecencyCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(5.dp))
+                Spacer(Modifier.height(9.dp))
                 if (session != null && durationMinutes != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = formatWorkoutDateTime(session.startTimeMs),
-                            color = palette.secondaryText,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.workout_total_minutes, durationMinutes),
-                            color = accent,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 12.sp,
-                            maxLines = 1
-                        )
+                    val distanceKm = session.distanceMeters?.takeIf { it > 0.0 }?.let { it / 1000.0 }
+                    val paceMinutesPerKm = if (
+                        durationMinutes > 0 &&
+                        session.distanceMeters != null &&
+                        session.distanceMeters >= MIN_DISTANCE_METERS_FOR_PACE
+                    ) {
+                        durationMinutes.toDouble() / (session.distanceMeters / 1000.0)
+                    } else {
+                        null
                     }
+                    WorkoutStatsGrid(
+                        palette = palette,
+                        accent = accent,
+                        whenText = formatWorkoutDateTime(session.startTimeMs),
+                        durationMinutes = durationMinutes,
+                        distanceKm = distanceKm,
+                        paceMinutesPerKm = paceMinutesPerKm
+                    )
                 } else {
                     Text(
                         text = emptyText,
@@ -758,6 +757,104 @@ private fun WorkoutRecencyCard(
         }
     }
 }
+
+/**
+ * Up to 4 stat slots for a workout card, matching the "no more than 4 main
+ * parameters" limit: when + duration are always shown (every session has
+ * them), distance + pace only appear when the session actually has a
+ * meaningful distance -- strength training, yoga, etc. simply show the
+ * first two and skip the second row entirely, rather than inventing a
+ * "0.0 km" that isn't real.
+ */
+@Composable
+private fun WorkoutStatsGrid(
+    palette: BitPalette,
+    accent: Color,
+    whenText: String,
+    durationMinutes: Long,
+    distanceKm: Double?,
+    paceMinutesPerKm: Double?
+) {
+    Column {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            WorkoutStat(
+                modifier = Modifier.weight(1f),
+                palette = palette,
+                valueColor = palette.text,
+                label = stringResource(R.string.workout_stat_when_label),
+                value = whenText
+            )
+            WorkoutStat(
+                modifier = Modifier.weight(1f),
+                palette = palette,
+                valueColor = accent,
+                label = stringResource(R.string.workout_stat_duration_label),
+                value = stringResource(R.string.workout_duration_value, durationMinutes)
+            )
+        }
+        if (distanceKm != null || paceMinutesPerKm != null) {
+            Spacer(Modifier.height(10.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                WorkoutStat(
+                    modifier = Modifier.weight(1f),
+                    palette = palette,
+                    valueColor = accent,
+                    label = stringResource(R.string.workout_stat_distance_label),
+                    value = distanceKm?.let { stringResource(R.string.distance_today_value, formatOneDecimal(it)) }
+                        ?: stringResource(R.string.no_data_short)
+                )
+                WorkoutStat(
+                    modifier = Modifier.weight(1f),
+                    palette = palette,
+                    valueColor = accent,
+                    label = stringResource(R.string.workout_stat_pace_label),
+                    value = paceMinutesPerKm?.let { stringResource(R.string.workout_pace_value, formatPace(it)) }
+                        ?: stringResource(R.string.no_data_short)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkoutStat(
+    modifier: Modifier = Modifier,
+    palette: BitPalette,
+    valueColor: Color,
+    label: String,
+    value: String
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = label.uppercase(Locale.getDefault()),
+            color = palette.secondaryText,
+            fontWeight = FontWeight.Black,
+            fontSize = 9.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = value,
+            color = valueColor,
+            fontWeight = FontWeight.Black,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/** Pace shown as "M:SS" per km, e.g. "5:32". Truncates rather than rounds -- off by at most 1 second, not worth a new import for. */
+private fun formatPace(minutesPerKm: Double): String {
+    val totalSeconds = (minutesPerKm * 60.0).toInt().coerceAtLeast(0)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
+}
+
+/** Below this, a computed pace is more noise than signal (GPS drift, a few meters of wandering before/after the real activity). */
+private const val MIN_DISTANCE_METERS_FOR_PACE = 500.0
 
 private fun formatWorkoutDateTime(epochMs: Long): String =
     java.time.Instant.ofEpochMilli(epochMs)
@@ -1238,6 +1335,91 @@ private fun SettingsScreen(
             secondaryAction = stringResource(R.string.import_archive_title),
             onSecondaryAction = onImportArchive
         )
+
+        Text(
+            text = stringResource(R.string.workout_filter_section_title),
+            color = palette.text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 18.sp
+        )
+        SoftCard(palette = palette, accent = HealthAccent.activity, tintWithAccent = true) {
+            val context = LocalContext.current
+            val workoutFilterPrefs = remember { com.openhealth.sync.config.WorkoutFilterPrefs(context) }
+            var minDurationMinutes by remember { mutableStateOf(workoutFilterPrefs.minDurationMinutes()) }
+            var excludedTypes by remember { mutableStateOf(workoutFilterPrefs.excludedExerciseTypes()) }
+
+            Text(
+                text = stringResource(R.string.workout_filter_section_body),
+                color = palette.secondaryText,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                lineHeight = 18.sp
+            )
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = stringResource(R.string.workout_filter_min_duration_label),
+                color = palette.text,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                com.openhealth.sync.config.WorkoutFilterPrefs.MIN_DURATION_PRESETS_MINUTES.forEach { minutes ->
+                    val selected = minDurationMinutes == minutes
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(if (selected) HealthAccent.activity else palette.stroke.copy(alpha = 0.3f))
+                            .clickable {
+                                minDurationMinutes = minutes
+                                workoutFilterPrefs.setMinDurationMinutes(minutes)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            text = if (minutes == 0) {
+                                stringResource(R.string.workout_filter_min_duration_off)
+                            } else {
+                                stringResource(R.string.workout_filter_min_duration_value, minutes)
+                            },
+                            color = if (selected) Color.White else palette.text,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            val categories = listOf(
+                stringResource(R.string.workout_filter_type_walking) to listOf(ExerciseSessionRecord.EXERCISE_TYPE_WALKING),
+                stringResource(R.string.workout_filter_type_running) to listOf(ExerciseSessionRecord.EXERCISE_TYPE_RUNNING),
+                stringResource(R.string.workout_filter_type_biking) to listOf(ExerciseSessionRecord.EXERCISE_TYPE_BIKING),
+                stringResource(R.string.workout_filter_type_swimming) to listOf(
+                    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL,
+                    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER
+                ),
+                stringResource(R.string.workout_filter_type_strength) to listOf(ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING),
+                stringResource(R.string.workout_filter_type_hiking) to listOf(ExerciseSessionRecord.EXERCISE_TYPE_HIKING)
+            )
+            categories.forEachIndexed { index, (label, exerciseTypes) ->
+                WidgetVisibilityRow(
+                    palette = palette,
+                    label = label,
+                    accent = HealthAccent.activity,
+                    checked = exerciseTypes.none { it in excludedTypes },
+                    onCheckedChange = { checked ->
+                        val updated = if (checked) {
+                            excludedTypes - exerciseTypes.toSet()
+                        } else {
+                            excludedTypes + exerciseTypes.toSet()
+                        }
+                        excludedTypes = updated
+                        workoutFilterPrefs.setExcludedExerciseTypes(updated)
+                    },
+                    isLast = index == categories.lastIndex
+                )
+            }
+        }
 
         Text(
             text = stringResource(R.string.data_scopes_link),
