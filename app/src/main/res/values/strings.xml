@@ -247,11 +247,7 @@
     <string name="insights_streak_days_ru_many">%1$d дней подряд</string>
     <string name="record_steps_per_day">Steps per day</string>
 
-    <string name="dashboard_elevation_title">Elevation</string>
-    <string name="dashboard_today_short">Today</string>
-    <string name="dashboard_last_7_days_short">Last 7 days</string>
     <string name="dashboard_elevation_value">%1$s m</string>
-    <string name="dashboard_floors_value">%1$s floors</string>
     <string name="dashboard_last_7_days_title">Last 7 days</string>
     <string name="dashboard_average_steps">Average steps</string>
     <string name="dashboard_best_day">Best day</string>

@@ -245,11 +245,7 @@
     <string name="onboarding_continue_button">Продолжить</string>
     <string name="record_steps_per_day">Шаги за день</string>
 
-    <string name="dashboard_elevation_title">Подъём</string>
-    <string name="dashboard_today_short">Сегодня</string>
-    <string name="dashboard_last_7_days_short">7 дней</string>
     <string name="dashboard_elevation_value">%1$s м</string>
-    <string name="dashboard_floors_value">%1$s эт.</string>
     <string name="dashboard_last_7_days_title">Последние 7 дней</string>
     <string name="dashboard_average_steps">Средние шаги</string>
     <string name="dashboard_best_day">Лучший день</string>

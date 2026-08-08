@@ -541,7 +541,6 @@ private fun SummaryScreen(
                     )
                 }
 
-                item { ElevationSummaryCard(palette = palette, state = state) }
                 item { LastSevenDaysCard(palette = palette, state = state) }
                 item {
                     PersonalRecordsCard(
@@ -556,56 +555,6 @@ private fun SummaryScreen(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ElevationSummaryCard(palette: BitPalette, state: DashboardUiState) {
-    SoftCard(palette = palette, accent = HealthAccent.violet, tintWithAccent = true, pressLift = true) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.TrendingUp, contentDescription = null, tint = HealthAccent.violet, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = stringResource(R.string.dashboard_elevation_title),
-                color = palette.text,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 16.sp
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        InsightValueRow(
-            palette = palette,
-            label = stringResource(R.string.dashboard_today_short),
-            value = elevationAndFloorsText(state.elevationMetersToday, state.floorsToday),
-            accent = HealthAccent.violet
-        )
-        Spacer(Modifier.height(10.dp))
-        InsightValueRow(
-            palette = palette,
-            label = stringResource(R.string.dashboard_last_7_days_short),
-            value = elevationAndFloorsText(state.elevationMeters7d, state.floors7d),
-            accent = HealthAccent.violet
-        )
-    }
-}
-
-@Composable
-private fun elevationAndFloorsText(elevationMeters: Double, floors: Double): String {
-    val parts = mutableListOf<String>()
-    if (elevationMeters > 0.0) {
-        parts += stringResource(R.string.dashboard_elevation_value, formatOneDecimal(elevationMeters))
-    }
-    if (floors > 0.0) {
-        parts += stringResource(R.string.dashboard_floors_value, formatOneDecimal(floors))
-    }
-    return if (parts.isEmpty()) stringResource(R.string.no_data_short) else parts.joinToString(" · ")
-}
-
-@Composable
-private fun InsightValueRow(palette: BitPalette, label: String, value: String, accent: Color) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.weight(1f))
-        Text(value, color = accent, fontWeight = FontWeight.Black, fontSize = 15.sp)
     }
 }
 
