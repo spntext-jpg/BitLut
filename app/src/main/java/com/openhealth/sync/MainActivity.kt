@@ -176,6 +176,9 @@ class MainActivity : ComponentActivity() {
                         dashboardViewModel.setWidgetVisible(widget, visible)
                     },
                     onDataSourceSelected = { source -> selectDataSource(source) },
+                    onStepsGoalChanged = { value -> dashboardViewModel.setStepsGoal(value) },
+                    onActiveMinutesGoalChanged = { value -> dashboardViewModel.setActiveMinutesGoal(value) },
+                    onCaloriesGoalChanged = { value -> dashboardViewModel.setCaloriesGoalKcal(value) },
                     hasSeenPermissionsOnboarding = hasSeenOnboarding,
                     onPermissionsOnboardingSeen = {
                         onboardingPrefs.markPermissionsRationaleSeen()

@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -54,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -61,6 +63,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.PermissionController
 import androidx.work.Constraints
@@ -92,6 +95,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
@@ -112,14 +116,24 @@ import androidx.compose.material.icons.rounded.Hiking
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.DonutLarge
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import com.openhealth.sync.ui.ImportScreen
 import com.openhealth.sync.ui.ImportViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.draw.scale
@@ -145,11 +159,16 @@ fun FinalBitLutShell(
     onExportCsv: () -> Unit = {},
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit = { _, _ -> },
     onDataSourceSelected: (HealthDataSource) -> Unit = {},
+    onStepsGoalChanged: (Long) -> Unit = {},
+    onActiveMinutesGoalChanged: (Int) -> Unit = {},
+    onCaloriesGoalChanged: (Double) -> Unit = {},
     hasSeenPermissionsOnboarding: Boolean = true,
     onPermissionsOnboardingSeen: () -> Unit = {},
     importViewModel: ImportViewModel) {
     var selected by rememberSaveable { mutableStateOf(MainTab.Today) }
     var showArchiveImport by rememberSaveable { mutableStateOf(false) }
+    var showCardLayoutEditor by rememberSaveable { mutableStateOf(false) }
+    var cardLayoutVersion by rememberSaveable { mutableStateOf(0) }
     var showPermissionsOnboarding by rememberSaveable { mutableStateOf(false) }
     var showLogViewer by rememberSaveable { mutableStateOf(false) }
     val dashboardState = dashboardStateProvider()
@@ -195,13 +214,31 @@ fun FinalBitLutShell(
                     viewModel = importViewModel,
                     onBack = { showArchiveImport = false; onRefresh() }
                 )
+            } else if (showCardLayoutEditor) {
+                CardLayoutEditorScreen(
+                    palette = palette,
+                    onBack = {
+                        showCardLayoutEditor = false
+                        cardLayoutVersion++
+                    }
+                )
             } else when (selected) {
-                MainTab.Today -> SummaryScreen(palette, dashboardState, syncState.selectedDataSource, syncState.lastSyncTime, onRefresh, wrappedOnRequestGoogle)
+                MainTab.Today -> SummaryScreen(
+                    palette, dashboardState, syncState.selectedDataSource, syncState.lastSyncTime, onRefresh, wrappedOnRequestGoogle,
+                    onEditLayout = { showCardLayoutEditor = true },
+                    cardLayoutVersion = cardLayoutVersion
+                )
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
                     onExportCsv = onExportCsv,
                     onWidgetVisibilityChanged = onWidgetVisibilityChanged,
-                    onDataSourceSelected = onDataSourceSelected)
+                    onDataSourceSelected = onDataSourceSelected,
+                    stepsGoal = dashboardState.stepsGoal,
+                    activeMinutesGoal = dashboardState.activeMinutesGoal,
+                    caloriesGoalKcal = dashboardState.caloriesGoalKcal,
+                    onStepsGoalChanged = onStepsGoalChanged,
+                    onActiveMinutesGoalChanged = onActiveMinutesGoalChanged,
+                    onCaloriesGoalChanged = onCaloriesGoalChanged)
             }
         }
     }
@@ -474,8 +511,14 @@ private fun SummaryScreen(
     dataSource: HealthDataSource,
     lastSyncTime: String,
     onRefresh: () -> Unit,
-    onRequestGoogle: () -> Unit
+    onRequestGoogle: () -> Unit,
+    onEditLayout: () -> Unit,
+    cardLayoutVersion: Int
 ) {
+    val context = LocalContext.current
+    val orderedCards = remember(cardLayoutVersion) {
+        com.openhealth.sync.config.DashboardCardLayoutPrefs(context).orderedVisibleCards()
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 28.dp),
@@ -485,7 +528,8 @@ private fun SummaryScreen(
             MinimalHeader(
                 palette = palette,
                 title = stringResource(R.string.summary_short_title),
-                trailing = formatDashboardSourceStatus(dataSource, lastSyncTime)
+                trailing = formatDashboardSourceStatus(dataSource, lastSyncTime),
+                onEditClick = onEditLayout
             )
         }
 
@@ -514,48 +558,210 @@ private fun SummaryScreen(
                         value = formatNumber(state.stepsToday),
                         unit = "${stringResource(R.string.steps_unit)} · ${stringResource(R.string.distance_today_value, formatOneDecimal(state.distanceMeters / 1000.0))}",
                         accent = HealthAccent.activity,
+                        progress = state.stepsProgress,
+                        progressText = stepsGoalProgressText(state.stepsToday, state.stepsGoal),
                         hero = true,
                         pressLift = true
                     )
                 }
 
-                item {
-                    WorkoutRecencyCard(
-                        palette = palette,
-                        label = stringResource(R.string.dashboard_latest_workout),
-                        emptyText = stringResource(R.string.dashboard_workout_empty_latest),
-                        position = 1,
-                        session = state.recentWorkouts.getOrNull(0),
-                        accent = HealthAccent.mind
-                    )
-                }
-
-                item {
-                    WorkoutRecencyCard(
-                        palette = palette,
-                        label = stringResource(R.string.dashboard_previous_workout),
-                        emptyText = stringResource(R.string.dashboard_workout_empty_previous),
-                        position = 2,
-                        session = state.recentWorkouts.getOrNull(1),
-                        accent = HealthAccent.violet
-                    )
-                }
-
-                item { LastSevenDaysCard(palette = palette, state = state) }
-                item {
-                    PersonalRecordsCard(
-                        palette = palette,
-                        bestStepsDay = state.bestStepsDay,
-                        bestDistanceDay = state.bestDistanceDay,
-                        bestCaloriesDay = state.bestCaloriesDay,
-                        bestElevationDay = state.bestElevationDay,
-                        bestWorkoutDuration = state.bestWorkoutDuration,
-                        isStepsRecordToday = state.isStepsRecordToday
-                    )
+                orderedCards.forEach { cardType ->
+                    item {
+                        DashboardOrderedCard(palette = palette, state = state, cardType = cardType)
+                    }
                 }
             }
         }
     }
+}
+
+/** Dispatches to the right card composable for a DashboardCardType -- the reorderable set edited from the pencil icon. */
+@Composable
+private fun DashboardOrderedCard(palette: BitPalette, state: DashboardUiState, cardType: com.openhealth.sync.config.DashboardCardType) {
+    when (cardType) {
+        com.openhealth.sync.config.DashboardCardType.ACTIVITY_RINGS ->
+            ActivityRingsCard(palette = palette, state = state)
+
+        com.openhealth.sync.config.DashboardCardType.WORKOUT_LATEST ->
+            WorkoutRecencyCard(
+                palette = palette,
+                label = stringResource(R.string.dashboard_latest_workout),
+                emptyText = stringResource(R.string.dashboard_workout_empty_latest),
+                position = 1,
+                session = state.recentWorkouts.getOrNull(0),
+                accent = HealthAccent.mind
+            )
+
+        com.openhealth.sync.config.DashboardCardType.WORKOUT_PREVIOUS ->
+            WorkoutRecencyCard(
+                palette = palette,
+                label = stringResource(R.string.dashboard_previous_workout),
+                emptyText = stringResource(R.string.dashboard_workout_empty_previous),
+                position = 2,
+                session = state.recentWorkouts.getOrNull(1),
+                accent = HealthAccent.violet
+            )
+
+        com.openhealth.sync.config.DashboardCardType.LAST_7_DAYS ->
+            LastSevenDaysCard(palette = palette, state = state)
+
+        com.openhealth.sync.config.DashboardCardType.PERSONAL_RECORDS ->
+            PersonalRecordsCard(
+                palette = palette,
+                bestStepsDay = state.bestStepsDay,
+                bestDistanceDay = state.bestDistanceDay,
+                bestCaloriesDay = state.bestCaloriesDay,
+                bestElevationDay = state.bestElevationDay,
+                bestWorkoutDuration = state.bestWorkoutDuration,
+                isStepsRecordToday = state.isStepsRecordToday
+            )
+
+        com.openhealth.sync.config.DashboardCardType.STREAK ->
+            StreakCard(palette = palette, streak = state.streak, stepsGoal = state.stepsGoal)
+    }
+}
+
+/**
+ * Full-screen editor reached from the pencil icon on the Today screen.
+ * Reorders with up/down buttons rather than drag-and-drop -- Compose has no
+ * built-in drag-reorder, and pulling in a third-party library for it is
+ * exactly the kind of new-dependency risk worth avoiding for a first pass.
+ * Every change (reorder or visibility toggle) is persisted immediately, the
+ * same "no explicit save button" pattern already used everywhere else in
+ * Settings (goals, workout filter).
+ */
+@Composable
+private fun CardLayoutEditorScreen(palette: BitPalette, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { com.openhealth.sync.config.DashboardCardLayoutPrefs(context) }
+    var cards by remember { mutableStateOf(prefs.allCardsForEditor()) }
+    var hidden by remember { mutableStateOf(prefs.hiddenKeys()) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(palette.backgroundBrush)
+            .padding(horizontal = 20.dp, vertical = 14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null, tint = palette.text)
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = stringResource(R.string.dashboard_edit_layout_title),
+                color = palette.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 22.sp
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = stringResource(R.string.dashboard_edit_layout_body),
+            color = palette.secondaryText,
+            fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
+            lineHeight = 18.sp
+        )
+        Spacer(Modifier.height(16.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            itemsIndexed(cards, key = { _, item -> item.key }) { index, cardType ->
+                CardLayoutRow(
+                    palette = palette,
+                    label = dashboardCardLabel(cardType),
+                    visible = cardType.key !in hidden,
+                    canMoveUp = index > 0,
+                    canMoveDown = index < cards.lastIndex,
+                    onToggleVisible = { checked ->
+                        hidden = if (checked) hidden - cardType.key else hidden + cardType.key
+                        prefs.setHidden(cardType, !checked)
+                    },
+                    onMoveUp = {
+                        cards = cards.toMutableList().apply { add(index - 1, removeAt(index)) }
+                        prefs.setOrder(cards)
+                    },
+                    onMoveDown = {
+                        cards = cards.toMutableList().apply { add(index + 1, removeAt(index)) }
+                        prefs.setOrder(cards)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardLayoutRow(
+    palette: BitPalette,
+    label: String,
+    visible: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onToggleVisible: (Boolean) -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit
+) {
+    SoftCard(palette = palette, accent = HealthAccent.activity) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = label,
+                color = palette.text,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .then(if (canMoveUp) Modifier.clickable(onClick = onMoveUp) else Modifier)
+                    .alpha(if (canMoveUp) 1f else 0.3f),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = null, tint = palette.secondaryText, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(4.dp))
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .then(if (canMoveDown) Modifier.clickable(onClick = onMoveDown) else Modifier)
+                    .alpha(if (canMoveDown) 1f else 0.3f),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = palette.secondaryText, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            Switch(
+                checked = visible,
+                onCheckedChange = onToggleVisible,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = HealthAccent.activity,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = palette.stroke
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun dashboardCardLabel(type: com.openhealth.sync.config.DashboardCardType): String = when (type) {
+    com.openhealth.sync.config.DashboardCardType.ACTIVITY_RINGS -> stringResource(R.string.dashboard_rings_title)
+    com.openhealth.sync.config.DashboardCardType.WORKOUT_LATEST -> stringResource(R.string.dashboard_latest_workout)
+    com.openhealth.sync.config.DashboardCardType.WORKOUT_PREVIOUS -> stringResource(R.string.dashboard_previous_workout)
+    com.openhealth.sync.config.DashboardCardType.LAST_7_DAYS -> stringResource(R.string.dashboard_last_7_days_title)
+    com.openhealth.sync.config.DashboardCardType.PERSONAL_RECORDS -> stringResource(R.string.insights_personal_records_title)
+    com.openhealth.sync.config.DashboardCardType.STREAK -> stringResource(R.string.dashboard_card_streak_label)
 }
 
 @Composable
@@ -643,6 +849,135 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
     ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> Icons.Rounded.SelfImprovement
     ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> Icons.Rounded.Hiking
     else -> Icons.Rounded.DirectionsRun
+}
+
+/**
+ * Apple-Watch-style concentric rings: Steps (outer), Active minutes (middle),
+ * Calories (inner). All three progress values already exist on
+ * DashboardUiState (stepsProgress/activeMinutesProgress/caloriesProgress,
+ * backed by GoalPrefs) -- this card is the first thing in the UI that
+ * actually shows them; the goals themselves are edited in Settings.
+ * Distance intentionally has no ring here: it overlaps semantically with
+ * Steps and a 4th ring made the card visually noisy without adding new
+ * information.
+ */
+@Composable
+private fun ActivityRingsCard(palette: BitPalette, state: DashboardUiState) {
+    SoftCard(palette = palette, accent = HealthAccent.activity, tintWithAccent = true, pressLift = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.DonutLarge, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.dashboard_rings_title),
+                color = palette.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 16.sp
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ActivityRings(
+                modifier = Modifier.size(112.dp),
+                trackColor = palette.stroke.copy(alpha = 0.35f),
+                rings = listOf(
+                    RingSpec(progress = state.stepsProgress, color = HealthAccent.activity),
+                    RingSpec(progress = state.activeMinutesProgress, color = HealthAccent.mind),
+                    RingSpec(progress = state.caloriesProgress, color = HealthAccent.violet)
+                )
+            )
+            Spacer(Modifier.width(20.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                RingLegendRow(
+                    palette = palette,
+                    color = HealthAccent.activity,
+                    label = stringResource(R.string.dashboard_rings_steps),
+                    value = "${formatNumber(state.stepsToday)} / ${formatNumber(state.stepsGoal)}"
+                )
+                RingLegendRow(
+                    palette = palette,
+                    color = HealthAccent.mind,
+                    label = stringResource(R.string.dashboard_rings_active_minutes),
+                    value = "${state.workoutMinutesToday} / ${state.activeMinutesGoal} ${stringResource(R.string.minutes_short)}"
+                )
+                RingLegendRow(
+                    palette = palette,
+                    color = HealthAccent.violet,
+                    label = stringResource(R.string.dashboard_rings_calories),
+                    value = "${state.caloriesKcal.toInt()} / ${state.caloriesGoalKcal.toInt()} " + stringResource(R.string.kcal_unit)
+                )
+            }
+        }
+    }
+}
+
+private data class RingSpec(val progress: Float, val color: Color)
+
+@Composable
+private fun ActivityRings(
+    rings: List<RingSpec>,
+    trackColor: Color,
+    modifier: Modifier = Modifier,
+    strokeWidth: Dp = 13.dp,
+    gap: Dp = 5.dp
+) {
+    // Animated per-ring rather than a single shared animation so each ring
+    // visibly sweeps in on its own, matching the layered feel of Apple's
+    // activity rings instead of three rings snapping to their values at once.
+    val animatedProgresses = rings.map { ring ->
+        animateFloatAsState(
+            targetValue = ring.progress.coerceIn(0f, 1f),
+            animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            label = "activityRingProgress"
+        ).value
+    }
+    Canvas(modifier = modifier) {
+        val strokePx = strokeWidth.toPx()
+        val gapPx = gap.toPx()
+        rings.forEachIndexed { index, ring ->
+            val inset = index * (strokePx + gapPx)
+            val diameter = size.minDimension - inset * 2f
+            val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+            val arcSize = Size(diameter, diameter)
+            drawArc(
+                color = trackColor,
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokePx, cap = StrokeCap.Round)
+            )
+            val sweep = 360f * animatedProgresses[index]
+            if (sweep > 0f) {
+                drawArc(
+                    color = ring.color,
+                    startAngle = -90f,
+                    sweepAngle = sweep,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RingLegendRow(palette: BitPalette, color: Color, label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(9.dp)
+                .clip(RoundedCornerShape(50))
+                .background(color)
+        )
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+            Text(value, color = palette.text, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+        }
+    }
 }
 
 /**
@@ -1235,7 +1570,13 @@ private fun SettingsScreen(
     onImportArchive: () -> Unit,
     onExportCsv: () -> Unit,
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit,
-    onDataSourceSelected: (HealthDataSource) -> Unit
+    onDataSourceSelected: (HealthDataSource) -> Unit,
+    stepsGoal: Long,
+    activeMinutesGoal: Int,
+    caloriesGoalKcal: Double,
+    onStepsGoalChanged: (Long) -> Unit,
+    onActiveMinutesGoalChanged: (Int) -> Unit,
+    onCaloriesGoalChanged: (Double) -> Unit
 ) {
     var showDataScopes by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
@@ -1335,6 +1676,61 @@ private fun SettingsScreen(
             secondaryAction = stringResource(R.string.import_archive_title),
             onSecondaryAction = onImportArchive
         )
+
+        Text(
+            text = stringResource(R.string.dashboard_goals_section_title),
+            color = palette.text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 18.sp
+        )
+        SoftCard(palette = palette, accent = HealthAccent.activity, tintWithAccent = true) {
+            Text(
+                text = stringResource(R.string.goals_section_body),
+                color = palette.secondaryText,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                lineHeight = 18.sp
+            )
+            Spacer(Modifier.height(14.dp))
+            GoalStepperRow(
+                palette = palette,
+                accent = HealthAccent.activity,
+                label = stringResource(R.string.dashboard_rings_steps),
+                valueText = formatNumber(stepsGoal),
+                onDecrease = {
+                    onStepsGoalChanged((stepsGoal - STEPS_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.STEPS_GOAL_RANGE))
+                },
+                onIncrease = {
+                    onStepsGoalChanged((stepsGoal + STEPS_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.STEPS_GOAL_RANGE))
+                }
+            )
+            Spacer(Modifier.height(12.dp))
+            GoalStepperRow(
+                palette = palette,
+                accent = HealthAccent.mind,
+                label = stringResource(R.string.dashboard_rings_active_minutes),
+                valueText = "$activeMinutesGoal ${stringResource(R.string.minutes_short)}",
+                onDecrease = {
+                    onActiveMinutesGoalChanged((activeMinutesGoal - ACTIVE_MINUTES_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE))
+                },
+                onIncrease = {
+                    onActiveMinutesGoalChanged((activeMinutesGoal + ACTIVE_MINUTES_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE))
+                }
+            )
+            Spacer(Modifier.height(12.dp))
+            GoalStepperRow(
+                palette = palette,
+                accent = HealthAccent.violet,
+                label = stringResource(R.string.dashboard_rings_calories),
+                valueText = "${caloriesGoalKcal.toInt()} ${stringResource(R.string.kcal_unit)}",
+                onDecrease = {
+                    onCaloriesGoalChanged((caloriesGoalKcal - CALORIES_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.CALORIES_GOAL_RANGE))
+                },
+                onIncrease = {
+                    onCaloriesGoalChanged((caloriesGoalKcal + CALORIES_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.CALORIES_GOAL_RANGE))
+                }
+            )
+        }
 
         Text(
             text = stringResource(R.string.workout_filter_section_title),
@@ -1597,6 +1993,58 @@ private fun DataSourceToggleRow(
     if (!isLast) Spacer(Modifier.height(10.dp))
 }
 
+/** Step sizes for the +/- goal editor in Settings. Values stay within GoalPrefs' own ranges via coerceIn at the call site. */
+private const val STEPS_GOAL_STEP = 500L
+private const val ACTIVE_MINUTES_GOAL_STEP = 5
+private const val CALORIES_GOAL_STEP = 50.0
+
+/** Label + a compact -/value/+ stepper, used by the three goal rows in Settings. */
+@Composable
+private fun GoalStepperRow(
+    palette: BitPalette,
+    accent: Color,
+    label: String,
+    valueText: String,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = palette.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GoalStepperButton(accent = accent, symbol = "–", onClick = onDecrease)
+            Text(
+                text = valueText,
+                color = palette.text,
+                fontWeight = FontWeight.Black,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(horizontal = 10.dp)
+                    .widthIn(min = 64.dp)
+            )
+            GoalStepperButton(accent = accent, symbol = "+", onClick = onIncrease)
+        }
+    }
+}
+
+@Composable
+private fun GoalStepperButton(accent: Color, symbol: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(30.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(accent.copy(alpha = 0.16f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(symbol, color = accent, fontWeight = FontWeight.Black, fontSize = 16.sp)
+    }
+}
+
 /** Single toggle row inside the Widgets settings card: label + Switch. [isLast]
  *  suppresses the bottom spacer so the card doesn't end with extra trailing gap. */
 @Composable
@@ -1728,7 +2176,8 @@ private fun MinimalHeader(
     palette: BitPalette,
     title: String,
     subtitle: String? = null,
-    trailing: String? = null
+    trailing: String? = null,
+    onEditClick: (() -> Unit)? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1749,6 +2198,23 @@ private fun MinimalHeader(
                     fontSize = 11.sp,
                     maxLines = 1
                 )
+            }
+            if (onEditClick != null) {
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onEditClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Rounded.Edit,
+                        contentDescription = stringResource(R.string.dashboard_edit_layout),
+                        tint = palette.secondaryText,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
             }
         }
         if (subtitle != null) {
@@ -1775,6 +2241,18 @@ private fun formatDashboardSourceStatus(source: HealthDataSource, lastSyncTime: 
     return "$sourceName · $whenText"
 }
 
+/** Progress-to-goal text shown inside the Steps card. Null when no real goal is set (defensive; GoalPrefs always returns a positive default in practice). */
+@Composable
+private fun stepsGoalProgressText(stepsToday: Long, stepsGoal: Long): String? {
+    if (stepsGoal <= 0) return null
+    val remaining = stepsGoal - stepsToday
+    return if (remaining <= 0) {
+        stringResource(R.string.steps_goal_reached)
+    } else {
+        stringResource(R.string.steps_goal_remaining, formatNumber(remaining))
+    }
+}
+
 @Composable
 private fun MinimalMetricCard(
     palette: BitPalette,
@@ -1783,6 +2261,7 @@ private fun MinimalMetricCard(
     unit: String,
     accent: Color,
     progress: Float? = null,
+    progressText: String? = null,
     icon: ImageVector? = null,
     hero: Boolean = false,
     pressLift: Boolean = false,
@@ -1864,6 +2343,17 @@ private fun MinimalMetricCard(
                     Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
                 }
             }
+        }
+        if (progressText != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = progressText,
+                color = palette.secondaryText,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         if (onClick != null) {
             Spacer(Modifier.height(10.dp))
