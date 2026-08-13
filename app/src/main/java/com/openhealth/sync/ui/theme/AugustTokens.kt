@@ -179,6 +179,27 @@ internal object AugustMotion {
     val StandardEasing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 }
 
+/**
+ * Section 6.4 shadow recipes (integration phase 2). Compose's `shadow()`
+ * takes an elevation, not an explicit CSS-style blur radius/spread, so
+ * there's no exact 1:1 port of the doc's `0 14px 34px rgba(27,30,48,.08)` /
+ * `0 24px 60px rgba(28,31,49,.15)` values -- the dp elevations here were
+ * chosen to read similarly at typical phone density rather than copying the
+ * px numbers literally. The color + alpha ARE taken directly from the doc.
+ * Both ambient and spot use the same neutral, non-accent tint, matching
+ * section 6.4's "A component SHOULD have zero or one shadow" -- no stacked
+ * or accent-tinted decorative shadow.
+ */
+internal object AugustElevation {
+    val CardShadowColor = Color(0xFF1B1E30)   // rgba(27,30,48, x)
+    const val CardShadowAlpha = 0.08f
+    val CardShadowElevation = 12.dp
+
+    val HeroShadowColor = Color(0xFF1C1F31)   // rgba(28,31,49, x)
+    const val HeroShadowAlpha = 0.15f
+    val HeroShadowElevation = 20.dp
+}
+
 /** Section 4 typography. Font family is system default for now -- see the
  * file header for why Inter Variable isn't bundled yet. */
 internal object AugustFont {

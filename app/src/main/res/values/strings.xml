@@ -162,7 +162,6 @@
     <string name="dashboard_card_streak_label">Streak</string>
     <string name="no_data_short">—</string>
     <string name="today_metrics">Today</string>
-    <string name="goal_template">Goal %1$s</string>
     <string name="dashboard_goals_section_title">Daily goals</string>
     <string name="goals_section_body">Used by the activity rings and progress indicators on the dashboard.</string>
     <string name="hours_unit">h</string>
@@ -239,11 +238,6 @@
     <string name="data_source_huawei_body">Imported by BitLut; the Dashboard shows only BitLut records.</string>
     <string name="data_source_google_fit_title">Google Fit</string>
     <string name="data_source_google_fit_body">The Dashboard reads only Google Fit records from Health Connect.</string>
-    <string name="goals_section_title">Daily goals</string>
-    <string name="goal_steps_label">Steps</string>
-    <string name="goal_distance_label">Distance</string>
-    <string name="goal_active_minutes_label">Active minutes</string>
-    <string name="goal_calories_label">Active calories</string>
     <string name="onboarding_title">Why BitLut needs this</string>
     <string name="onboarding_body">To sync your Huawei Health data into Google Health Connect, BitLut needs permission to read and write a few activity metrics.</string>
     <string name="onboarding_scope_steps">Steps</string>

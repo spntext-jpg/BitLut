@@ -1,14 +1,13 @@
+
 package com.openhealth.sync
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,30 +15,49 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.openhealth.sync.ui.theme.AugustElevation
+import com.openhealth.sync.ui.theme.AugustMotion
+import com.openhealth.sync.ui.theme.AugustRadius
+import com.openhealth.sync.ui.theme.AugustSpace
 
 /**
- * Warm slate shadow tone for light theme (v1.9.11), used instead of pure
- * black. A pure-black ambient shadow on a near-white card reads as a flat,
- * generic Material default; a warm, slightly tinted shadow (the same trick
- * Linear/Apple-style premium UIs use) gives the card a sense of being lit
- * from a real light source instead of just "darkened at the edges".
+ * August design system integration, phase 2 (see AugustTokens.kt). Rewritten
+ * from the old "Glass 2.0" card recipe -- a three-stop background gradient,
+ * two accent-tinted radial "glow" layers drawn behind the content, a
+ * specular top-highlight stroke, and a bouncy spring press animation that
+ * simultaneously lifted, scaled and re-tinted the card -- to August's actual
+ * card spec: a plain Surface/Dark-Panel colored panel, border before shadow,
+ * at most one restrained shadow, and press motion that "confirms" a state
+ * change rather than performing for its own sake (doc section 1.3 principle
+ * 7; section 6.4 "A component SHOULD have zero or one shadow"; section 7
+ * "no bounce/elastic overshoot").
+ *
+ * The public signature is unchanged -- accent/hero/tintWithAccent/pressLift
+ * all still exist -- so no call site in FinalBitLutShell.kt needed editing
+ * for this rewrite. Two of those parameters do mean something different now
+ * than before, both toward the same "quiet depth" principle:
+ *
+ *   - tintWithAccent no longer tints the card's background fill (background
+ *     is always palette.card now, a plain Surface/Dark-Panel color -- the
+ *     accent-wash background was exactly the "glass-heavy" look August's
+ *     non-goals rule out). It now strengthens the BORDER toward the card's
+ *     accent color instead, which is still "border before shadow" -- a more
+ *     emphasized border, not a colored fill.
+ *   - pressLift no longer scales the card or re-tints its background on
+ *     press, just a small upward translate (2dp, matching the doc's "-2px
+ *     for cards" hover translation) on a plain tween instead of a spring.
  */
-private val LightShadowTint = Color(0xFF2B2620)
-
 @Composable
 internal fun SoftCard(
     palette: BitPalette,
@@ -50,63 +68,31 @@ internal fun SoftCard(
     pressLift: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val shape = remember(hero) { RoundedCornerShape(if (hero) 34.dp else 28.dp) }
+    val shape = remember(hero) { RoundedCornerShape(if (hero) AugustRadius.Hero else AugustRadius.Card) }
     var pressed by remember { mutableStateOf(false) }
+
     val lift by animateDpAsState(
-        targetValue = if (pressed) 5.dp else 0.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        targetValue = if (pressed) 2.dp else 0.dp,
+        animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
         label = "softCardLift"
     )
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 1.012f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "softCardScale"
-    )
-    val baseShadowElevation = if (hero) 36.dp else 24.dp
-    val shadowElevation by animateDpAsState(
-        targetValue = baseShadowElevation + if (pressed) 10.dp else 0.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "softCardShadow"
-    )
-    val targetCardColor = if (palette.dark) {
-        lerp(palette.card, accent, if (hero || tintWithAccent) 0.12f else 0.07f)
-    } else {
-        // Light-theme tint strengthened (v1.9.11): 0.045f/0.025f read as
-        // almost untinted white next to dark theme's much richer 0.12f/0.07f,
-        // which is the single biggest reason light mode felt visibly less
-        // premium than dark mode. This keeps the card unmistakably white at a
-        // glance (still far below dark mode's saturation) while making the
-        // accent hue actually perceptible instead of nearly invisible.
-        lerp(palette.card, accent, if (hero || tintWithAccent) 0.085f else 0.05f)
-    }
+
     val bg by animateColorAsState(
-        targetValue = if (pressed) lerp(targetCardColor, accent, if (palette.dark) 0.035f else 0.025f) else targetCardColor,
-        label = "glass20CardBg"
+        targetValue = palette.card,
+        animationSpec = tween(AugustMotion.FastMs),
+        label = "softCardBg"
     )
-    val backgroundBrush = remember(bg, palette.systemBackground, palette.dark) {
-        Brush.linearGradient(
-            listOf(
-                bg.copy(alpha = if (palette.dark) 0.86f else 0.90f),
-                bg.copy(alpha = if (palette.dark) 0.62f else 0.72f),
-                palette.systemBackground.copy(alpha = if (palette.dark) 0.16f else 0.28f)
-            )
-        )
+
+    val borderColor = if (tintWithAccent) {
+        lerp(palette.stroke, accent, if (palette.dark) 0.55f else 0.45f)
+    } else {
+        palette.stroke
     }
-    val accentGlowColors = remember(accent, hero, palette.dark) {
-        listOf(accent.copy(alpha = if (hero) (if (palette.dark) 0.22f else 0.16f) else (if (palette.dark) 0.15f else 0.11f)), Color.Transparent)
-    }
-    val mindGlowColors = remember(palette.mind, hero, palette.dark) {
-        listOf(palette.mind.copy(alpha = if (hero) (if (palette.dark) 0.14f else 0.10f) else (if (palette.dark) 0.08f else 0.06f)), Color.Transparent)
-    }
+
+    val shadowColor = if (hero) AugustElevation.HeroShadowColor else AugustElevation.CardShadowColor
+    val shadowAlpha = if (hero) AugustElevation.HeroShadowAlpha else AugustElevation.CardShadowAlpha
+    val shadowElevation = if (hero) AugustElevation.HeroShadowElevation else AugustElevation.CardShadowElevation
+
     val pressModifier = if (pressLift) {
         Modifier.pointerInput(Unit) {
             awaitEachGesture {
@@ -128,52 +114,17 @@ internal fun SoftCard(
     Column(
         modifier = modifier
             .then(pressModifier)
-            .graphicsLayer {
-                translationY = -lift.toPx()
-                scaleX = scale
-                scaleY = scale
-            }
+            .graphicsLayer { translationY = -lift.toPx() }
             .shadow(
                 elevation = shadowElevation,
                 shape = shape,
-                // Light-theme shadow strengthened from a near-invisible 0.06f
-                // pure-black ambient to a warm slate tone with real presence,
-                // matching dark theme's sense of physical depth instead of
-                // sitting almost flush with the page.
-                ambientColor = if (palette.dark) Color.Black.copy(alpha = 0.32f) else LightShadowTint.copy(alpha = 0.14f),
-                spotColor = accent.copy(alpha = if (palette.dark) 0.24f else 0.16f)
+                ambientColor = shadowColor.copy(alpha = shadowAlpha),
+                spotColor = shadowColor.copy(alpha = shadowAlpha)
             )
             .clip(shape)
-            .background(backgroundBrush)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = accentGlowColors,
-                        center = Offset(size.width * 0.88f, size.height * 0.08f),
-                        radius = size.maxDimension * 0.62f
-                    )
-                )
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = mindGlowColors,
-                        center = Offset(size.width * 0.10f, size.height * 0.98f),
-                        radius = size.maxDimension * 0.58f
-                    )
-                )
-                drawLine(
-                    color = Color.White.copy(alpha = if (palette.dark) 0.15f else 0.36f),
-                    start = Offset(size.width * 0.08f, 1.1f),
-                    end = Offset(size.width * 0.92f, 1.1f),
-                    strokeWidth = 1.1f
-                )
-            }
-            .border(
-                width = 1.dp,
-                color = palette.stroke.copy(alpha = if (palette.dark) 0.70f else 0.62f),
-                shape = shape
-            )
-            .padding(if (hero) 24.dp else 16.dp),
+            .background(bg)
+            .border(width = 1.dp, color = borderColor, shape = shape)
+            .padding(if (hero) AugustSpace.s24 else AugustSpace.s16),
         content = content
     )
 }
-

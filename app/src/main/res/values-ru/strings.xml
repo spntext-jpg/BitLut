@@ -162,7 +162,6 @@
     <string name="dashboard_card_streak_label">Серия дней</string>
     <string name="no_data_short">—</string>
     <string name="today_metrics">Сегодня</string>
-    <string name="goal_template">Цель %1$s</string>
     <string name="dashboard_goals_section_title">Дневные цели</string>
     <string name="goals_section_body">Используются кольцами активности и индикаторами прогресса на главном экране.</string>
     <string name="hours_unit">ч</string>
@@ -240,11 +239,6 @@
     <string name="data_source_huawei_body">Импорт через BitLut; Dashboard показывает только записи BitLut.</string>
     <string name="data_source_google_fit_title">Google Fit</string>
     <string name="data_source_google_fit_body">Dashboard читает только записи Google Fit из Health Connect.</string>
-    <string name="goals_section_title">Дневные цели</string>
-    <string name="goal_steps_label">Шаги</string>
-    <string name="goal_distance_label">Дистанция</string>
-    <string name="goal_active_minutes_label">Активные минуты</string>
-    <string name="goal_calories_label">Активные калории</string>
     <string name="onboarding_title">Зачем это нужно BitLut</string>
     <string name="onboarding_body">Чтобы синхронизировать данные Huawei Health с Google Health Connect, BitLut нужен доступ к нескольким показателям активности.</string>
     <string name="onboarding_scope_steps">Шаги</string>

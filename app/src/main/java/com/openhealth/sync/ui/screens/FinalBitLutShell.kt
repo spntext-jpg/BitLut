@@ -88,6 +88,7 @@ import com.openhealth.sync.ui.DashboardViewModel
 import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.AugustColor
+import com.openhealth.sync.ui.theme.AugustRadius
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 import com.openhealth.sync.util.AppLogger
 import java.util.Locale
@@ -1344,13 +1345,43 @@ private fun WeekChangeStat(
             )
         } else {
             val positive = percentChange >= 0
-            val displayColor = if (positive) HealthAccent.mind else palette.secondaryText
-            Text(
-                text = "${if (positive) "+" else ""}$percentChange%",
-                color = displayColor,
-                fontWeight = FontWeight.Black,
-                fontSize = 18.sp
-            )
+            if (positive) {
+                // August design system integration, phase 2 (see
+                // AugustTokens.kt): this is the app's first real "growth"
+                // moment -- a week-over-week improvement -- and the doc's
+                // own named pattern for exactly this ("Growth: Lime with
+                // Navy text. Never use Lime text on white", section 3.1) is
+                // a small dark-backed badge, not bare colored text on the
+                // ambient card. A bare Lime number on this app's white/light
+                // cards measures at 1.14:1 contrast (computed) -- unreadable
+                // -- which is why [mind]/HealthAccent still aliases to
+                // Accent Dark rather than Lime (see HealthAccent's doc
+                // comment): Lime needs its own dark backing per call site,
+                // not a global color swap. Navy is used as a fixed badge
+                // color in both light and dark theme, matching the doc's
+                // literal "Lime with Navy text" pairing rather than
+                // following the surrounding card's theme.
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(AugustRadius.Pill))
+                        .background(AugustColor.Navy)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = "+$percentChange%",
+                        color = AugustColor.GrowthLime,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                Text(
+                    text = "$percentChange%",
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp
+                )
+            }
         }
     }
 }
