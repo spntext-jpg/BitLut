@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import com.openhealth.sync.ui.theme.AugustColor
 import kotlinx.coroutines.launch
 
 /**
@@ -171,16 +172,22 @@ internal fun Glass20BottomNavigation(
 }
 
 /**
- * Warm orange, sprint 2026-07-09: distinct from every existing accent
- * (activity/mind/violet) on purpose, so the refresh button reads as its
- * own clearly-tappable action rather than belonging to either tab.
+ * August design system integration, phase 1 (see AugustTokens.kt). Was a
+ * warm orange (sprint 2026-07-09) chosen specifically to be distinct from
+ * every other accent in the app at the time. Under August, that rationale
+ * inverts: "purple means action" (section 1.3, principle 4) makes the one
+ * true Accent purple the *correct* color for the app's single most central
+ * tappable action, not a mismatch -- so this is now literally
+ * AugustColor.Accent rather than a fourth hue invented to stand apart from
+ * activity/mind/violet (which are themselves now Accent/Accent Dark, see
+ * HealthAccent in FinalBitLutShell.kt).
  */
-private val WarmRefreshOrange = Color(0xFFFF8A34)
+private val RefreshButtonAccent = AugustColor.Accent
 
 /**
- * Centered, larger, warm-orange manual refresh button (sprint 2026-07-09),
- * sitting between the two tab buttons in the bottom nav. Reuses the same
- * "sync now" action as the Settings screen's manual sync button.
+ * Centered, larger manual refresh button (sprint 2026-07-09), sitting
+ * between the two tab buttons in the bottom nav. Reuses the same "sync now"
+ * action as the Settings screen's manual sync button.
  */
 @Composable
 private fun Glass20RefreshButton(onClick: () -> Unit) {
@@ -192,7 +199,7 @@ private fun Glass20RefreshButton(onClick: () -> Unit) {
     val shape = remember { RoundedCornerShape(30.dp) }
     val brush = remember {
         Brush.linearGradient(
-            listOf(WarmRefreshOrange, WarmRefreshOrange.copy(alpha = 0.84f))
+            listOf(RefreshButtonAccent, RefreshButtonAccent.copy(alpha = 0.84f))
         )
     }
     val glowColors = remember {
@@ -244,8 +251,8 @@ private fun Glass20RefreshButton(onClick: () -> Unit) {
             .shadow(
                 elevation = elevation,
                 shape = shape,
-                ambientColor = WarmRefreshOrange.copy(alpha = 0.40f),
-                spotColor = WarmRefreshOrange.copy(alpha = 0.55f)
+                ambientColor = RefreshButtonAccent.copy(alpha = 0.40f),
+                spotColor = RefreshButtonAccent.copy(alpha = 0.55f)
             )
             .clip(shape)
             .background(brush)

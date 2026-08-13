@@ -3,9 +3,15 @@
   Sprint (2026-07-16): home screen widget colors, dark (night) variant.
   See values/colors.xml for why this is resource-qualified files rather
   than Glance's ColorProvider(day=, night=).
+
+  August design system integration, phase 1: widget_card/widget_text/
+  widget_secondary_text are now August's DarkPanel / White / dark-surface
+  secondary text tokens (see AugustTokens.kt AugustColor.DarkPanel and
+  AugustColor.DarkSecondaryText for how these were derived and
+  contrast-checked) instead of their own independently-set hexes.
 -->
 <resources>
-    <color name="widget_card">#FF1C1C1E</color>
-    <color name="widget_text">#FFF8F8F8</color>
-    <color name="widget_secondary_text">#FF8E8E93</color>
+    <color name="widget_card">#FF252739</color>
+    <color name="widget_text">#FFFFFFFF</color>
+    <color name="widget_secondary_text">#FFBEC3D4</color>
 </resources>

@@ -87,6 +87,7 @@ import com.openhealth.sync.ui.DashboardUiState
 import com.openhealth.sync.ui.DashboardViewModel
 import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
+import com.openhealth.sync.ui.theme.AugustColor
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 import com.openhealth.sync.util.AppLogger
 import java.util.Locale
@@ -2085,15 +2086,26 @@ private fun WidgetVisibilityRow(
 
 /**
  * Shared accent-color palette used across cards and icons throughout the app.
- * These are purely visual accents (not tied to any specific health metric) --
- * [violet] in particular is just the app's fourth decorative accent color
- * (currently used for the Manual Sync card in Settings), not an indicator of
- * any sleep-related feature or data.
+ * These are purely visual accents (not tied to any specific health metric).
+ *
+ * August design system integration, phase 1 (see AugustTokens.kt): these
+ * three used to be three unrelated hues (warm orange/teal/violet). August's
+ * own principles are explicit about this ("one strong action color... never
+ * a collection of unrelated gradients") -- [activity] and [violet] are now
+ * both drawn from August's purple family (Accent / Accent Dark), and [mind]
+ * is aliased to Accent Dark as an interim, contrast-safe value too. [mind]'s
+ * call sites include real "growth" moments (the positive-trend indicator,
+ * the activity rings) that are strong candidates for August's actual Growth
+ * Lime token -- that needs a per-call-site pass to give Lime a proper dark
+ * backing (Lime text/icons on the app's white/light cards fails contrast
+ * outright: computed at 1.14:1, versus the ~4.6-6.7:1 the two purple tokens
+ * below measure at on both this app's card surfaces), so it's deliberately
+ * deferred to the next integration phase rather than shipped unverified.
  */
 internal object HealthAccent {
-    val activity = Color(0xFFFF6B5A)
-    val violet = Color(0xFF9E6FC3)
-    val mind = Color(0xFF5FE0C6)
+    val activity = AugustColor.Accent
+    val violet = AugustColor.AccentDark
+    val mind = AugustColor.AccentDark
     val cardLight = Color.White
     val cardDark = Color(0xCC1C1C1E)
     val systemLight = Color(0xFFF2F2F7)
@@ -2606,34 +2618,43 @@ internal data class BitPalette(
     val backgroundBrush: Brush
 ) {
     companion object {
-        // light() intentionally uses its own, slightly more saturated accent
-        // values rather than HealthAccent's dark-mode hexes verbatim: the same
-        // glow-tinted accent that reads as rich against a near-black card
-        // washes out and looks chalky against white, so a small amount of
-        // per-theme accent tuning is correct design, not drift.
+        // August design system integration, phase 1 (see AugustTokens.kt).
+        // light() previously used its own hand-tuned accent hexes rather than
+        // HealthAccent's verbatim, because the old warm-orange/teal accents
+        // read as "chalky" against white without per-theme tuning. August's
+        // Accent/Accent Dark tokens don't have that problem -- the doc's own
+        // contrast numbers (4.64:1 / 6.74:1) are already computed against a
+        // white surface -- so light() now reuses HealthAccent directly too,
+        // same as dark() already did.
         fun light(): BitPalette = BitPalette(
             dark = false,
-            systemBackground = Color(0xFFF6F4F1),
-            card = Color.White,
-            text = Color(0xFF111318),
-            secondaryText = Color(0xFF6E6E73),
-            stroke = Color(0x1A111318),
-            activity = Color(0xFFFF6B5F),
-            mind = Color(0xFF46C7B7),
-            backgroundBrush = Brush.verticalGradient(listOf(Color(0xFFF6F4F1), Color(0xFFFFFFFF)))
+            systemBackground = AugustColor.Canvas,
+            card = AugustColor.Surface,
+            text = AugustColor.Ink,
+            secondaryText = AugustColor.Muted,
+            stroke = AugustColor.BorderLight,
+            activity = HealthAccent.activity,
+            mind = HealthAccent.mind,
+            backgroundBrush = Brush.verticalGradient(listOf(AugustColor.Canvas, AugustColor.Surface))
         )
         // dark() reuses HealthAccent directly (single source of truth) rather
         // than redeclaring near-duplicate hex values that could drift apart.
+        // systemBackground/card/text/secondaryText/stroke follow August's own
+        // dark-surface rule (section 3.1: "Navy or Dark Panel with white
+        // primary text and #BEC3D4 secondary text") -- see AugustColor's
+        // DarkPanel/AccentLight doc comments for how those specific values
+        // were derived and contrast-checked, since the source doc describes
+        // Navy as a component-level anchor, not a full app dark theme.
         fun dark(): BitPalette = BitPalette(
             dark = true,
-            systemBackground = Color(0xFF0C0C0E),
-            card = Color(0xCC1C1C1E),
-            text = Color(0xFFF8F8F8),
-            secondaryText = Color(0xFF8E8E93),
-            stroke = Color(0x22FFFFFF),
+            systemBackground = AugustColor.Navy,
+            card = AugustColor.DarkPanel,
+            text = Color.White,
+            secondaryText = AugustColor.DarkSecondaryText,
+            stroke = AugustColor.BorderDark,
             activity = HealthAccent.activity,
             mind = HealthAccent.mind,
-            backgroundBrush = Brush.verticalGradient(listOf(Color(0xFF0C0C0E), Color(0xFF1C1C1E)))
+            backgroundBrush = Brush.verticalGradient(listOf(AugustColor.Navy, AugustColor.DarkPanel))
         )
     }
 }
