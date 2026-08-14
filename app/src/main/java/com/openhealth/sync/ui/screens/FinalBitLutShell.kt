@@ -88,6 +88,8 @@ import com.openhealth.sync.ui.DashboardViewModel
 import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.AugustColor
+import com.openhealth.sync.ui.theme.AugustElevation
+import com.openhealth.sync.ui.theme.AugustMotion
 import com.openhealth.sync.ui.theme.AugustRadius
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 import com.openhealth.sync.util.AppLogger
@@ -130,8 +132,8 @@ import androidx.compose.ui.text.style.TextAlign
 import com.openhealth.sync.ui.ImportScreen
 import com.openhealth.sync.ui.ImportViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.geometry.Offset
@@ -2068,7 +2070,7 @@ private fun GoalStepperButton(accent: Color, symbol: String, onClick: () -> Unit
     Box(
         modifier = Modifier
             .size(30.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(AugustRadius.Compact))
             .background(accent.copy(alpha = 0.16f))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
@@ -2143,9 +2145,15 @@ internal object HealthAccent {
 }
 
 /**
- * iOS/Apple-Health-style tactile press feedback: scales a tappable surface down
- * slightly while pressed, using spring physics rather than a linear tween so the
- * release has a small natural bounce.
+ * Tactile press feedback: scales a tappable surface down slightly while
+ * pressed.
+ *
+ * August design system integration, phase 3 (see AugustTokens.kt): was a
+ * bouncy spring (small overshoot on release) -- section 7 is explicit that
+ * motion "confirms" a state change and rules out bounce/elastic overshoot
+ * everywhere, not just on cards (which phase 2 already fixed). This keeps
+ * the scale-on-press technique itself, which the doc doesn't rule out, just
+ * on its standard tween + easing instead of a spring.
  *
  * Pass the SAME [interactionSource] you give to your own `Modifier.clickable(...)`
  * — this modifier only observes press state, it never intercepts the tap itself,
@@ -2156,10 +2164,7 @@ internal fun Modifier.pressScale(interactionSource: MutableInteractionSource): M
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "pressScale"
     )
     return this.scale(scale)
@@ -2174,12 +2179,95 @@ private fun PrimaryButton(
     modifier: Modifier = Modifier.fillMaxWidth(),
     onClick: () -> Unit
 ) {
+    // August design system integration, phase 3 (see AugustTokens.kt).
+    // Section 9's component table: "Primary button | 44px minimum height |
+    // Purple fill, white text, 13px radius, accent shadow." [compact] isn't
+    // a named August variant -- it's this app's own smaller inline usage
+    // (e.g. two side-by-side actions in SettingsConnectionCard) -- sized to
+    // section 10's "Compact controls: 36px only when spacing preserves a
+    // minimum 24px target area", not invented freely.
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val press by animateDpAsState(
+        targetValue = if (pressed) 1.dp else 0.dp,
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
+        label = "primaryButtonPress"
+    )
+    val minHeight = if (compact) 36.dp else 44.dp
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier,
-        shape = RoundedCornerShape(if (compact) 16.dp else 22.dp),
+        interactionSource = interactionSource,
+        modifier = modifier
+            .heightIn(min = minHeight)
+            .graphicsLayer { translationY = -press.toPx() }
+            .then(
+                if (enabled) {
+                    Modifier.shadow(
+                        elevation = AugustElevation.ButtonShadowElevation,
+                        shape = RoundedCornerShape(AugustRadius.Button),
+                        ambientColor = AugustElevation.ButtonShadowColor.copy(alpha = AugustElevation.ButtonShadowAlpha),
+                        spotColor = AugustElevation.ButtonShadowColor.copy(alpha = AugustElevation.ButtonShadowAlpha)
+                    )
+                } else {
+                    Modifier
+                }
+            ),
+        shape = RoundedCornerShape(AugustRadius.Button),
         colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
+            disabledElevation = 0.dp
+        ),
+        contentPadding = if (compact) PaddingValues(horizontal = 12.dp, vertical = 6.dp) else ButtonDefaults.ContentPadding
+    ) { Text(text, fontWeight = FontWeight.ExtraBold, fontSize = if (compact) 12.sp else 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+}
+
+/**
+ * August design system integration, phase 3 (see AugustTokens.kt). Section
+ * 9's component table: "Secondary button | 40px minimum height | White
+ * surface, subtle border, dark text." Introduced this phase for
+ * SettingsConnectionCard's secondary action slot (e.g. "Refresh status"
+ * next to "Connect"), which previously rendered as a second identical
+ * PrimaryButton -- two equally-loud purple actions side by side, when only
+ * one of them is really the primary action. No shadow, matching section
+ * 9.1 (only Primary gets the accent shadow) and 6.4's "zero or one shadow"
+ * -- a bordered, unshadowed button reads as secondary next to a shadowed
+ * filled one without needing a second visual language.
+ */
+@Composable
+private fun SecondaryButton(
+    text: String,
+    palette: BitPalette,
+    enabled: Boolean = true,
+    compact: Boolean = false,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val press by animateDpAsState(
+        targetValue = if (pressed) 1.dp else 0.dp,
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
+        label = "secondaryButtonPress"
+    )
+    val minHeight = if (compact) 36.dp else 40.dp
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        interactionSource = interactionSource,
+        modifier = modifier
+            .heightIn(min = minHeight)
+            .graphicsLayer { translationY = -press.toPx() },
+        shape = RoundedCornerShape(AugustRadius.Button),
+        colors = ButtonDefaults.buttonColors(containerColor = palette.card, contentColor = palette.text),
+        border = BorderStroke(1.dp, palette.stroke),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
+            disabledElevation = 0.dp
+        ),
         contentPadding = if (compact) PaddingValues(horizontal = 12.dp, vertical = 6.dp) else ButtonDefaults.ContentPadding
     ) { Text(text, fontWeight = FontWeight.ExtraBold, fontSize = if (compact) 12.sp else 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
 }
@@ -2625,9 +2713,9 @@ private fun SettingsConnectionCard(
                 onClick = onPrimaryAction
             )
             if (secondaryAction != null && onSecondaryAction != null) {
-                PrimaryButton(
+                SecondaryButton(
                     text = secondaryAction,
-                    accent = accent,
+                    palette = palette,
                     compact = true,
                     modifier = Modifier.weight(1f),
                     onClick = onSecondaryAction

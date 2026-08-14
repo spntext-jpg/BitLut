@@ -134,6 +134,7 @@ internal object AugustColor {
 internal object AugustRadius {
     val Compact = 10.dp   // 8-12px: compact controls, work items, icon buttons
     val Control = 15.dp   // 13-16px: regular controls, nav items, segmented controls
+    val Button = 13.dp    // component spec (9): Primary/Secondary button, exact value
     val Card = 20.dp       // 18-24px: cards and panels
     val Hero = 28.dp       // 26-30px: guidance banners, hero, onboarding
     val Pill = 999.dp     // pills, chips, progress tracks
@@ -180,15 +181,15 @@ internal object AugustMotion {
 }
 
 /**
- * Section 6.4 shadow recipes (integration phase 2). Compose's `shadow()`
+ * Section 6.4 shadow recipes (integration phases 2-3). Compose's `shadow()`
  * takes an elevation, not an explicit CSS-style blur radius/spread, so
  * there's no exact 1:1 port of the doc's `0 14px 34px rgba(27,30,48,.08)` /
- * `0 24px 60px rgba(28,31,49,.15)` values -- the dp elevations here were
- * chosen to read similarly at typical phone density rather than copying the
- * px numbers literally. The color + alpha ARE taken directly from the doc.
- * Both ambient and spot use the same neutral, non-accent tint, matching
- * section 6.4's "A component SHOULD have zero or one shadow" -- no stacked
- * or accent-tinted decorative shadow.
+ * `0 24px 60px rgba(28,31,49,.15)` / `0 8px 22px rgba(110,92,246,.24)`
+ * values -- the dp elevations here were chosen to read similarly at
+ * typical phone density rather than copying the px numbers literally. The
+ * color + alpha ARE taken directly from the doc. Every shadow here is used
+ * alone (ambient == spot, single tint), matching section 6.4's "A component
+ * SHOULD have zero or one shadow" -- no stacked or mismatched shadows.
  */
 internal object AugustElevation {
     val CardShadowColor = Color(0xFF1B1E30)   // rgba(27,30,48, x)
@@ -198,6 +199,16 @@ internal object AugustElevation {
     val HeroShadowColor = Color(0xFF1C1F31)   // rgba(28,31,49, x)
     const val HeroShadowAlpha = 0.15f
     val HeroShadowElevation = 20.dp
+
+    // "Accent action" shadow (section 6.4): `0 8px 22px rgba(110,92,246,.24)`.
+    // rgb(110,92,246) is Accent itself (#6E5CF6) -- this is the one shadow in
+    // the whole spec that IS accent-tinted on purpose, reserved for the
+    // Primary button per section 9's component table ("accent shadow").
+    // Everywhere else (cards) uses a neutral tint -- see CardShadowColor/
+    // HeroShadowColor above and their doc comments for why.
+    val ButtonShadowColor = AugustColor.Accent
+    const val ButtonShadowAlpha = 0.24f
+    val ButtonShadowElevation = 10.dp
 }
 
 /** Section 4 typography. Font family is system default for now -- see the
