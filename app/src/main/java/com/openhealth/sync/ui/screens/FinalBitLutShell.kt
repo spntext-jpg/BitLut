@@ -199,7 +199,6 @@ fun FinalBitLutShell(
         bottomBar = {
             Glass20BottomNavigation(
                 selected = selected,
-                palette = palette,
                 onSelected = { selected = it },
                 onSecretLogViewerTriggered = { showLogViewer = true },
                 onRefreshClick = onSyncNow
