@@ -152,7 +152,6 @@
     <string name="steps_unit">шагов</string>
     <string name="steps_goal_reached">Цель на сегодня достигнута 🎉</string>
     <string name="steps_goal_remaining">Ещё %1$s до цели</string>
-    <string name="dashboard_rings_title">Кольца активности</string>
     <string name="dashboard_rings_steps">Шаги</string>
     <string name="dashboard_rings_active_minutes">Активные минуты</string>
     <string name="dashboard_rings_calories">Калории</string>

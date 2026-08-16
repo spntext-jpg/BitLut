@@ -3,12 +3,16 @@ package com.openhealth.sync.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.openhealth.sync.R
 
 // ── August Design System — token foundation (integration phase 1) ─────────────
 //
@@ -35,13 +39,10 @@ import androidx.compose.ui.unit.sp
 //   - AugustRadius / AugustSpace / AugustMotion: direct ports of sections
 //     5 (spacing), 6.1 (radius) and 7 (motion) of the doc.
 //   - AugustTypography: a Material3 Typography built from section 4's type
-//     scale. Font family is FontFamily.Default (system sans) for now, not
-//     the doc's specified Inter Variable -- bundling a real, offline-safe
-//     Inter font file is a deliberately separate, later phase (it needs a
-//     product decision: bundle an actual .ttf in the APK vs. Android's
-//     Downloadable Fonts API, which depends on Google Play Services and is
-//     therefore risky on Huawei devices without GMS). AugustFont.Family is
-//     the one line that phase will change.
+//     scale. Font family was FontFamily.Default (system sans) through
+//     phase 4 -- phase 5 bundled the doc's actual specified Inter Variable
+//     font; see AugustFont's own doc comment below for that decision and
+//     how the bundled file was produced.
 //
 // What phase 1 deliberately does NOT do: rewrite SoftCard's shadow/glow
 // recipe, the bottom nav's glass chrome, or the ~2700 lines of hand-set
@@ -211,10 +212,77 @@ internal object AugustElevation {
     val ButtonShadowElevation = 10.dp
 }
 
-/** Section 4 typography. Font family is system default for now -- see the
- * file header for why Inter Variable isn't bundled yet. */
+/**
+ * Section 4 typography, font family (integration phase 5). Bundled real
+ * Inter -- specifically the OFL variable instance from Google's own font
+ * repository (github.com/google/fonts, ofl/inter/Inter[opsz,wght].ttf),
+ * subsetted to Latin + Cyrillic (this app is EN/RU only) with fonttools'
+ * pyftsubset, which cut it from 876KB to 481KB while keeping every
+ * character actually used anywhere in strings.xml (both locales) --
+ * verified by diffing the subset font's cmap against every distinct
+ * character in both string tables; the only 2 characters not covered were
+ * emoji (🎉/🎯), which Inter never covers regardless of subsetting -- no
+ * text typeface ships emoji glyphs, Android's font-fallback chain renders
+ * those from the system emoji font automatically no matter what
+ * AugustFont.Family is set to, so this isn't a real gap.
+ *
+ * This was deliberately deferred out of phase 1 pending a product decision
+ * between Android's Downloadable Fonts API (depends on Google Play
+ * Services' Fonts Provider -- risky on Huawei devices without GMS, which
+ * is this app's whole target audience) and bundling a real font file
+ * (works fully offline, no GMS dependency, at the cost of real APK size).
+ * Bundling won on that trade-off given the GMS constraint.
+ *
+ * Every FontWeight value used ANYWHERE in the app (not just
+ * AugustTypography's own 9 styles) is registered here with its own
+ * FontVariation.weight setting, verified by grepping every FontWeight.*
+ * and TextStyle fontWeight literal across FinalBitLutShell.kt, GlassCards.kt,
+ * GlassNavigation.kt and ImportScreen.kt: 450/500/600/650/700/750/780/800/
+ * 820/850/900. None of those call sites set their own `fontFamily` (the
+ * app's one exception, a monospace id/hash display, explicitly opts out
+ * with FontFamily.Monospace already) -- Compose's Text() merges an
+ * unspecified fontFamily from the ambient LocalTextStyle, which
+ * MaterialTheme sets to AugustTypography's own text styles, so bundling
+ * the real typeface here retheme the entire app's text without editing any
+ * of those individual Text() calls. The optical-size axis (opsz, 14-32) is
+ * intentionally left unset on every entry: this app's real weight range
+ * (450-900 across mostly small-to-medium text) sits at or near the font's
+ * own default opsz of 14, so an explicit value would be redundant with
+ * the font's default rather than a deliberate choice -- see this file's
+ * top-level header for why per-role opsz was considered and dropped (a
+ * single FontWeight can't carry two different opsz values through
+ * Compose's family-matching, so a uniform value was the only option that
+ * didn't need per-TextStyle fontFamily overrides).
+ *
+ * @OptIn(ExperimentalTextApi::class): the `Font(resId, weight, style,
+ * variationSettings)` overload -- the one that actually lets a resource
+ * font be rendered at a specific point on its variable axes instead of
+ * just its default instance -- is marked experimental by Compose UI
+ * itself, and unlike most `@Experimental*` warnings, Kotlin treats an
+ * unacknowledged use of it as a hard compile error, not a warning (caught
+ * by this integration's own compile gate on the very first real build --
+ * this file had never actually been compiled by a real Kotlin toolchain
+ * before that, only diffed against a hand-edited copy, which can verify
+ * the text is exactly what was intended but can't catch a real compiler
+ * error). The opt-in is scoped to this one object rather than a broader
+ * file- or module-level suppression, since it's the only place in the
+ * app that touches this API.
+ */
+@OptIn(ExperimentalTextApi::class)
 internal object AugustFont {
-    val Family: FontFamily = FontFamily.Default
+    val Family: FontFamily = FontFamily(
+        Font(R.font.inter_variable, weight = FontWeight(450), variationSettings = FontVariation.Settings(FontVariation.weight(450))),
+        Font(R.font.inter_variable, weight = FontWeight(500), variationSettings = FontVariation.Settings(FontVariation.weight(500))),
+        Font(R.font.inter_variable, weight = FontWeight(600), variationSettings = FontVariation.Settings(FontVariation.weight(600))),
+        Font(R.font.inter_variable, weight = FontWeight(650), variationSettings = FontVariation.Settings(FontVariation.weight(650))),
+        Font(R.font.inter_variable, weight = FontWeight(700), variationSettings = FontVariation.Settings(FontVariation.weight(700))),
+        Font(R.font.inter_variable, weight = FontWeight(750), variationSettings = FontVariation.Settings(FontVariation.weight(750))),
+        Font(R.font.inter_variable, weight = FontWeight(780), variationSettings = FontVariation.Settings(FontVariation.weight(780))),
+        Font(R.font.inter_variable, weight = FontWeight(800), variationSettings = FontVariation.Settings(FontVariation.weight(800))),
+        Font(R.font.inter_variable, weight = FontWeight(820), variationSettings = FontVariation.Settings(FontVariation.weight(820))),
+        Font(R.font.inter_variable, weight = FontWeight(850), variationSettings = FontVariation.Settings(FontVariation.weight(850))),
+        Font(R.font.inter_variable, weight = FontWeight(900), variationSettings = FontVariation.Settings(FontVariation.weight(900))),
+    )
 }
 
 /**

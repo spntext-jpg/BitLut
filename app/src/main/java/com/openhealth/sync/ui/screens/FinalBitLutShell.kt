@@ -120,7 +120,6 @@ import androidx.compose.material.icons.rounded.Hiking
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.DonutLarge
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -135,9 +134,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.draw.scale
@@ -582,9 +578,6 @@ private fun SummaryScreen(
 @Composable
 private fun DashboardOrderedCard(palette: BitPalette, state: DashboardUiState, cardType: com.openhealth.sync.config.DashboardCardType) {
     when (cardType) {
-        com.openhealth.sync.config.DashboardCardType.ACTIVITY_RINGS ->
-            ActivityRingsCard(palette = palette, state = state)
-
         com.openhealth.sync.config.DashboardCardType.WORKOUT_LATEST ->
             WorkoutRecencyCard(
                 palette = palette,
@@ -759,7 +752,6 @@ private fun CardLayoutRow(
 
 @Composable
 private fun dashboardCardLabel(type: com.openhealth.sync.config.DashboardCardType): String = when (type) {
-    com.openhealth.sync.config.DashboardCardType.ACTIVITY_RINGS -> stringResource(R.string.dashboard_rings_title)
     com.openhealth.sync.config.DashboardCardType.WORKOUT_LATEST -> stringResource(R.string.dashboard_latest_workout)
     com.openhealth.sync.config.DashboardCardType.WORKOUT_PREVIOUS -> stringResource(R.string.dashboard_previous_workout)
     com.openhealth.sync.config.DashboardCardType.LAST_7_DAYS -> stringResource(R.string.dashboard_last_7_days_title)
@@ -852,135 +844,6 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
     ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> Icons.Rounded.SelfImprovement
     ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> Icons.Rounded.Hiking
     else -> Icons.Rounded.DirectionsRun
-}
-
-/**
- * Apple-Watch-style concentric rings: Steps (outer), Active minutes (middle),
- * Calories (inner). All three progress values already exist on
- * DashboardUiState (stepsProgress/activeMinutesProgress/caloriesProgress,
- * backed by GoalPrefs) -- this card is the first thing in the UI that
- * actually shows them; the goals themselves are edited in Settings.
- * Distance intentionally has no ring here: it overlaps semantically with
- * Steps and a 4th ring made the card visually noisy without adding new
- * information.
- */
-@Composable
-private fun ActivityRingsCard(palette: BitPalette, state: DashboardUiState) {
-    SoftCard(palette = palette, accent = HealthAccent.activity, tintWithAccent = true, pressLift = true) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.DonutLarge, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = stringResource(R.string.dashboard_rings_title),
-                color = palette.text,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 16.sp
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ActivityRings(
-                modifier = Modifier.size(112.dp),
-                trackColor = palette.stroke.copy(alpha = 0.35f),
-                rings = listOf(
-                    RingSpec(progress = state.stepsProgress, color = HealthAccent.activity),
-                    RingSpec(progress = state.activeMinutesProgress, color = HealthAccent.mind),
-                    RingSpec(progress = state.caloriesProgress, color = HealthAccent.violet)
-                )
-            )
-            Spacer(Modifier.width(20.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                RingLegendRow(
-                    palette = palette,
-                    color = HealthAccent.activity,
-                    label = stringResource(R.string.dashboard_rings_steps),
-                    value = "${formatNumber(state.stepsToday)} / ${formatNumber(state.stepsGoal)}"
-                )
-                RingLegendRow(
-                    palette = palette,
-                    color = HealthAccent.mind,
-                    label = stringResource(R.string.dashboard_rings_active_minutes),
-                    value = "${state.workoutMinutesToday} / ${state.activeMinutesGoal} ${stringResource(R.string.minutes_short)}"
-                )
-                RingLegendRow(
-                    palette = palette,
-                    color = HealthAccent.violet,
-                    label = stringResource(R.string.dashboard_rings_calories),
-                    value = "${state.caloriesKcal.toInt()} / ${state.caloriesGoalKcal.toInt()} " + stringResource(R.string.kcal_unit)
-                )
-            }
-        }
-    }
-}
-
-private data class RingSpec(val progress: Float, val color: Color)
-
-@Composable
-private fun ActivityRings(
-    rings: List<RingSpec>,
-    trackColor: Color,
-    modifier: Modifier = Modifier,
-    strokeWidth: Dp = 13.dp,
-    gap: Dp = 5.dp
-) {
-    // Animated per-ring rather than a single shared animation so each ring
-    // visibly sweeps in on its own, matching the layered feel of Apple's
-    // activity rings instead of three rings snapping to their values at once.
-    val animatedProgresses = rings.map { ring ->
-        animateFloatAsState(
-            targetValue = ring.progress.coerceIn(0f, 1f),
-            animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-            label = "activityRingProgress"
-        ).value
-    }
-    Canvas(modifier = modifier) {
-        val strokePx = strokeWidth.toPx()
-        val gapPx = gap.toPx()
-        rings.forEachIndexed { index, ring ->
-            val inset = index * (strokePx + gapPx)
-            val diameter = size.minDimension - inset * 2f
-            val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
-            val arcSize = Size(diameter, diameter)
-            drawArc(
-                color = trackColor,
-                startAngle = -90f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokePx, cap = StrokeCap.Round)
-            )
-            val sweep = 360f * animatedProgresses[index]
-            if (sweep > 0f) {
-                drawArc(
-                    color = ring.color,
-                    startAngle = -90f,
-                    sweepAngle = sweep,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RingLegendRow(palette: BitPalette, color: Color, label: String, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(9.dp)
-                .clip(RoundedCornerShape(50))
-                .background(color)
-        )
-        Spacer(Modifier.width(8.dp))
-        Column {
-            Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
-            Text(value, color = palette.text, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-        }
-    }
 }
 
 /**

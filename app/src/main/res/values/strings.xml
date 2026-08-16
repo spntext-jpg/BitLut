@@ -152,7 +152,6 @@
     <string name="steps_unit">steps</string>
     <string name="steps_goal_reached">Goal reached today 🎉</string>
     <string name="steps_goal_remaining">%1$s to go</string>
-    <string name="dashboard_rings_title">Activity rings</string>
     <string name="dashboard_rings_steps">Steps</string>
     <string name="dashboard_rings_active_minutes">Active minutes</string>
     <string name="dashboard_rings_calories">Calories</string>

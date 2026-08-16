@@ -9,9 +9,21 @@ import com.openhealth.sync.data.remote.HuaweiConfig
  * hero card (Steps itself is not part of this list -- it always stays first,
  * it's the screen's anchor). Order here is only the fallback DEFAULT_ORDER;
  * the person's actual order/visibility lives in DashboardCardLayoutPrefs.
+ *
+ * ACTIVITY_RINGS was removed (2026-08): steps synced reliably, but Huawei's
+ * per-category scope approval left activeCalories denied on real devices
+ * far more often than not (see CLAUDE.md / HuaweiAuthFailureReason), and
+ * active-minutes only has data on days with a logged workout session rather
+ * than ambient activity -- so in practice 2 of the 3 rings usually sat empty
+ * regardless of how active the day actually was. A 3-ring visual promising
+ * three tracked metrics when only one reliably has data was worse than not
+ * showing it at all. Existing users' saved card order/hidden-state strings
+ * that still mention "activity_rings" are handled gracefully already --
+ * DashboardCardType.fromKey() returns null for unknown keys and
+ * allCardsForEditor()/orderedVisibleCards() already drop those via
+ * mapNotNull/filter, so no migration was needed for this removal.
  */
 enum class DashboardCardType(val key: String) {
-    ACTIVITY_RINGS("activity_rings"),
     WORKOUT_LATEST("workout_latest"),
     WORKOUT_PREVIOUS("workout_previous"),
     LAST_7_DAYS("last_7_days"),
@@ -20,7 +32,7 @@ enum class DashboardCardType(val key: String) {
 
     companion object {
         val DEFAULT_ORDER: List<DashboardCardType> = listOf(
-            ACTIVITY_RINGS, WORKOUT_LATEST, WORKOUT_PREVIOUS, LAST_7_DAYS, PERSONAL_RECORDS, STREAK
+            WORKOUT_LATEST, WORKOUT_PREVIOUS, LAST_7_DAYS, PERSONAL_RECORDS, STREAK
         )
 
         fun fromKey(key: String): DashboardCardType? = values().firstOrNull { it.key == key }

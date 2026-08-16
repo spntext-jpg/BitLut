@@ -75,8 +75,11 @@ data class DashboardUiState(
 ) {
     val stepsProgress: Float get() = (stepsToday.toFloat() / stepsGoal.toFloat()).coerceIn(0f, 1f)
     val distanceProgress: Float get() = (distanceMeters / distanceGoalMeters).toFloat().coerceIn(0f, 1f)
-    val activeMinutesProgress: Float get() = (workoutMinutesToday.toFloat() / activeMinutesGoal.toFloat()).coerceIn(0f, 1f)
-    val caloriesProgress: Float get() = (caloriesKcal / caloriesGoalKcal).toFloat().coerceIn(0f, 1f)
+    // activeMinutesProgress/caloriesProgress removed (2026-08): their only
+    // consumer was the removed activity-rings card (see DashboardCardType's
+    // doc comment in DashboardCardLayoutPrefs.kt for why). workoutMinutesToday
+    // and caloriesKcal themselves are untouched -- still real, synced data,
+    // just no longer paired with a goal-progress fraction nothing reads.
 
     /** True only when we've actually checked permissions and confirmed they're
      *  missing -- never true purely because we're still loading. The UI should
