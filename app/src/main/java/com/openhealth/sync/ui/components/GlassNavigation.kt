@@ -30,11 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.openhealth.sync.ui.theme.AugustColor
 import com.openhealth.sync.ui.theme.AugustElevation
+import com.openhealth.sync.ui.theme.AugustGlass
 import com.openhealth.sync.ui.theme.AugustMotion
 import com.openhealth.sync.ui.theme.AugustRadius
 
@@ -53,16 +55,23 @@ private const val SECRET_TAP_COUNT = 5
 private const val SECRET_TAP_WINDOW_MS = 2000L
 
 /**
- * August design system integration, phase 4 (see AugustTokens.kt). This
- * whole file was the app's last and heaviest "Glass 2.0" holdout -- a
- * 3-stop translucent gradient shell, two accent-tinted radial glow layers,
- * a specular top-highlight line, a 40dp accent-tinted shadow, an icon that
- * tilted +/-13deg and spun 360deg on tap, and five separate bouncy-spring
- * animations across the two button composables. Rewritten against section
- * 9's literal "Mobile nav: Fixed floating bar, dark glass surface" plus the
- * blanket rules already applied elsewhere in this integration: one shadow
- * per component (6.4), no bounce/elastic overshoot and motion that confirms
- * state rather than performing for its own sake (7).
+ * August design system integration, phase 4 (see AugustTokens.kt), plus a
+ * neoglassmorphism 2.0 pass (2026-08, see AugustGlass in AugustTokens.kt
+ * for what that means here and why it's confined to this one file). This
+ * file was the app's last and heaviest "Glass 2.0" holdout before phase 4
+ * -- a 3-stop translucent gradient shell, two accent-tinted radial glow
+ * layers, a specular top-highlight line, a 40dp accent-tinted shadow, an
+ * icon that tilted +/-13deg and spun 360deg on tap, and five separate
+ * bouncy-spring animations across the two button composables. Phase 4
+ * rewrote it against section 9's literal "Mobile nav: Fixed floating bar,
+ * dark glass surface" plus the blanket rules already applied elsewhere in
+ * this integration: one shadow per component (6.4), no bounce/elastic
+ * overshoot and motion that confirms state rather than performing for its
+ * own sake (7). This pass keeps every one of those rules -- the shell
+ * still has exactly one shadow, buttons still use a plain tween, nothing
+ * bounces -- and adds real glass depth on top: a two-layer tinted
+ * background instead of one flat translucent color, and a specular
+ * gradient-stroke border instead of a flat one.
  *
  * "Dark glass surface" is why this shell is Navy-based regardless of the
  * app's own light/dark setting -- unlike every other surface in this app
@@ -111,8 +120,13 @@ internal fun Glass20BottomNavigation(
                     spotColor = AugustElevation.HeroShadowColor.copy(alpha = AugustElevation.HeroShadowAlpha)
                 )
                 .clip(shellShape)
-                .background(AugustColor.Navy.copy(alpha = 0.94f))
-                .border(width = 1.dp, color = AugustColor.BorderDark, shape = shellShape)
+                .background(AugustGlass.ShellUndertint)
+                .background(Brush.verticalGradient(listOf(AugustGlass.ShellTint, Color.Transparent)))
+                .border(
+                    width = AugustGlass.ShellBorderWidth,
+                    brush = Brush.verticalGradient(listOf(AugustGlass.SpecularTop, AugustGlass.SpecularBottom)),
+                    shape = shellShape
+                )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Row(
