@@ -30,13 +30,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.openhealth.sync.ui.theme.AugustColor
 import com.openhealth.sync.ui.theme.AugustElevation
-import com.openhealth.sync.ui.theme.AugustGlass
 import com.openhealth.sync.ui.theme.AugustMotion
 import com.openhealth.sync.ui.theme.AugustRadius
 
@@ -47,31 +45,35 @@ import com.openhealth.sync.ui.theme.AugustRadius
  * Settings visits over a day never accidentally trigger it -- only a
  * deliberate rapid-tap gesture does.
  *
- * Lives at the [Glass20BottomNavigation] level (not inside
- * [Glass20NavButton]) so it can distinguish which tab was tapped without
+ * Lives at the [AugustBottomNav] level (not inside
+ * [AugustNavButton]) so it can distinguish which tab was tapped without
  * needing every nav button to know about this feature.
  */
 private const val SECRET_TAP_COUNT = 5
 private const val SECRET_TAP_WINDOW_MS = 2000L
 
 /**
- * August design system integration, phase 4 (see AugustTokens.kt), plus a
- * neoglassmorphism 2.0 pass (2026-08, see AugustGlass in AugustTokens.kt
- * for what that means here and why it's confined to this one file). This
+ * August design system integration, phase 4 (see AugustTokens.kt). This
  * file was the app's last and heaviest "Glass 2.0" holdout before phase 4
  * -- a 3-stop translucent gradient shell, two accent-tinted radial glow
  * layers, a specular top-highlight line, a 40dp accent-tinted shadow, an
  * icon that tilted +/-13deg and spun 360deg on tap, and five separate
- * bouncy-spring animations across the two button composables. Phase 4
- * rewrote it against section 9's literal "Mobile nav: Fixed floating bar,
- * dark glass surface" plus the blanket rules already applied elsewhere in
- * this integration: one shadow per component (6.4), no bounce/elastic
- * overshoot and motion that confirms state rather than performing for its
- * own sake (7). This pass keeps every one of those rules -- the shell
- * still has exactly one shadow, buttons still use a plain tween, nothing
- * bounces -- and adds real glass depth on top: a two-layer tinted
- * background instead of one flat translucent color, and a specular
- * gradient-stroke border instead of a flat one.
+ * bouncy-spring animations across the two button composables. Rewritten
+ * against section 9's literal "Mobile nav: Fixed floating bar, dark glass
+ * surface" plus the blanket rules already applied elsewhere in this
+ * integration: one shadow per component (6.4), no bounce/elastic overshoot
+ * and motion that confirms state rather than performing for its own sake
+ * (7).
+ *
+ * A neoglassmorphism 2.0 pass (multi-layer tint, specular gradient border)
+ * was tried and reverted (2026-08) -- rejected on sight as not reading as
+ * real glass, which tracks: without genuine backdrop blur-through (the
+ * Dashboard content actually blurring behind the bar), tint-and-gradient
+ * tricks alone don't produce what "glassmorphism" actually means visually,
+ * they produce a tinted panel. Real backdrop blur needs either a shader/
+ * blur library (a new Gradle dependency) or capturing and re-compositing
+ * the content layer behind the Scaffold -- a deliberate, larger decision,
+ * not something to guess at a third time without a way to see the result.
  *
  * "Dark glass surface" is why this shell is Navy-based regardless of the
  * app's own light/dark setting -- unlike every other surface in this app
@@ -83,7 +85,7 @@ private const val SECRET_TAP_WINDOW_MS = 2000L
  * theme and stop matching a shell that no longer does).
  */
 @Composable
-internal fun Glass20BottomNavigation(
+internal fun AugustBottomNav(
     selected: MainTab,
     onSelected: (MainTab) -> Unit,
     onSecretLogViewerTriggered: () -> Unit = {},
@@ -120,13 +122,8 @@ internal fun Glass20BottomNavigation(
                     spotColor = AugustElevation.HeroShadowColor.copy(alpha = AugustElevation.HeroShadowAlpha)
                 )
                 .clip(shellShape)
-                .background(AugustGlass.ShellUndertint)
-                .background(Brush.verticalGradient(listOf(AugustGlass.ShellTint, Color.Transparent)))
-                .border(
-                    width = AugustGlass.ShellBorderWidth,
-                    brush = Brush.verticalGradient(listOf(AugustGlass.SpecularTop, AugustGlass.SpecularBottom)),
-                    shape = shellShape
-                )
+                .background(AugustColor.Navy.copy(alpha = 0.94f))
+                .border(width = 1.dp, color = AugustColor.BorderDark, shape = shellShape)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Row(
@@ -137,13 +134,13 @@ internal fun Glass20BottomNavigation(
                 // since History was removed, so this is now an explicit
                 // 3-slot row -- tab, big centered refresh button, tab --
                 // instead of a generic MainTab.values() loop.
-                Glass20NavButton(
+                AugustNavButton(
                     tab = MainTab.Today,
                     selected = selected == MainTab.Today,
                     onClick = { onSelected(MainTab.Today) }
                 )
-                Glass20RefreshButton(onClick = onRefreshClick)
-                Glass20NavButton(
+                AugustRefreshButton(onClick = onRefreshClick)
+                AugustNavButton(
                     tab = MainTab.Settings,
                     selected = selected == MainTab.Settings,
                     onClick = {
@@ -166,7 +163,7 @@ internal fun Glass20BottomNavigation(
  * AugustColor.Accent rather than a fourth hue invented to stand apart from
  * activity/mind/violet (which are themselves now Accent/Accent Dark, see
  * HealthAccent in FinalBitLutShell.kt). Phase 4 widened its use to also
- * fill the selected tab in Glass20NavButton -- "action" and "selection"
+ * fill the selected tab in AugustNavButton -- "action" and "selection"
  * are the same one-purple language under this system, not two competing
  * accents.
  */
@@ -191,7 +188,7 @@ private val NavAccent = AugustColor.Accent
  * Primary button does.
  */
 @Composable
-private fun Glass20RefreshButton(onClick: () -> Unit) {
+private fun AugustRefreshButton(onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val shape = remember { RoundedCornerShape(30.dp) }
@@ -234,7 +231,7 @@ private fun Glass20RefreshButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun Glass20NavButton(
+private fun AugustNavButton(
     tab: MainTab,
     selected: Boolean,
     onClick: () -> Unit

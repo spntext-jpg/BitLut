@@ -1,17 +1,8 @@
 package com.openhealth.sync
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 
-import android.content.Context
-import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -31,21 +21,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -65,16 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
-import androidx.health.connect.client.PermissionController
-import androidx.work.Constraints
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
-import com.openhealth.sync.data.worker.SyncWorker
 import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.HuaweiAuthFailureReason
 import com.openhealth.sync.data.PersonalRecord
@@ -82,20 +58,14 @@ import com.openhealth.sync.data.StreakState
 import com.openhealth.sync.data.WeekComparison
 import com.openhealth.sync.config.DashboardWidget
 import com.openhealth.sync.config.HealthDataSource
-import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardUiState
-import com.openhealth.sync.ui.DashboardViewModel
 import com.openhealth.sync.ui.SyncUiState
-import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.AugustColor
 import com.openhealth.sync.ui.theme.AugustElevation
 import com.openhealth.sync.ui.theme.AugustMotion
 import com.openhealth.sync.ui.theme.AugustRadius
-import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 import com.openhealth.sync.util.AppLogger
 import java.util.Locale
-import java.util.concurrent.TimeUnit
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.heightIn
@@ -106,7 +76,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.rounded.TrendingUp
-import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material.icons.rounded.CloudSync
@@ -137,7 +106,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
@@ -193,7 +161,7 @@ fun FinalBitLutShell(
     Scaffold(
         containerColor = palette.systemBackground,
         bottomBar = {
-            Glass20BottomNavigation(
+            AugustBottomNav(
                 selected = selected,
                 onSelected = { selected = it },
                 onSecretLogViewerTriggered = { showLogViewer = true },
@@ -1996,14 +1964,17 @@ private fun WidgetVisibilityRow(
  * outright: computed at 1.14:1, versus the ~4.6-6.7:1 the two purple tokens
  * below measure at on both this app's card surfaces), so it's deliberately
  * deferred to the next integration phase rather than shipped unverified.
+ *
+ * cardLight/cardDark/systemLight were removed (2026-08 audit): all three
+ * were leftover pre-August values (cardDark's #1C1C1E and systemLight's
+ * #F2F2F7 are literally the old near-black/iOS-gray palette this
+ * integration replaced) with zero references anywhere in the app --
+ * verified by grep, not assumed from the names looking unused.
  */
 internal object HealthAccent {
     val activity = AugustColor.Accent
     val violet = AugustColor.AccentDark
     val mind = AugustColor.AccentDark
-    val cardLight = Color.White
-    val cardDark = Color(0xCC1C1C1E)
-    val systemLight = Color(0xFFF2F2F7)
 }
 
 /**
