@@ -577,6 +577,10 @@ class GoogleHealthManager(
                 daysBack = DASHBOARD_HISTORY_DAYS,
                 workouts = recentWorkouts
             )
+            val displayedWorkouts = enrichDisplayedWorkoutMetrics(
+                client = client,
+                workouts = activityWindow.workouts.take(2)
+            )
             val today = LocalDate.now()
             val todayActivity = activityWindow.dailyActivity.firstOrNull { it.date == today }
 
@@ -586,7 +590,7 @@ class GoogleHealthManager(
                 caloriesKcal = todayActivity?.caloriesKcal ?: 0.0,
                 workoutMinutesToday = todayActivity?.workoutMinutes ?: 0L,
                 activeHoursToday = 0,
-                recentWorkouts = activityWindow.workouts.take(2),
+                recentWorkouts = displayedWorkouts,
                 dailyActivity = activityWindow.dailyActivity
             )
         } catch (e: CancellationException) {
@@ -598,6 +602,79 @@ class GoogleHealthManager(
         } catch (e: Exception) {
             AppLogger.e(TAG, "readDashboardSnapshot failed; preserving previous UI snapshot: ${e.message}", e)
             null
+        }
+    }
+
+    /**
+     * Enriches only the workout cards that are actually displayed.
+     *
+     * Raw activity records are still used for the 30-day dashboard ledger, but
+     * they are not a reliable primary source for per-session metrics: a bounded
+     * newest-first page can legitimately omit records from an older workout.
+     * Health Connect's aggregate API is designed for this exact case and
+     * computes totals inside the exercise interval without paging raw records.
+     *
+     * The dashboard shows two workouts, so this adds at most two provider calls
+     * per dashboard snapshot and keeps the quota-storm fix intact.
+     */
+    private suspend fun enrichDisplayedWorkoutMetrics(
+        client: HealthConnectClient,
+        workouts: List<ActivitySessionData>
+    ): List<ActivitySessionData> = workouts.take(2).map { workout ->
+        if (workout.endTimeMs <= workout.startTimeMs) return@map workout
+
+        val start = Instant.ofEpochMilli(workout.startTimeMs)
+        val end = Instant.ofEpochMilli(workout.endTimeMs)
+
+        try {
+            val aggregate = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(
+                        StepsRecord.COUNT_TOTAL,
+                        DistanceRecord.DISTANCE_TOTAL,
+                        ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL,
+                        ElevationGainedRecord.ELEVATION_GAINED_TOTAL
+                    ),
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                    dataOriginFilter = selectedDataOrigins()
+                )
+            )
+
+            val distanceMeters = aggregate[DistanceRecord.DISTANCE_TOTAL]
+                ?.inMeters
+                ?.takeIf { it > 0.0 }
+            val activeCaloriesKcal = aggregate[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]
+                ?.inKilocalories
+                ?.takeIf { it > 0.0 }
+            val elevationMeters = aggregate[ElevationGainedRecord.ELEVATION_GAINED_TOTAL]
+                ?.inMeters
+                ?.takeIf { it > 0.0 }
+            val steps = aggregate[StepsRecord.COUNT_TOTAL]
+                ?.takeIf { it > 0L }
+
+            AppLogger.i(
+                TAG,
+                "Workout metrics aggregated: type=${workout.exerciseType} " +
+                    "start=${workout.startTimeMs} end=${workout.endTimeMs} " +
+                    "distanceMeters=${distanceMeters ?: 0.0} " +
+                    "activeCaloriesKcal=${activeCaloriesKcal ?: 0.0} " +
+                    "elevationMeters=${elevationMeters ?: 0.0} steps=${steps ?: 0L}"
+            )
+
+            workout.copy(
+                distanceMeters = distanceMeters ?: workout.distanceMeters,
+                activeCaloriesKcal = activeCaloriesKcal ?: workout.activeCaloriesKcal,
+                elevationMeters = elevationMeters ?: workout.elevationMeters,
+                steps = steps ?: workout.steps
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.w(
+                TAG,
+                "Workout metric aggregation failed for ${workout.startTimeMs}..${workout.endTimeMs}: ${e.message}"
+            )
+            workout
         }
     }
 
@@ -805,10 +882,10 @@ class GoogleHealthManager(
                 workout
             } else {
                 workout.copy(
-                    distanceMeters = metrics.distanceMeters.takeIf { it > 0.0 } ?: workout.distanceMeters,
-                    activeCaloriesKcal = metrics.activeCaloriesKcal.takeIf { it > 0.0 } ?: workout.activeCaloriesKcal,
-                    elevationMeters = metrics.elevationMeters.takeIf { it > 0.0 } ?: workout.elevationMeters,
-                    steps = metrics.steps.toLong().takeIf { it > 0L } ?: workout.steps
+                    distanceMeters = workout.distanceMeters ?: metrics.distanceMeters.takeIf { it > 0.0 },
+                    activeCaloriesKcal = workout.activeCaloriesKcal ?: metrics.activeCaloriesKcal.takeIf { it > 0.0 },
+                    elevationMeters = workout.elevationMeters ?: metrics.elevationMeters.takeIf { it > 0.0 },
+                    steps = workout.steps ?: metrics.steps.toLong().takeIf { it > 0L }
                 )
             }
         }
