@@ -206,11 +206,7 @@ fun FinalBitLutShell(
                     onWidgetVisibilityChanged = onWidgetVisibilityChanged,
                     onDataSourceSelected = onDataSourceSelected,
                     stepsGoal = dashboardState.stepsGoal,
-                    activeMinutesGoal = dashboardState.activeMinutesGoal,
-                    caloriesGoalKcal = dashboardState.caloriesGoalKcal,
-                    onStepsGoalChanged = onStepsGoalChanged,
-                    onActiveMinutesGoalChanged = onActiveMinutesGoalChanged,
-                    onCaloriesGoalChanged = onCaloriesGoalChanged)
+                    onStepsGoalChanged = onStepsGoalChanged)
             }
         }
     }
@@ -822,131 +818,69 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
 }
 
 /**
- * Four deliberately type-aware metrics per workout. Values are either read
- * from already-imported Health Connect streams or derived from real distance +
- * duration; unavailable values render as an em dash instead of being invented.
+ * Six consistent metrics on every workout card. Values come from real imported
+ * Health Connect data; average speed is derived only from real distance and
+ * duration. Missing source values remain an em dash.
  */
 private data class WorkoutMetricDisplay(val label: String, val value: String)
 
 @Composable
-private fun workoutMetricDisplays(session: ActivitySessionData, durationMinutes: Long): List<WorkoutMetricDisplay> {
+private fun workoutMetricDisplays(
+    session: ActivitySessionData,
+    durationMinutes: Long
+): List<WorkoutMetricDisplay> {
     val noData = stringResource(R.string.no_data_short)
     val distanceMeters = session.distanceMeters?.takeIf { it > 0.0 }
     val distanceKm = distanceMeters?.div(1000.0)
     val calories = session.activeCaloriesKcal?.takeIf { it > 0.0 }
     val elevation = session.elevationMeters?.takeIf { it > 0.0 }
     val steps = session.steps?.takeIf { it > 0L }
-    val durationHours = (session.endTimeMs - session.startTimeMs).toDouble() / 3_600_000.0
-    val averageSpeedKmh = if (distanceKm != null && durationHours > 0.0 && distanceMeters >= MIN_DISTANCE_METERS_FOR_SPEED) {
+    val durationHours =
+        (session.endTimeMs - session.startTimeMs).toDouble() / 3_600_000.0
+    val averageSpeedKmh = if (
+        distanceKm != null &&
+        durationHours > 0.0 &&
+        distanceMeters >= MIN_DISTANCE_METERS_FOR_SPEED
+    ) {
         distanceKm / durationHours
-    } else null
-    val paceMinutesPerKm = if (distanceKm != null && distanceMeters >= MIN_DISTANCE_METERS_FOR_PACE && durationMinutes > 0L) {
-        durationMinutes.toDouble() / distanceKm
-    } else null
-    val swimPaceMinutesPer100m = if (distanceMeters != null && distanceMeters >= MIN_DISTANCE_METERS_FOR_SWIM_PACE && durationMinutes > 0L) {
-        durationMinutes.toDouble() / (distanceMeters / 100.0)
-    } else null
-
-    @Composable
-    fun duration() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_duration_label),
-        stringResource(R.string.workout_duration_value, durationMinutes)
-    )
-    @Composable
-    fun distance() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_distance_label),
-        distanceKm?.let { stringResource(R.string.distance_today_value, formatOneDecimal(it)) } ?: noData
-    )
-    @Composable
-    fun caloriesMetric() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_calories_label),
-        calories?.let { stringResource(R.string.workout_calories_value, it.toLong()) } ?: noData
-    )
-    @Composable
-    fun elevationMetric() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_elevation_label),
-        elevation?.let { stringResource(R.string.workout_elevation_value, it.toLong()) } ?: noData
-    )
-    @Composable
-    fun stepsMetric() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_steps_label),
-        steps?.let(::formatNumber) ?: noData
-    )
-    @Composable
-    fun started() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_started_label),
-        formatWorkoutDateTime(session.startTimeMs)
-    )
-    @Composable
-    fun ended() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_ended_label),
-        formatWorkoutClockTime(session.endTimeMs)
-    )
-    @Composable
-    fun pace() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_pace_label),
-        paceMinutesPerKm?.let { stringResource(R.string.workout_pace_value, formatPace(it)) } ?: noData
-    )
-    @Composable
-    fun speed() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_speed_label),
-        averageSpeedKmh?.let { stringResource(R.string.workout_speed_value, formatOneDecimal(it)) } ?: noData
-    )
-    @Composable
-    fun swimPace() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_swim_pace_label),
-        swimPaceMinutesPer100m?.let { stringResource(R.string.workout_swim_pace_value, formatPace(it)) } ?: noData
-    )
-
-    fun prefer(primary: WorkoutMetricDisplay, fallback: WorkoutMetricDisplay): WorkoutMetricDisplay =
-        if (primary.value != noData) primary else fallback
-
-    return when (session.exerciseType) {
-        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
-        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> listOf(
-            duration(),
-            prefer(distance(), stepsMetric()),
-            prefer(pace(), started()),
-            prefer(caloriesMetric(), ended())
-        )
-
-        ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> listOf(
-            duration(),
-            prefer(distance(), started()),
-            prefer(speed(), ended()),
-            prefer(elevationMetric(), stepsMetric())
-        )
-
-        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> listOf(
-            duration(),
-            prefer(distance(), stepsMetric()),
-            prefer(elevationMetric(), started()),
-            prefer(caloriesMetric(), ended())
-        )
-
-        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
-        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> listOf(
-            duration(),
-            prefer(distance(), started()),
-            prefer(swimPace(), ended()),
-            prefer(caloriesMetric(), started())
-        )
-
-        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
-        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING ->
-            listOf(duration(), prefer(caloriesMetric(), stepsMetric()), started(), ended())
-
-        ExerciseSessionRecord.EXERCISE_TYPE_YOGA,
-        ExerciseSessionRecord.EXERCISE_TYPE_PILATES ->
-            listOf(duration(), started(), ended(), prefer(caloriesMetric(), stepsMetric()))
-
-        else -> listOf(
-            duration(),
-            prefer(distance(), stepsMetric()),
-            started(),
-            prefer(caloriesMetric(), ended())
-        )
+    } else {
+        null
     }
+
+    return listOf(
+        WorkoutMetricDisplay(
+            stringResource(R.string.workout_stat_duration_label),
+            stringResource(R.string.workout_duration_value, durationMinutes)
+        ),
+        WorkoutMetricDisplay(
+            stringResource(R.string.workout_stat_distance_label),
+            distanceKm?.let {
+                stringResource(R.string.distance_today_value, formatOneDecimal(it))
+            } ?: noData
+        ),
+        WorkoutMetricDisplay(
+            stringResource(R.string.workout_stat_speed_label),
+            averageSpeedKmh?.let {
+                stringResource(R.string.workout_speed_value, formatOneDecimal(it))
+            } ?: noData
+        ),
+        WorkoutMetricDisplay(
+            stringResource(R.string.workout_stat_steps_label),
+            steps?.let(::formatNumber) ?: noData
+        ),
+        WorkoutMetricDisplay(
+            stringResource(R.string.workout_stat_calories_label),
+            calories?.let {
+                stringResource(R.string.workout_calories_value, it.toLong())
+            } ?: noData
+        ),
+        WorkoutMetricDisplay(
+            stringResource(R.string.workout_stat_elevation_label),
+            elevation?.let {
+                stringResource(R.string.workout_elevation_value, it.toLong())
+            } ?: noData
+        )
+    )
 }
 
 @Composable
@@ -1055,7 +989,7 @@ private fun WorkoutStatsGrid(
     metrics: List<WorkoutMetricDisplay>
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        metrics.take(4).chunked(2).forEach { rowMetrics ->
+        metrics.take(6).chunked(2).forEach { rowMetrics ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1532,17 +1466,13 @@ private fun SettingsScreen(
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit,
     onDataSourceSelected: (HealthDataSource) -> Unit,
     stepsGoal: Long,
-    activeMinutesGoal: Int,
-    caloriesGoalKcal: Double,
-    onStepsGoalChanged: (Long) -> Unit,
-    onActiveMinutesGoalChanged: (Int) -> Unit,
-    onCaloriesGoalChanged: (Double) -> Unit
+    onStepsGoalChanged: (Long) -> Unit
 ) {
     var showDataScopes by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
-    // Settings intentionally contains only source selection,
-    // permissions/connections, import/export, and trust information. Daily
-    // goals were removed because they are outside BitLut's transfer mission.
+    // Settings exposes only the steps goal because it is the only daily goal
+    // currently used by the product. Other health targets must not exist as
+    // decorative controls without downstream behavior.
     Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
@@ -1643,7 +1573,11 @@ private fun SettingsScreen(
             fontWeight = FontWeight.ExtraBold,
             fontSize = 18.sp
         )
-        SoftCard(palette = palette, accent = HealthAccent.activity, tintWithAccent = true) {
+        SoftCard(
+            palette = palette,
+            accent = HealthAccent.activity,
+            tintWithAccent = true
+        ) {
             Text(
                 text = stringResource(R.string.goals_section_body),
                 color = palette.secondaryText,
@@ -1658,40 +1592,21 @@ private fun SettingsScreen(
                 label = stringResource(R.string.dashboard_rings_steps),
                 valueText = formatNumber(stepsGoal),
                 onDecrease = {
-                    onStepsGoalChanged((stepsGoal - STEPS_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.STEPS_GOAL_RANGE))
+                    onStepsGoalChanged(
+                        (stepsGoal - STEPS_GOAL_STEP).coerceIn(
+                            com.openhealth.sync.config.GoalPrefs.STEPS_GOAL_RANGE
+                        )
+                    )
                 },
                 onIncrease = {
-                    onStepsGoalChanged((stepsGoal + STEPS_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.STEPS_GOAL_RANGE))
-                }
-            )
-            Spacer(Modifier.height(12.dp))
-            GoalStepperRow(
-                palette = palette,
-                accent = HealthAccent.mind,
-                label = stringResource(R.string.dashboard_rings_active_minutes),
-                valueText = "$activeMinutesGoal ${stringResource(R.string.minutes_short)}",
-                onDecrease = {
-                    onActiveMinutesGoalChanged((activeMinutesGoal - ACTIVE_MINUTES_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE))
-                },
-                onIncrease = {
-                    onActiveMinutesGoalChanged((activeMinutesGoal + ACTIVE_MINUTES_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.ACTIVE_MINUTES_GOAL_RANGE))
-                }
-            )
-            Spacer(Modifier.height(12.dp))
-            GoalStepperRow(
-                palette = palette,
-                accent = HealthAccent.violet,
-                label = stringResource(R.string.dashboard_rings_calories),
-                valueText = "${caloriesGoalKcal.toInt()} ${stringResource(R.string.kcal_unit)}",
-                onDecrease = {
-                    onCaloriesGoalChanged((caloriesGoalKcal - CALORIES_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.CALORIES_GOAL_RANGE))
-                },
-                onIncrease = {
-                    onCaloriesGoalChanged((caloriesGoalKcal + CALORIES_GOAL_STEP).coerceIn(com.openhealth.sync.config.GoalPrefs.CALORIES_GOAL_RANGE))
+                    onStepsGoalChanged(
+                        (stepsGoal + STEPS_GOAL_STEP).coerceIn(
+                            com.openhealth.sync.config.GoalPrefs.STEPS_GOAL_RANGE
+                        )
+                    )
                 }
             )
         }
-
         Text(
             text = stringResource(R.string.workout_filter_section_title),
             color = palette.text,
@@ -1953,12 +1868,9 @@ private fun DataSourceToggleRow(
     if (!isLast) Spacer(Modifier.height(10.dp))
 }
 
-/** Step sizes for the +/- goal editor in Settings. Values stay within GoalPrefs' own ranges via coerceIn at the call site. */
+/** Step size for the only active daily goal editor in Settings. */
 private const val STEPS_GOAL_STEP = 500L
-private const val ACTIVE_MINUTES_GOAL_STEP = 5
-private const val CALORIES_GOAL_STEP = 50.0
-
-/** Label + a compact -/value/+ stepper, used by the three goal rows in Settings. */
+/** Label + a compact -/value/+ stepper for the steps goal. */
 @Composable
 private fun GoalStepperRow(
     palette: BitPalette,

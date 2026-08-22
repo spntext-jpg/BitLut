@@ -5,107 +5,131 @@
 <h1 align="center">BitLut</h1>
 
 <p align="center">
-  <strong>Open-source bridge from HUAWEI Health to Android Health Connect</strong>
+  <strong>Открытый Android-мост между HUAWEI Health и Android Health Connect</strong>
 </p>
 
-BitLut is a free Android application that reads supported activity data from
-HUAWEI Health through HUAWEI Health Kit and writes it to Android Health Connect.
-The app is designed for people who use Huawei wearables but want their activity
-data to be available to other Health Connect-compatible apps.
+<p align="center">
+  Локально на устройстве · Без аккаунта · Без рекламы · Без выдуманных данных
+</p>
 
-BitLut works locally on the device. It has no BitLut account, no advertising,
-no cloud backend, and no health-data selling.
+---
 
-## Supported activity scope
+## Что такое BitLut
 
-The production scope is intentionally activity-only:
-
-- steps
-- distance
-- floors climbed / elevation gain
-- active calories when the approved Huawei scope is available
-- exercise / activity sessions
-
-Sleep, heart rate, SpO2, HRV, stress, and other biometric categories are outside
-the current product scope and must not be added without an explicit permission
-and product decision.
-
-## How synchronization works
+BitLut переносит поддерживаемые данные активности из **HUAWEI Health** в
+**Android Health Connect**, чтобы ими могли пользоваться другие совместимые
+приложения.
 
 ```text
 HUAWEI Health
-    |
-    | HUAWEI Health Kit (read-only)
-    v
-BitLut
-    |
-    | validated activity records
-    v
-Android Health Connect
-    |
-    v
-Other Health Connect-compatible apps
+      ↓
+   BitLut
+      ↓
+Health Connect
+      ↓
+Совместимые приложения
 ```
 
-BitLut never fabricates health data. Only real source-derived records may be
-written to Health Connect.
+BitLut не создаёт собственный профиль пользователя, не отправляет данные на
+сервер BitLut и не подменяет отсутствующие показатели тестовыми значениями.
 
-The app also supports bounded local import of supported HUAWEI export data,
-dashboard snapshots, CSV export, background synchronization, and a home-screen
-widget.
+## Что синхронизируется
 
-## Current engineering baseline
+| Категория | Статус |
+| --- | --- |
+| Шаги | Поддерживается |
+| Дистанция | Поддерживается, если HUAWEI Health отдаёт реальные записи |
+| Набор высоты | Поддерживается при наличии данных |
+| Активные калории | Поддерживается при доступном Huawei scope |
+| Тренировки / активности | Поддерживается при доступном Huawei scope |
+| Этажи | Huawei SDK не предоставляет подходящий DataType в текущей интеграции |
 
-As of 2026-08-22:
+Сон, пульс, SpO2, HRV, стресс и другие биометрические категории не входят в
+текущий продуктовый scope.
 
-- Kotlin Gradle plugin remains on the project's stable 2.0.21 baseline.
-- Android Gradle Plugin is 8.7.3 and Gradle is 8.9.
-- Java/JVM target is 17.
-- The debug build is green in GitHub Codespaces.
-- Haze has been removed. UI blur must not introduce a dependency-driven
-  Kotlin/toolchain migration.
-- The UI uses the August v3 semantic design system.
-- Primary actions use Lime with Ink content.
-- Purple is reserved for focus and secondary interaction details.
-- Navy is the dark architectural anchor.
-- The bottom navigation uses native Compose surfaces rather than Haze blur.
+## Карточки тренировок
 
-## Architecture
+Две последние тренировки используют одинаковую структуру из шести показателей:
 
-Key runtime components:
+1. **Длительность**
+2. **Дистанция**
+3. **Средняя скорость**
+4. **Шаги**
+5. **Калории**
+6. **Набор высоты**
 
-- `HuaweiHealthManager` — HUAWEI Health Kit authorization and approved activity reads.
-- `GoogleHealthManager` — Health Connect reads and writes.
-- `SyncOrchestrator` — immediate/manual synchronization coordination.
-- `BackgroundSyncScheduler` / `SyncWorker` — WorkManager scheduling and execution.
-- `HuaweiExportParser` — bounded local archive import.
-- `DashboardSnapshotCache` — last-known dashboard state for resilient cold launch.
-- `AchievementsStore` — local activity records and achievements.
-- `DashboardViewModel` — dashboard aggregation and UI state.
-- `FinalBitLutShell` — main Compose application shell.
-- `AugustTokens` / `BitLutExpressiveTheme` — canonical UI token/theme layer.
+Значения берутся из реальных данных Health Connect, уже импортированных BitLut.
+Средняя скорость рассчитывается только из реальной дистанции и длительности.
 
-## Design system: August v3
+Если источник не содержит конкретный показатель, BitLut показывает `—`.
+Приложение не восстанавливает отсутствующую дистанцию по шагам, не оценивает
+калории формулами и не создаёт mock-данные.
 
-BitLut follows the Android adaptation of August v3:
+## Синхронизация
 
-- Canvas: light neutral background.
-- Navy: navigation/dark anchor.
-- Surface: white controls and cards.
-- Lime: filled primary action/brand surface with Ink foreground.
-- Purple: focus, selection detail, and secondary interaction.
-- Inter Variable: primary typeface.
-- Main touch targets: at least 44 dp.
-- Pressed scale for primary actions: approximately `0.98`.
-- Avoid decorative glass layers and dependency-heavy blur effects.
+BitLut поддерживает:
 
-Do not reintroduce the removed Haze integration. It caused a Kotlin metadata
-mismatch because Haze 1.7.x was built with Kotlin 2.2.x while BitLut intentionally
-remained on Kotlin 2.0.21.
+- ручную синхронизацию;
+- фоновую синхронизацию через WorkManager;
+- защиту от параллельных sync jobs;
+- устойчивый sync cursor;
+- частичный успех, когда отдельный Huawei scope временно недоступен;
+- локальный snapshot dashboard для быстрого и устойчивого открытия приложения.
 
-## Codespaces build
+Dashboard использует ограниченные Health Connect reads, чтобы не создавать
+request storm и не исчерпывать quota провайдера.
 
-For constrained GitHub Codespaces, use the low-memory build:
+## Интерфейс
+
+Интерфейс использует дизайн-систему **August v3**:
+
+- светлый Canvas `#F7F8FC`;
+- белые Surface-карточки;
+- Navy `#151728` как тёмный архитектурный цвет;
+- Lime `#DFFF6A` для primary actions;
+- Purple `#6E5CF6` для focus и secondary interaction;
+- Inter Variable;
+- верхняя карточка Steps — тёмный Hero;
+- компактная нижняя навигация на native Compose без Haze.
+
+## Настройки
+
+В разделе дневных целей остаётся только **цель по шагам** — единственная цель,
+которая сейчас реально используется продуктом.
+
+Настройки также включают:
+
+- выбор источника данных;
+- подключение Health Connect / HUAWEI Health;
+- ручную синхронизацию;
+- импорт архива HUAWEI;
+- CSV export;
+- фильтр тренировок;
+- управление виджетами;
+- диагностические и privacy-разделы.
+
+## Принципы данных
+
+> **Real data only.**
+
+BitLut записывает и показывает только данные, полученные от реального источника
+или корректно вычисленные из реальных исходных значений.
+
+Отсутствующее значение означает `—`, а не приблизительную цифру.
+
+## Технологии
+
+- Kotlin
+- Jetpack Compose
+- Android Health Connect
+- HUAWEI Health Kit
+- WorkManager
+- Gradle 8.9
+- Android Gradle Plugin 8.7.3
+- Kotlin 2.0.21
+- Java 17
+
+## Сборка в GitHub Codespaces
 
 ```bash
 ./gradlew :app:assembleDebug \
@@ -117,37 +141,22 @@ For constrained GitHub Codespaces, use the low-memory build:
   -Pkotlin.compiler.execution.strategy=in-process
 ```
 
-A successful build is required before commit.
+Перед commit сборка должна завершаться `BUILD SUCCESSFUL`.
 
-## Release workflow
+## Privacy
 
-GitHub Actions builds signed release APKs using repository secrets and
-`.github/workflows/release.yml`.
+BitLut работает локально и не имеет собственного backend для хранения health
+data. Актуальная политика находится в
+[`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md).
 
-Required secrets include:
+## Для разработки
 
-- `BITLUT_KEYSTORE_BASE64`
-- `BITLUT_KEYSTORE_PASSWORD`
-- `BITLUT_KEY_ALIAS`
-- `BITLUT_KEY_PASSWORD`
-- `HUAWEI_APP_ID`
-- `AGCONNECT_SERVICES_JSON_BASE64`
+Основные документы:
 
-Do not commit signing files, `.huawei.env`, `agconnect-services.json`,
-local environment files, Repomix output, patch backups, or generated APKs.
+- [`CLAUDE.md`](CLAUDE.md) — инженерные правила и invariants;
+- [`CONTEXT.md`](CONTEXT.md) — компактный текущий контекст;
+- [`SESSION_HANDOFF.md`](SESSION_HANDOFF.md) — состояние проекта для следующей сессии;
+- [`CHANGELOG.md`](CHANGELOG.md) — история изменений.
 
-## Development rules
-
-1. Preserve working synchronization and import behavior.
-2. Prefer small, surgical changes over unrelated refactors.
-3. Do not add health permissions without an explicit product decision.
-4. Do not generate fake health data.
-5. Keep sync/background reliability semantics intact unless the task directly
-   requires changing them.
-6. Treat `CHANGELOG.md` as history; keep `README.md`, `CLAUDE.md`,
-   `CONTEXT.md`, and `SESSION_HANDOFF.md` current rather than cumulative.
-7. Run a real build before commit.
-
-For implementation constraints and engineering gotchas, read `CLAUDE.md`.
-For a compact machine-readable project context, read `CONTEXT.md`.
-For continuation in a new conversation, read `SESSION_HANDOFF.md`.
+Главный принцип разработки: **не ломать работающую синхронизацию ради UI и не
+выдумывать данные ради заполнения интерфейса**.
