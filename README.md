@@ -5,350 +5,149 @@
 <h1 align="center">BitLut</h1>
 
 <p align="center">
-  <strong>Премиальный open-source мост между Huawei Health и Android Health Connect</strong>
+  <strong>Open-source bridge from HUAWEI Health to Android Health Connect</strong>
 </p>
 
-<p align="center">
-  BitLut помогает владельцам Huawei Band и Huawei Watch переносить реальные данные активности
-  из Huawei Health в Android Health Connect — прозрачно, безопасно и без фейковых записей.
-</p>
+BitLut is a free Android application that reads supported activity data from
+HUAWEI Health through HUAWEI Health Kit and writes it to Android Health Connect.
+The app is designed for people who use Huawei wearables but want their activity
+data to be available to other Health Connect-compatible apps.
 
-<p align="center">
-  <img alt="Android" src="https://img.shields.io/badge/Android-26%2B-C1FF05?style=for-the-badge&logo=android&logoColor=111111">
-  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-Android-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white">
-  <img alt="Jetpack Compose" src="https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white">
-</p>
+BitLut works locally on the device. It has no BitLut account, no advertising,
+no cloud backend, and no health-data selling.
 
-<p align="center">
-  <img alt="Health Connect" src="https://img.shields.io/badge/Health%20Connect-ready-34A853?style=flat-square">
-  <img alt="Huawei Health" src="https://img.shields.io/badge/Huawei%20Health-import%20ready-D61F26?style=flat-square">
-  <img alt="Open Source" src="https://img.shields.io/badge/Open%20Source-free-111111?style=flat-square">
-  <img alt="Release" src="https://img.shields.io/badge/release-v1.10.11-9E6FC3?style=flat-square">
-</p>
+## Supported activity scope
 
-<!-- BITLUT_STATUS:START -->
-BitLut помогает переносить данные об активности из HUAWEI Health в Health Connect и просматривать их в удобном интерфейсе.
+The production scope is intentionally activity-only:
 
-Приложение предназначено для пользователей, которые хотят использовать данные HUAWEI Health в других приложениях, совместимых с Health Connect.
-
-Возможности BitLut
-
-• Импорт шагов и пройденного расстояния
-• Импорт поддерживаемых тренировок
-• Передача данных в Health Connect
-• Отображение шагов за текущий день
-• Просмотр двух последних тренировок
-• Домашний виджет с количеством шагов
-• Экспорт данных в CSV
-• Ручная и автоматическая фоновая синхронизация
-• Выбор источника данных для главного экрана
-
-BitLut работает локально на устройстве. Для использования приложения не требуется создавать аккаунт. В приложении нет рекламы, облачного сервера и продажи пользовательских данных.
-
-Для синхронизации необходимы HUAWEI Health, HMS Core, Health Connect и соответствующие разрешения. Доступность отдельных типов данных зависит от разрешений HUAWEI Health Kit и от данных, сохранённых в HUAWEI Health.
-
-BitLut получает данные из HUAWEI Health только для чтения и не изменяет информацию в HUAWEI Health.
-
-BitLut — независимое приложение и не является официальным приложением HUAWEI.
-
-
-
-BitLut transfers activity data from HUAWEI Health to Health Connect and presents it in a clear, convenient dashboard.
-
-The app is designed for users who want to make their HUAWEI Health activity data available to other apps compatible with Health Connect.
-
-BitLut features
-
-• Import steps and distance
-• Import supported workout sessions
-• Transfer data to Health Connect
-• View today’s step count
-• View the two most recent workouts
-• Home screen widget with today’s steps
-• Export synchronized data as a CSV file
-• Manual and automatic background synchronization
-• Select the data source used by the dashboard
-
-BitLut works locally on your device. No account is required. The app contains no advertising, has no cloud server, and does not sell user data.
-
-HUAWEI Health, HMS Core, Health Connect, and the relevant permissions are required for synchronization. The availability of individual data types depends on the permissions provided by HUAWEI Health Kit and the data stored in HUAWEI Health.
-
-BitLut accesses HUAWEI Health data in read-only mode and does not modify information stored in HUAWEI Health.
-
-BitLut is an independent application and is not an official HUAWEI app.
-
----
-
-## Open source
-
-BitLut — бесплатный open-source проект для пользователей Huawei, которым нужен прозрачный контроль над своими health-данными и надежный мост в Android Health Connect.
-
-Если вы используете Huawei Band или Huawei Watch и хотите видеть свои данные в Android Health Connect, BitLut создан именно для этого.
-
-## BitLut v1.9.6 strict health-data scope
-
-BitLut v1.9.6 is locked to the Huawei Health approval scope requested in AppGallery:
-
-- Step
-- Distance, ascent and altitude
-- Active Hours
-- Daily Activity Summary
-- Activity record
-- Activity
-
-The app does not request, read, write or infer sleep, heart rate, SpO2, HRV, stress or Activity Intensity data in this release.
-
-Health Connect export is limited to Huawei-derived activity/basic sport records: `StepsRecord`, `DistanceRecord`, `FloorsClimbedRecord`, `ElevationGainedRecord`, `ActiveCaloriesBurnedRecord` and `ExerciseSessionRecord`.
-
-## BitLut v1.9.6 GUI scope
-
-The app UI is activity-only in v1.9.6. Dashboard and Settings must not expose widgets, toggles or permission prompts for pulse, sleep, stress, SpO2, HRV or Activity Intensity.
-
-The bottom navigation is icon-only neo-glassmorphism. Status refresh actions live in Settings only; app startup refreshes status automatically.
-
-## BitLut v1.9.6 Glassmorphism 2.0 GUI polish
-
-The UI uses a premium activity-only glass system across all screens: translucent cards, soft depth shadows, radial glow, thin glass borders and an icon-only floating bottom navigation.
-
-The History chart reserves fixed vertical space for values, bars and dates so large step values cannot push bars outside the card bounds.
-
-## BitLut v1.9.6 Glass 2.0 UI system
-
-The UI uses a premium activity-only glass system across all screens: translucent surfaces, floating glass navigation, soft depth shadows, radial glow, thin highlight borders and bounded charts.
-
-History charts reserve fixed vertical space for values, bars and dates so large step values cannot push bars outside card bounds.
-
-## v1.9.6 current baseline
-
-BitLut v1.9.6 is now locked to activity-only health sync.
-
-Supported health data:
 - steps
 - distance
-- floors / ascent / elevation
-- active calories / active hours
-- activity sessions / workout records
+- floors climbed / elevation gain
+- active calories when the approved Huawei scope is available
+- exercise / activity sessions
 
-Unsupported metrics are intentionally removed from sync and UI:
-- sleep
-- pulse / heart rate
-- SpO2
-- HRV
-- stress
-- Activity Intensity
+Sleep, heart rate, SpO2, HRV, stress, and other biometric categories are outside
+the current product scope and must not be added without an explicit permission
+and product decision.
 
-The UI uses the Glass 2.0 system: translucent surfaces, floating icon-only navigation, soft depth, radial glow, thin highlight borders and bounded charts.
+## How synchronization works
 
-## v1.9.6 lifecycle and Glass performance hardening
-
-Implemented after deep code review:
-
-- Compose state collection in `MainActivity` is lifecycle-aware via `collectAsStateWithLifecycle`.
-- Glass 2.0 UI helpers cache stable shapes, gradient color lists and static brushes with `remember(...)`.
-- History chart bars are bounded with fixed value/bar/date regions to avoid overflow on large step values.
-- App logger has conservative memory guards for retained in-app logs.
-
-Deferred to a separate architecture sprint:
-
-- Splitting `FinalBitLutShell.kt` into feature-level UI files.
-- Moving WorkManager orchestration out of `MainActivity`.
-- Introducing interfaces for `GoogleHealthManager` / `HuaweiHealthManager`.
-- Gradle Version Catalog migration.
-
-## v1.9.6 Architecture Hardening 1
-
-Implemented:
-
-- `HealthConnectManager` and `HuaweiHealthReader` interfaces define the app-facing health contracts.
-- `GoogleHealthManager` and `HuaweiHealthManager` implement these contracts.
-- `DashboardViewModel`, `SyncViewModel`, `ImportViewModel` and the Health Connect permission requester depend on interfaces instead of concrete manager classes.
-- `AppContainer` exposes health dependencies through interfaces.
-- Huawei snapshot reads are explicitly offloaded through an injectable `CoroutineDispatcher`, defaulting to `Dispatchers.IO`.
-
-Still deferred to a later sprint:
-
-- Moving WorkManager orchestration out of `MainActivity`.
-- Splitting `FinalBitLutShell.kt` into feature-level UI files.
-- Gradle Version Catalog migration.
-
-## v1.9.6 Sync Orchestrator Sprint
-
-Implemented:
-
-- Added `SyncOrchestrator` as the UI-safe boundary for manual and periodic sync orchestration.
-- `MainActivity` no longer directly imports or observes WorkManager sync classes.
-- Manual sync permission preflight moved out of `MainActivity`.
-- `MainActivity` now delegates scheduling to `syncOrchestrator.schedulePeriodic()`.
-- Manual sync callbacks remain lifecycle-owned by the Activity and update ViewModels through explicit callbacks.
-
-Still deferred:
-
-- Moving Huawei authorization UI flow out of `MainActivity`.
-- Converting archive-import intent handling into a dedicated import orchestrator.
-- Splitting `FinalBitLutShell.kt` into feature-level screen files.
-
-## v1.9.6 MainActivity recovery
-
-`MainActivity.kt` was clean-room rewritten after the Sync Orchestrator migration to remove a broken partial WorkManager block and restore:
-
-- lifecycle-aware Compose state collection;
-- Google Health permission flow;
-- Huawei authorization flow;
-- archive import picker;
-- launch-time status refresh;
-- periodic sync delegation;
-- manual sync delegation through `SyncOrchestrator`.
-
-`MainActivity` must not directly import WorkManager or `BackgroundSyncScheduler`.
-
-## v1.9.6 UI File Split Sprint 1
-
-Implemented:
-
-- Extracted stable Glass 2.0 UI components from `FinalBitLutShell.kt`.
-- Added `GlassNavigation.kt` for the floating icon-only bottom navigation.
-- Added `GlassCards.kt` for the shared translucent `SoftCard` surface.
-- Added `MetricCharts.kt` for bounded metric chart rendering.
-- Kept screen behavior, sync behavior, Health Connect contract and Huawei scope unchanged.
-
-This is intentionally a low-risk first split. Screen-level extraction remains deferred to the next UI architecture sprint.
-
-## v1.9.6 split-aware Glass performance verification
-
-`verify_lifecycle_glass_perf_hardening.py` now validates Glass 2.0 performance tokens across both `FinalBitLutShell.kt` and extracted `ui/components/*.kt` files.
-
-## v1.9.6 split-aware Glass GUI verification
-
-`verify_glass20_gui_self_heal.py` and `verify_gui_neoglass_activity_only.py` now validate Glass 2.0 UI across both `FinalBitLutShell.kt` and extracted `ui/components/*.kt` files.
-
-## v1.9.6 Metric chart split compile fix
-
-`MetricBarChartCard` no longer depends on the missing `MetricBar` type after the UI split. It now accepts the existing chart bar objects from call-sites as `List<Any?>` and reads value/label fields defensively.
-
-This keeps the extracted chart component compile-safe without changing sync, Health Connect or Huawei behavior.
-
-## v1.9.6 MetricCharts self-check fix
-
-Fixed the UI split verifier/self-check so it allows `MetricBarChartCard` as a function name while preventing dependency on the missing `List<MetricBar>` type.
-
-v1.9.9 release-readiness sprint
-
-Prepared BitLut for the 1.9.9 release without touching app version fields because versioning is owned by GitHub Actions.
-
-Included:
-
-release checklist in docs/release-1.9.9.md;
-release-readiness verifier;
-strict activity-only scope guard;
-UI split guard;
-SyncOrchestrator guard;
-cleanup of failed local recovery scripts.
-
-v1.9.9 release-readiness sprint
-
-Prepared BitLut for the 1.9.9 release without touching app version fields because versioning is owned by GitHub Actions.
-
-Included:
-
-release checklist in docs/release-1.9.9.md;
-release-readiness verifier;
-strict activity-only scope guard;
-UI split guard;
-SyncOrchestrator guard;
-cleanup of failed local recovery scripts.
-
-## v1.9.9 release-readiness sprint
-
-Prepared BitLut for the `1.9.9` release without touching app version fields because versioning is owned by GitHub Actions.
-
-Included: release checklist, release-readiness verifier, strict activity-only scope guard, UI split guard, SyncOrchestrator guard, and cleanup of failed local recovery scripts.
-
-## v1.9.10 Dashboard persistence and force-refresh sprint
-
-BitLut now caches the last successfully read dashboard snapshot locally
-(`DashboardSnapshotCache`, SharedPreferences-backed), so the app shows real,
-last-known data immediately on launch instead of "Подключите Google Health"
-while the first Health Connect read is still in progress.
-
-* Cold start shows cached data instantly; live data replaces it once the
-  first Health Connect read completes.
-* A transient permission-check or read failure no longer downgrades the
-  dashboard back to the connect screen -- it keeps showing the last good data.
-* The "Обновить статус" button for Google Health in Settings now performs a
-  real sync (Huawei -> Health Connect -> dashboard reload), not just a status
-  re-check.
-* The existing 30-minute periodic background sync (WorkManager) now also
-  refreshes this local cache after each successful sync, so data stays fresh
-  even when the app isn't open.
-
-## v1.9.10 Dashboard persistence and force-refresh sprint
-
-BitLut now caches the last successfully read dashboard snapshot locally
-(`DashboardSnapshotCache`, SharedPreferences-backed), so the app shows real,
-last-known data immediately on launch instead of "Подключите Google Health"
-while the first Health Connect read is still in progress.
-
-* Cold start shows cached data instantly; live data replaces it once the
-  first Health Connect read completes.
-* A transient permission-check or read failure no longer downgrades the
-  dashboard back to the connect screen -- it keeps showing the last good data.
-* The "Обновить статус" button for Google Health in Settings now performs a
-  real sync (Huawei -> Health Connect -> dashboard reload), not just a status
-  re-check.
-* The existing 30-minute periodic background sync (WorkManager) now also
-  refreshes this local cache after each successful sync, so data stays fresh
-  even when the app isn't open.
-
-<!-- BITLUT_FINAL_STATE_2026_08_04_START -->
-
-## Current state — 2026-08-04
-
-BitLut is an activity-only Android bridge between Huawei Health and Android
-Health Connect. The current build is verified with `:app:assembleDebug`.
-
-### Current data scope
-
-- Steps
-- Distance
-- Floors climbed and elevation gain
-- Active calories
-- Exercise sessions and workout duration
-
-Sleep, heart rate, SpO2, HRV, stress, blood pressure and other health metrics
-are intentionally not requested, imported or displayed.
-
-### Current reliability behavior
-
-- Manual and background synchronization use WorkManager without observing
-  discarded duplicate requests.
-- Work observers are removed after terminal states.
-- Huawei ZIP/JSON import is bounded and supports the known export layouts.
-- Partial imports report only categories that were actually written.
-- Dashboard snapshots and synchronization metadata are persisted locally.
-- Local signing credentials are ignored by Git and are never committed.
-
-### Current dashboard
-
-- Today's steps, distance, calories and activity.
-- Workout history without the maximum-cadence field.
-- Elevation/floors summary for today and the last seven days.
-- Seven-day average, best day and comparison with the previous seven days.
-- Personal records for steps, distance, calories, elevation and workout duration.
-- Locally accumulated achievements.
-- Last successful synchronization time and selected data source.
-
-### Build command for constrained Codespaces
-
-```bash
-./gradlew :app:assembleDebug   --no-daemon   --max-workers=1   --no-watch-fs   -Dorg.gradle.jvmargs="-Xmx1024m -XX:MaxMetaspaceSize=384m -Dfile.encoding=UTF-8"   -Pkotlin.compiler.execution.strategy=in-process
+```text
+HUAWEI Health
+    |
+    | HUAWEI Health Kit (read-only)
+    v
+BitLut
+    |
+    | validated activity records
+    v
+Android Health Connect
+    |
+    v
+Other Health Connect-compatible apps
 ```
 
-### Maintenance rules
+BitLut never fabricates health data. Only real source-derived records may be
+written to Health Connect.
 
-- Do not add new health permissions without an explicit product decision.
-- Keep changes surgical; do not refactor unrelated working synchronization code.
-- Deliver repository changes as idempotent Python patch scripts.
-- Verify with a real Gradle build before commit and push.
-- Version numbers for releases remain owned by the GitHub Actions release workflow.
+The app also supports bounded local import of supported HUAWEI export data,
+dashboard snapshots, CSV export, background synchronization, and a home-screen
+widget.
 
-<!-- BITLUT_FINAL_STATE_2026_08_04_END -->
+## Current engineering baseline
+
+As of 2026-08-22:
+
+- Kotlin Gradle plugin remains on the project's stable 2.0.21 baseline.
+- Android Gradle Plugin is 8.7.3 and Gradle is 8.9.
+- Java/JVM target is 17.
+- The debug build is green in GitHub Codespaces.
+- Haze has been removed. UI blur must not introduce a dependency-driven
+  Kotlin/toolchain migration.
+- The UI uses the August v3 semantic design system.
+- Primary actions use Lime with Ink content.
+- Purple is reserved for focus and secondary interaction details.
+- Navy is the dark architectural anchor.
+- The bottom navigation uses native Compose surfaces rather than Haze blur.
+
+## Architecture
+
+Key runtime components:
+
+- `HuaweiHealthManager` — HUAWEI Health Kit authorization and approved activity reads.
+- `GoogleHealthManager` — Health Connect reads and writes.
+- `SyncOrchestrator` — immediate/manual synchronization coordination.
+- `BackgroundSyncScheduler` / `SyncWorker` — WorkManager scheduling and execution.
+- `HuaweiExportParser` — bounded local archive import.
+- `DashboardSnapshotCache` — last-known dashboard state for resilient cold launch.
+- `AchievementsStore` — local activity records and achievements.
+- `DashboardViewModel` — dashboard aggregation and UI state.
+- `FinalBitLutShell` — main Compose application shell.
+- `AugustTokens` / `BitLutExpressiveTheme` — canonical UI token/theme layer.
+
+## Design system: August v3
+
+BitLut follows the Android adaptation of August v3:
+
+- Canvas: light neutral background.
+- Navy: navigation/dark anchor.
+- Surface: white controls and cards.
+- Lime: filled primary action/brand surface with Ink foreground.
+- Purple: focus, selection detail, and secondary interaction.
+- Inter Variable: primary typeface.
+- Main touch targets: at least 44 dp.
+- Pressed scale for primary actions: approximately `0.98`.
+- Avoid decorative glass layers and dependency-heavy blur effects.
+
+Do not reintroduce the removed Haze integration. It caused a Kotlin metadata
+mismatch because Haze 1.7.x was built with Kotlin 2.2.x while BitLut intentionally
+remained on Kotlin 2.0.21.
+
+## Codespaces build
+
+For constrained GitHub Codespaces, use the low-memory build:
+
+```bash
+./gradlew :app:assembleDebug \
+  --no-daemon \
+  --max-workers=1 \
+  --no-watch-fs \
+  --console=plain \
+  -Dorg.gradle.jvmargs="-Xmx1024m -XX:MaxMetaspaceSize=384m -Dfile.encoding=UTF-8" \
+  -Pkotlin.compiler.execution.strategy=in-process
+```
+
+A successful build is required before commit.
+
+## Release workflow
+
+GitHub Actions builds signed release APKs using repository secrets and
+`.github/workflows/release.yml`.
+
+Required secrets include:
+
+- `BITLUT_KEYSTORE_BASE64`
+- `BITLUT_KEYSTORE_PASSWORD`
+- `BITLUT_KEY_ALIAS`
+- `BITLUT_KEY_PASSWORD`
+- `HUAWEI_APP_ID`
+- `AGCONNECT_SERVICES_JSON_BASE64`
+
+Do not commit signing files, `.huawei.env`, `agconnect-services.json`,
+local environment files, Repomix output, patch backups, or generated APKs.
+
+## Development rules
+
+1. Preserve working synchronization and import behavior.
+2. Prefer small, surgical changes over unrelated refactors.
+3. Do not add health permissions without an explicit product decision.
+4. Do not generate fake health data.
+5. Keep sync/background reliability semantics intact unless the task directly
+   requires changing them.
+6. Treat `CHANGELOG.md` as history; keep `README.md`, `CLAUDE.md`,
+   `CONTEXT.md`, and `SESSION_HANDOFF.md` current rather than cumulative.
+7. Run a real build before commit.
+
+For implementation constraints and engineering gotchas, read `CLAUDE.md`.
+For a compact machine-readable project context, read `CONTEXT.md`.
+For continuation in a new conversation, read `SESSION_HANDOFF.md`.
