@@ -36,6 +36,9 @@ import kotlin.reflect.KClass
 private const val TAG = "GoogleHealthManager"
 private const val WRITE_BATCH_SIZE = 400
 private const val DASHBOARD_HISTORY_DAYS = 30
+private const val WORKOUT_DISTANCE_QUERY_PADDING_SECONDS = 2L * 60L * 60L
+private const val MAX_WORKOUT_DISTANCE_SOURCE_RECORD_MS = 3L * 60L * 60L * 1000L
+private const val MIN_RECOVERED_WORKOUT_DISTANCE_METERS = 25.0
 private const val READ_PAGE_SIZE = 1000
 /** Sprint 2026-07-08: single quick retry delay for a transient permission-
  *  check failure -- see [GoogleHealthManager.grantedPermissionsOrEmpty]. */
@@ -640,7 +643,7 @@ class GoogleHealthManager(
                 )
             )
 
-            val distanceMeters = aggregate[DistanceRecord.DISTANCE_TOTAL]
+            val aggregateDistanceMeters = aggregate[DistanceRecord.DISTANCE_TOTAL]
                 ?.inMeters
                 ?.takeIf { it > 0.0 }
             val activeCaloriesKcal = aggregate[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]
@@ -652,17 +655,32 @@ class GoogleHealthManager(
             val steps = aggregate[StepsRecord.COUNT_TOTAL]
                 ?.takeIf { it > 0L }
 
+            val recoveredDistanceMeters = if (
+                aggregateDistanceMeters == null && workout.distanceMeters == null
+            ) {
+                recoverWorkoutDistanceFromRawRecords(client, workout)
+            } else {
+                null
+            }
+            val distanceMeters = aggregateDistanceMeters ?: recoveredDistanceMeters ?: workout.distanceMeters
+
             AppLogger.i(
                 TAG,
-                "Workout metrics aggregated: type=${workout.exerciseType} " +
+                "Workout metrics resolved: type=${workout.exerciseType} " +
                     "start=${workout.startTimeMs} end=${workout.endTimeMs} " +
                     "distanceMeters=${distanceMeters ?: 0.0} " +
+                    "distanceSource=${when {
+                        aggregateDistanceMeters != null -> "aggregate"
+                        recoveredDistanceMeters != null -> "raw_overlap"
+                        workout.distanceMeters != null -> "session"
+                        else -> "missing"
+                    }} " +
                     "activeCaloriesKcal=${activeCaloriesKcal ?: 0.0} " +
                     "elevationMeters=${elevationMeters ?: 0.0} steps=${steps ?: 0L}"
             )
 
             workout.copy(
-                distanceMeters = distanceMeters ?: workout.distanceMeters,
+                distanceMeters = distanceMeters,
                 activeCaloriesKcal = activeCaloriesKcal ?: workout.activeCaloriesKcal,
                 elevationMeters = elevationMeters ?: workout.elevationMeters,
                 steps = steps ?: workout.steps
@@ -676,6 +694,84 @@ class GoogleHealthManager(
             )
             workout
         }
+    }
+
+    /**
+     * Conservative recovery for source distance intervals that cross an
+     * exercise-session boundary. The provider query is widened only for the
+     * two displayed workout cards, but attribution is still calculated against
+     * the exact workout interval. Coarse records longer than three hours are
+     * ignored so daily totals cannot be smeared into a workout.
+     */
+    private suspend fun recoverWorkoutDistanceFromRawRecords(
+        client: HealthConnectClient,
+        workout: ActivitySessionData
+    ): Double? {
+        val sessionStartMs = workout.startTimeMs
+        val sessionEndMs = workout.endTimeMs
+        if (sessionEndMs <= sessionStartMs) return null
+
+        val queryStart = Instant.ofEpochMilli(sessionStartMs)
+            .minusSeconds(WORKOUT_DISTANCE_QUERY_PADDING_SECONDS)
+        val queryEnd = Instant.ofEpochMilli(sessionEndMs)
+            .plusSeconds(WORKOUT_DISTANCE_QUERY_PADDING_SECONDS)
+
+        val records = try {
+            client.readRecords(
+                ReadRecordsRequest(
+                    recordType = DistanceRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(queryStart, queryEnd),
+                    dataOriginFilter = selectedDataOrigins()
+                )
+            ).records
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.w(
+                TAG,
+                "Workout distance fallback failed for ${workout.startTimeMs}..${workout.endTimeMs}: ${e.message}"
+            )
+            return null
+        }
+
+        var recoveredMeters = 0.0
+        var matchedRecords = 0
+
+        records.forEach { record ->
+            val recordStartMs = record.startTime.toEpochMilli()
+            val recordEndMs = record.endTime.toEpochMilli()
+            val recordDurationMs = recordEndMs - recordStartMs
+            if (
+                recordDurationMs <= 0L ||
+                recordDurationMs > MAX_WORKOUT_DISTANCE_SOURCE_RECORD_MS
+            ) {
+                return@forEach
+            }
+
+            val overlapStartMs = maxOf(recordStartMs, sessionStartMs)
+            val overlapEndMs = minOf(recordEndMs, sessionEndMs)
+            if (overlapEndMs <= overlapStartMs) return@forEach
+
+            val overlapFraction =
+                (overlapEndMs - overlapStartMs).toDouble() / recordDurationMs.toDouble()
+            val attributedMeters = record.distance.inMeters * overlapFraction
+            if (attributedMeters > 0.0) {
+                recoveredMeters += attributedMeters
+                matchedRecords += 1
+            }
+        }
+
+        val result = recoveredMeters.takeIf {
+            it >= MIN_RECOVERED_WORKOUT_DISTANCE_METERS
+        }
+
+        AppLogger.i(
+            TAG,
+            "Workout distance fallback: start=$sessionStartMs end=$sessionEndMs " +
+                "records=${records.size} matched=$matchedRecords recoveredMeters=${result ?: 0.0}"
+        )
+
+        return result
     }
 
     /**

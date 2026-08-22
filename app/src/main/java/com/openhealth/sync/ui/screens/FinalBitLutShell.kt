@@ -903,18 +903,34 @@ private fun workoutMetricDisplays(session: ActivitySessionData, durationMinutes:
 
     return when (session.exerciseType) {
         ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
-        ExerciseSessionRecord.EXERCISE_TYPE_WALKING ->
-            listOf(duration(), distance(), pace(), prefer(caloriesMetric(), started()))
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> listOf(
+            duration(),
+            prefer(distance(), stepsMetric()),
+            prefer(pace(), started()),
+            prefer(caloriesMetric(), ended())
+        )
 
-        ExerciseSessionRecord.EXERCISE_TYPE_BIKING ->
-            listOf(duration(), distance(), speed(), prefer(elevationMetric(), started()))
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> listOf(
+            duration(),
+            prefer(distance(), started()),
+            prefer(speed(), ended()),
+            prefer(elevationMetric(), stepsMetric())
+        )
 
-        ExerciseSessionRecord.EXERCISE_TYPE_HIKING ->
-            listOf(duration(), distance(), prefer(elevationMetric(), started()), prefer(caloriesMetric(), ended()))
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> listOf(
+            duration(),
+            prefer(distance(), stepsMetric()),
+            prefer(elevationMetric(), started()),
+            prefer(caloriesMetric(), ended())
+        )
 
         ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
-        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL ->
-            listOf(duration(), distance(), swimPace(), prefer(caloriesMetric(), started()))
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> listOf(
+            duration(),
+            prefer(distance(), started()),
+            prefer(swimPace(), ended()),
+            prefer(caloriesMetric(), started())
+        )
 
         ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
         ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING ->
@@ -924,7 +940,12 @@ private fun workoutMetricDisplays(session: ActivitySessionData, durationMinutes:
         ExerciseSessionRecord.EXERCISE_TYPE_PILATES ->
             listOf(duration(), started(), ended(), prefer(caloriesMetric(), stepsMetric()))
 
-        else -> listOf(duration(), distance(), started(), prefer(caloriesMetric(), ended()))
+        else -> listOf(
+            duration(),
+            prefer(distance(), stepsMetric()),
+            started(),
+            prefer(caloriesMetric(), ended())
+        )
     }
 }
 
