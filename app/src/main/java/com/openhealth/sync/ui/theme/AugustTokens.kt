@@ -14,61 +14,53 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.openhealth.sync.R
 
-// ── August Design System — token foundation (integration phase 1) ─────────────
+// ── August v3 — Dark Workbench / BitLut adaptation ───────────────────────────
 //
-// Source: AUGUST_DESIGN_SYSTEM_AI_FIRST_v1.0.md (Paulo's brand design system,
-// "AI-first implementation standard v1.0.0"). This file is the machine-
-// readable seam between that document and Compose: primitive + semantic
-// tokens only. Component-level decisions (card shadow recipes, button
-// anatomy, nav bar chrome, etc.) are NOT here on purpose -- they belong to
-// the composables that consume these tokens, and are being migrated in
-// later phases of this integration (see CLAUDE.md / CHANGELOG.md for the
-// phase breakdown once phase 1 lands).
+// Canonical roles for the Android app:
+//   Canvas/Surface = content and controls
+//   Navy = persistent architectural anchor (bottom navigation / dark chrome)
+//   Lime = primary action surface with Ink foreground
+//   Purple = focus, selection detail, and secondary interaction
 //
-// What phase 1 wires up:
-//   - AugustColor: the literal palette from the doc's section 3, plus a
-//     small number of DERIVED (non-normative) extensions clearly marked as
-//     such below -- the source doc is a light-canvas-with-dark-anchor web
-//     design system and doesn't tabulate every value a full Android
-//     light/dark theme needs (e.g. a dark-mode card surface distinct from
-//     Navy, or a lighter accent tint safe as icon/text foreground on a dark
-//     background). Every derived value has a comment explaining how it was
-//     produced and why (WCAG contrast computed against the exact surface
-//     it's used on -- see the accompanying design-system integration plan
-//     for the numbers).
-//   - AugustRadius / AugustSpace / AugustMotion: direct ports of sections
-//     5 (spacing), 6.1 (radius) and 7 (motion) of the doc.
-//   - AugustTypography: a Material3 Typography built from section 4's type
-//     scale. Font family was FontFamily.Default (system sans) through
-//     phase 4 -- phase 5 bundled the doc's actual specified Inter Variable
-//     font; see AugustFont's own doc comment below for that decision and
-//     how the bundled file was produced.
-//
-// What phase 1 deliberately does NOT do: rewrite SoftCard's shadow/glow
-// recipe, the bottom nav's glass chrome, or the ~2700 lines of hand-set
-// fontSize/fontWeight in FinalBitLutShell.kt. Those are real UI/behavior
-// changes that need their own reviewed, compiled, diffed patch scripts --
-// bundling them into the token foundation would make one already-large
-// change much harder to verify or roll back independently.
+// This file is the single token source of truth for Compose. Existing
+// Accent/GrowthLime names remain only as compatibility aliases so the
+// migration can stay surgical and avoid rewriting unrelated health-data UI.
 
-/**
- * Primitive + semantic color tokens, ported from the design doc's section 3
- * (Color system) and 3.2 (Status colors). Values are copied verbatim from
- * the doc's table except where marked DERIVED.
- */
 internal object AugustColor {
-    // -- Primitive / semantic (verbatim from the doc) --
-    val Ink = Color(0xFF171927)
-    val Muted = Color(0xFF697084)
+    // August v3 core neutrals.
+    val Ink = Color(0xFF151728)
+    val InkSoft = Color(0xFF292C3E)
+    val Muted = Color(0xFF6F7385)
     val Canvas = Color(0xFFF7F8FC)
     val Surface = Color(0xFFFFFFFF)
-    val Soft = Color(0xFFF4F5FA)
-    val Accent = Color(0xFF6E5CF6)
-    val AccentDark = Color(0xFF5140DC)
-    val GrowthLime = Color(0xFFD7FF61)
-    val Navy = Color(0xFF15172A)
+    val Soft = Color(0xFFF2F3F7)
 
-    // Status pairs (background / foreground), verbatim from 3.2.
+    // Brand/action: Lime is a filled surface with Ink foreground.
+    val Lime = Color(0xFFDFFF6A)
+    val LimeHover = Color(0xFFD2F650)
+    val LimeActive = Color(0xFFC3E93E)
+    val LimeInk = Ink
+
+    // Interaction/focus: Purple is secondary, never the primary CTA.
+    val Purple = Color(0xFF6E5CF6)
+    val PurpleDark = Color(0xFF5140DC)
+    val PurpleSoft = Color(0xFFEEEAFF)
+
+    // Dark architectural anchor.
+    val Navy = Color(0xFF151728)
+    val NavyRaised = Color(0xFF1C1E33)
+    val NavySoft = Color(0xFF24263D)
+    val DarkSecondaryText = Color(0xFFB8BDCE)
+
+    // Compatibility aliases for incremental migration of existing call sites.
+    // New UI code should prefer the semantic v3 names above.
+    val Accent = Purple
+    val AccentDark = PurpleDark
+    val GrowthLime = Lime
+    val DarkPanel = NavyRaised
+    val AccentLight = Color(0xFF8B7DF8)
+
+    // Semantic status colors remain independent from brand/action colors.
     val SuccessBg = Color(0xFFDAF6DC)
     val SuccessFg = Color(0xFF276131)
     val WarningBg = Color(0xFFFFF0C9)
@@ -77,68 +69,31 @@ internal object AugustColor {
     val DangerFg = Color(0xFFA43F3F)
     val NeutralBg = Color(0xFFECECF0)
     val NeutralFg = Color(0xFF777B88)
-    val AccentStatusBg = Color(0xFFEEEAFF)
-    val AccentStatusFg = Color(0xFF5D4BD5)
+    val AccentStatusBg = PurpleSoft
+    val AccentStatusFg = PurpleDark
     val GrowthStatusBg = Color(0xFFE7FF9D)
     val GrowthStatusFg = Color(0xFF31410C)
 
-    // Borders, verbatim from 3.1 (light/dark alpha over the token itself).
-    val BorderLight = Color(0x1C1C1F31) // rgba(28,31,49,.11)
-    val BorderDark = Color(0x1AFFFFFF)  // rgba(255,255,255,.10)
+    val BorderLight = Color(0x1C151728)
+    val BorderDark = Color(0x1AFFFFFF)
 
-    // Dark-surface secondary text, verbatim from 3.1 ("#BEC3D4").
-    val DarkSecondaryText = Color(0xFFBEC3D4)
-
-    // -- DERIVED (not in the source doc) --
-    //
-    // The doc treats Navy as a component-level "anchor" (sidebar/hero/
-    // editor) inside an otherwise light UI, not as a full app-wide dark
-    // theme background. BitLut already supports following the system
-    // light/dark setting (see BitPalette in FinalBitLutShell.kt), so phase
-    // 1 extends August's own stated dark-surface rule ("Navy or Dark Panel
-    // with white primary text and #BEC3D4 secondary text", section 3.1)
-    // into a full dark ColorScheme rather than dropping system dark-theme
-    // support. Every derived value below was chosen by computing its real
-    // WCAG contrast ratio against the exact surface it's used on -- see the
-    // integration plan for the numbers; the short version is in each
-    // comment.
-
-    /** Dark-mode card/panel surface: Navy blended 7% toward white, so cards
-     * read as a distinct elevated layer above the Navy page background
-     * instead of blending into it flat. White text on this: 14.7:1. */
-    val DarkPanel = Color(0xFF252739)
-
-    /** Accent lightened ~20% toward white. Reserved for icon/text FOREGROUND
-     * on dark surfaces only (Navy or DarkPanel) -- true Accent's contrast
-     * there is only ~3.2-3.8:1 (fine for a button fill with white text on
-     * top, too low to reuse as bare foreground). AccentLight on Navy:
-     * 5.4:1; on DarkPanel: 4.5:1. Never use as a button FILL (white text on
-     * AccentLight only reaches 3.3:1) -- fills always use plain Accent. */
-    val AccentLight = Color(0xFF8B7DF8)
-
-    // Derived Material3 dark tonal containers (primary/secondary/tertiary/
-    // error), each Navy blended toward its accent so dark containers read
-    // as "the accent, dimmed for a dark surface" rather than a flat navy
-    // box. Paired *_fg tokens (AccentLight / GrowthLime / a lightened
-    // danger red) are the only foregrounds verified legible on each one.
-    val DarkPrimaryContainer = Color(0xFF342F71)
+    // Derived dark containers used by the existing Material bridge.
+    val DarkPrimaryContainer = NavySoft
     val DarkSecondaryContainer = Color(0xFF27235F)
     val DarkTertiaryContainer = Color(0xFF303732)
     val DarkErrorContainer = Color(0xFF472531)
     val DarkErrorContainerFg = Color(0xFFFFC9C9)
 }
 
-/** Section 6.1 radius scale. One representative dp per named bucket -- the
- * doc gives ranges (e.g. "18-24px: cards and panels"); component code picks
- * the exact end of the range it needs and should still reference these
- * where a bucket, not a specific px value, is what actually matters. */
+/** August v3 radius scale: controls 10-14, cards 14-18, work surfaces 20-24. */
 internal object AugustRadius {
-    val Compact = 10.dp   // 8-12px: compact controls, work items, icon buttons
-    val Control = 15.dp   // 13-16px: regular controls, nav items, segmented controls
-    val Button = 13.dp    // component spec (9): Primary/Secondary button, exact value
-    val Card = 20.dp       // 18-24px: cards and panels
-    val Hero = 28.dp       // 26-30px: guidance banners, hero, onboarding
-    val Pill = 999.dp     // pills, chips, progress tracks
+    val Compact = 12.dp
+    val Control = 14.dp
+    val Button = 14.dp
+    val Card = 18.dp
+    val WorkSurface = 22.dp
+    val Hero = 28.dp
+    val Pill = 999.dp
 }
 
 /** Section 5 spacing scale, verbatim: 0,2,4,6,8,10,12,14,16,18,20,22,24,28,
@@ -167,50 +122,31 @@ internal object AugustSpace {
     val s72 = 72.dp
 }
 
-/** Section 7 motion. Durations in ms (for `tween(durationMillis = ...)`)
- * plus the doc's standard cubic-bezier easing. The doc explicitly forbids
- * bounce/elastic overshoot -- component code migrating off the old
- * `Spring.DampingRatioMediumBouncy` presses should land on
- * `tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing)` or
- * similar, not a replacement spring. */
+/** August v3 motion: 140-200 ms standard, navigation up to 280 ms, no bounce. */
 internal object AugustMotion {
-    const val FastMs = 120
-    const val DefaultMs = 160
+    const val FastMs = 140
+    const val DefaultMs = 180
     const val MediumMs = 240
-    const val SlowMs = 360
+    const val NavigationMs = 280
     val StandardEasing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 }
 
-/**
- * Section 6.4 shadow recipes (integration phases 2-3). Compose's `shadow()`
- * takes an elevation, not an explicit CSS-style blur radius/spread, so
- * there's no exact 1:1 port of the doc's `0 14px 34px rgba(27,30,48,.08)` /
- * `0 24px 60px rgba(28,31,49,.15)` / `0 8px 22px rgba(110,92,246,.24)`
- * values -- the dp elevations here were chosen to read similarly at
- * typical phone density rather than copying the px numbers literally. The
- * color + alpha ARE taken directly from the doc. Every shadow here is used
- * alone (ambient == spot, single tint), matching section 6.4's "A component
- * SHOULD have zero or one shadow" -- no stacked or mismatched shadows.
- */
+/** August v3 restrained neutral depth + weak Lime primary-action glow. */
 internal object AugustElevation {
-    val CardShadowColor = Color(0xFF1B1E30)   // rgba(27,30,48, x)
+    val CardShadowColor = Color(0xFF151728)
     const val CardShadowAlpha = 0.08f
-    val CardShadowElevation = 12.dp
+    val CardShadowElevation = 10.dp
 
-    val HeroShadowColor = Color(0xFF1C1F31)   // rgba(28,31,49, x)
-    const val HeroShadowAlpha = 0.15f
-    val HeroShadowElevation = 20.dp
+    val HeroShadowColor = Color(0xFF151728)
+    const val HeroShadowAlpha = 0.14f
+    val HeroShadowElevation = 16.dp
 
-    // "Accent action" shadow (section 6.4): `0 8px 22px rgba(110,92,246,.24)`.
-    // rgb(110,92,246) is Accent itself (#6E5CF6) -- this is the one shadow in
-    // the whole spec that IS accent-tinted on purpose, reserved for the
-    // Primary button per section 9's component table ("accent shadow").
-    // Everywhere else (cards) uses a neutral tint -- see CardShadowColor/
-    // HeroShadowColor above and their doc comments for why.
-    val ButtonShadowColor = AugustColor.Accent
-    const val ButtonShadowAlpha = 0.24f
-    val ButtonShadowElevation = 10.dp
+    // August v3 allows a weak Lime glow only for primary action surfaces.
+    val ButtonShadowColor = AugustColor.Lime
+    const val ButtonShadowAlpha = 0.16f
+    val ButtonShadowElevation = 8.dp
 }
+
 
 /**
  * Section 4 typography, font family (integration phase 5). Bundled real

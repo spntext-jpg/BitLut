@@ -128,6 +128,7 @@ dependencies {
     implementation("androidx.compose.material3:material3-adaptive-navigation-suite")
     implementation("androidx.compose.material:material-icons-extended")
 
+
     // Sprint (2026-07-14): home screen widget (see widget/HomeWidget.kt).
     // glance-appwidget alone (no glance-material3) is enough -- the widget
     // uses plain ColorProvider(day=.., night=..) values matching

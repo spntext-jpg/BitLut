@@ -1,4 +1,3 @@
-
 package com.openhealth.sync.ui.theme
 
 import android.app.Activity
@@ -9,45 +8,31 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// ── Design System Tokens (August integration, phase 1) ────────────────────────
-//
-// v1.9.11 note (kept for history): this file used to hand-roll its own
-// Blue/Orange/Purple token set that no screen actually rendered with, since
-// every screen built its visuals through the separate BitPalette/HealthAccent
-// system in FinalBitLutShell.kt instead. That's still true architecturally --
-// BitPalette/HealthAccent remain the primary source most composables read
-// from -- but as of this phase, BOTH systems are sourced from the same
-// AugustColor tokens (see AugustTokens.kt), so there's exactly one Accent
-// purple, one Growth lime, etc., no matter which system a given piece of UI
-// reads its color from. BitPalette/HealthAccent's own token swap lives in
-// FinalBitLutShell.kt, not here.
-//
-// This MaterialTheme colorScheme has exactly one real independent consumer
-// today: ImportScreen.kt (the Huawei archive-import flow), which reads
-// MaterialTheme.colorScheme/.typography directly rather than going through
-// BitPalette. Everything else in this object was previously unused dead
-// exported API surface (confirmed via a whole-tree grep before this rewrite)
-// -- wiring real August tokens through it costs nothing and fixes that
-// screen's theming as a side effect of this phase, rather than requiring a
-// separate change.
-
+/**
+ * Material bridge for August v3.
+ *
+ * Most BitLut screens still consume BitPalette for incremental migration,
+ * while ImportScreen consumes MaterialTheme directly. Both are sourced from
+ * the same AugustColor tokens so primary/secondary semantics cannot drift.
+ */
 private val LightScheme = lightColorScheme(
-    primary              = AugustColor.Accent,
-    onPrimary            = AugustColor.Surface,
-    primaryContainer     = AugustColor.AccentStatusBg,
-    onPrimaryContainer   = AugustColor.AccentStatusFg,
-    secondary            = AugustColor.AccentDark,
+    primary              = AugustColor.Lime,
+    onPrimary            = AugustColor.LimeInk,
+    primaryContainer     = AugustColor.GrowthStatusBg,
+    onPrimaryContainer   = AugustColor.Ink,
+    secondary            = AugustColor.Purple,
     onSecondary          = AugustColor.Surface,
-    secondaryContainer   = AugustColor.Soft,
-    onSecondaryContainer = AugustColor.Ink,
-    tertiary             = AugustColor.GrowthStatusFg,
+    secondaryContainer   = AugustColor.PurpleSoft,
+    onSecondaryContainer = AugustColor.PurpleDark,
+    tertiary             = AugustColor.Navy,
     onTertiary           = AugustColor.Surface,
-    tertiaryContainer    = AugustColor.GrowthStatusBg,
-    onTertiaryContainer  = AugustColor.GrowthStatusFg,
+    tertiaryContainer    = AugustColor.Soft,
+    onTertiaryContainer  = AugustColor.Ink,
     error                = AugustColor.DangerFg,
     onError              = AugustColor.Surface,
     errorContainer       = AugustColor.DangerBg,
@@ -62,40 +47,40 @@ private val LightScheme = lightColorScheme(
     outlineVariant       = AugustColor.Soft,
     inverseSurface       = AugustColor.Navy,
     inverseOnSurface     = AugustColor.Surface,
-    inversePrimary       = AugustColor.AccentLight,
-    surfaceTint          = AugustColor.Accent,
+    inversePrimary       = AugustColor.Lime,
+    surfaceTint          = Color.Transparent,
     scrim                = AugustColor.Navy.copy(alpha = 0.80f),
 )
 
 private val DarkScheme = darkColorScheme(
-    primary              = AugustColor.Accent,
-    onPrimary            = AugustColor.Surface,
-    primaryContainer     = AugustColor.DarkPrimaryContainer,
-    onPrimaryContainer   = AugustColor.AccentLight,
+    primary              = AugustColor.Lime,
+    onPrimary            = AugustColor.LimeInk,
+    primaryContainer     = AugustColor.NavySoft,
+    onPrimaryContainer   = AugustColor.Lime,
     secondary            = AugustColor.AccentLight,
     onSecondary          = AugustColor.Navy,
     secondaryContainer   = AugustColor.DarkSecondaryContainer,
     onSecondaryContainer = AugustColor.AccentLight,
-    tertiary             = AugustColor.GrowthLime,
+    tertiary             = AugustColor.Surface,
     onTertiary           = AugustColor.Navy,
-    tertiaryContainer    = AugustColor.DarkTertiaryContainer,
-    onTertiaryContainer  = AugustColor.GrowthLime,
+    tertiaryContainer    = AugustColor.NavySoft,
+    onTertiaryContainer  = AugustColor.Surface,
     error                = AugustColor.DarkErrorContainerFg,
     onError              = AugustColor.Navy,
     errorContainer       = AugustColor.DarkErrorContainer,
     onErrorContainer     = AugustColor.DarkErrorContainerFg,
     background           = AugustColor.Navy,
     onBackground         = AugustColor.Surface,
-    surface              = AugustColor.DarkPanel,
+    surface              = AugustColor.NavyRaised,
     onSurface            = AugustColor.Surface,
-    surfaceVariant       = AugustColor.DarkPanel,
+    surfaceVariant       = AugustColor.NavySoft,
     onSurfaceVariant     = AugustColor.DarkSecondaryText,
     outline              = AugustColor.BorderDark,
-    outlineVariant       = AugustColor.DarkPanel,
+    outlineVariant       = AugustColor.NavySoft,
     inverseSurface       = AugustColor.Surface,
     inverseOnSurface     = AugustColor.Navy,
-    inversePrimary       = AugustColor.AccentDark,
-    surfaceTint          = AugustColor.Accent,
+    inversePrimary       = AugustColor.Lime,
+    surfaceTint          = Color.Transparent,
     scrim                = AugustColor.Navy.copy(alpha = 0.80f),
 )
 
@@ -103,7 +88,9 @@ private val DarkScheme = darkColorScheme(
 fun BitLutExpressiveTheme(content: @Composable () -> Unit) {
     val isDark = isSystemInDarkTheme()
     val scheme = remember(isDark) { if (isDark) DarkScheme else LightScheme }
-    val statusBarColor = remember(isDark) { if (isDark) AugustColor.Navy else AugustColor.Canvas }
+    val statusBarColor = remember(isDark) {
+        if (isDark) AugustColor.Navy else AugustColor.Canvas
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -112,14 +99,15 @@ fun BitLutExpressiveTheme(content: @Composable () -> Unit) {
             window.statusBarColor = statusBarColor.toArgb()
             window.navigationBarColor = statusBarColor.toArgb()
             WindowCompat.getInsetsController(window, view).apply {
-                // Light system bars need dark icons (isAppearanceLight* = true);
-                // dark bars need light icons -- previously hardcoded to always
-                // dark-appearance icons regardless of theme, which only looked
-                // right because the app effectively always rendered dark chrome.
                 isAppearanceLightStatusBars = !isDark
                 isAppearanceLightNavigationBars = !isDark
             }
         }
     }
-    MaterialTheme(colorScheme = scheme, typography = AugustTypography, content = content)
+
+    MaterialTheme(
+        colorScheme = scheme,
+        typography = AugustTypography,
+        content = content
+    )
 }

@@ -49,7 +49,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.HuaweiAuthFailureReason
@@ -101,10 +100,10 @@ import com.openhealth.sync.ui.ImportScreen
 import com.openhealth.sync.ui.ImportViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -158,6 +157,9 @@ fun FinalBitLutShell(
         }
     }
 
+    // August v3 keeps navigation as a stable Navy anchor. Scaffold owns
+    // content insets normally; no blur-source or measured-clearance plumbing.
+
     Scaffold(
         containerColor = palette.systemBackground,
         bottomBar = {
@@ -169,6 +171,7 @@ fun FinalBitLutShell(
             )
         }
     ) { padding ->
+        // Standard Scaffold padding keeps content clear of the fixed bottom navigation.
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -273,7 +276,6 @@ private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     PrimaryButton(
                         text = "Copy",
-                        accent = HealthAccent.mind,
                         modifier = Modifier,
                         onClick = {
                             val dump = com.openhealth.sync.util.AppLogger.exportFullDump(context)
@@ -282,7 +284,6 @@ private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
                     )
                     PrimaryButton(
                         text = "Close",
-                        accent = HealthAccent.activity,
                         modifier = Modifier,
                         onClick = onClose
                     )
@@ -382,7 +383,6 @@ private fun PermissionsOnboardingScreen(palette: BitPalette, onContinue: () -> U
 
             PrimaryButton(
                 text = stringResource(R.string.onboarding_continue_button),
-                accent = HealthAccent.mind,
                 onClick = onContinue
             )
         }
@@ -464,7 +464,6 @@ private fun DataScopesScreen(palette: BitPalette, onClose: () -> Unit) {
 
             PrimaryButton(
                 text = stringResource(R.string.data_scopes_close),
-                accent = HealthAccent.mind,
                 onClick = onClose
             )
         }
@@ -634,7 +633,10 @@ private fun CardLayoutEditorScreen(palette: BitPalette, onBack: () -> Unit) {
             lineHeight = 18.sp
         )
         Spacer(Modifier.height(16.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 8.dp)
+        ) {
             itemsIndexed(cards, key = { _, item -> item.key }) { index, cardType ->
                 CardLayoutRow(
                     palette = palette,
@@ -1948,33 +1950,16 @@ private fun WidgetVisibilityRow(
 }
 
 /**
- * Shared accent-color palette used across cards and icons throughout the app.
- * These are purely visual accents (not tied to any specific health metric).
+ * Existing metric/decorative accents mapped onto August v3 Purple.
  *
- * August design system integration, phase 1 (see AugustTokens.kt): these
- * three used to be three unrelated hues (warm orange/teal/violet). August's
- * own principles are explicit about this ("one strong action color... never
- * a collection of unrelated gradients") -- [activity] and [violet] are now
- * both drawn from August's purple family (Accent / Accent Dark), and [mind]
- * is aliased to Accent Dark as an interim, contrast-safe value too. [mind]'s
- * call sites include real "growth" moments (the positive-trend indicator,
- * the activity rings) that are strong candidates for August's actual Growth
- * Lime token -- that needs a per-call-site pass to give Lime a proper dark
- * backing (Lime text/icons on the app's white/light cards fails contrast
- * outright: computed at 1.14:1, versus the ~4.6-6.7:1 the two purple tokens
- * below measure at on both this app's card surfaces), so it's deliberately
- * deferred to the next integration phase rather than shipped unverified.
- *
- * cardLight/cardDark/systemLight were removed (2026-08 audit): all three
- * were leftover pre-August values (cardDark's #1C1C1E and systemLight's
- * #F2F2F7 are literally the old near-black/iOS-gray palette this
- * integration replaced) with zero references anywhere in the app --
- * verified by grep, not assumed from the names looking unused.
+ * These aliases intentionally remain for incremental migration of the large
+ * dashboard file. Primary actions do not consume this object; they are always
+ * Lime + Ink through PrimaryButton.
  */
 internal object HealthAccent {
-    val activity = AugustColor.Accent
-    val violet = AugustColor.AccentDark
-    val mind = AugustColor.AccentDark
+    val activity = AugustColor.Purple
+    val violet = AugustColor.PurpleDark
+    val mind = AugustColor.PurpleDark
 }
 
 /**
@@ -1996,7 +1981,7 @@ internal object HealthAccent {
 internal fun Modifier.pressScale(interactionSource: MutableInteractionSource): Modifier {
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
+        targetValue = if (pressed) 0.98f else 1f,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "pressScale"
     )
@@ -2006,69 +1991,78 @@ internal fun Modifier.pressScale(interactionSource: MutableInteractionSource): M
 @Composable
 private fun PrimaryButton(
     text: String,
-    accent: Color,
     enabled: Boolean = true,
     compact: Boolean = false,
     modifier: Modifier = Modifier.fillMaxWidth(),
     onClick: () -> Unit
 ) {
-    // August design system integration, phase 3 (see AugustTokens.kt).
-    // Section 9's component table: "Primary button | 44px minimum height |
-    // Purple fill, white text, 13px radius, accent shadow." [compact] isn't
-    // a named August variant -- it's this app's own smaller inline usage
-    // (e.g. two side-by-side actions in SettingsConnectionCard) -- sized to
-    // section 10's "Compact controls: 36px only when spacing preserves a
-    // minimum 24px target area", not invented freely.
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val press by animateDpAsState(
-        targetValue = if (pressed) 1.dp else 0.dp,
+    val focused by interactionSource.collectIsFocusedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.98f else 1f,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
-        label = "primaryButtonPress"
+        label = "primaryButtonScale"
     )
-    val minHeight = if (compact) 36.dp else 44.dp
+    val minHeight = if (compact) 44.dp else 48.dp
+    val shape = RoundedCornerShape(AugustRadius.Button)
+
     Button(
         onClick = onClick,
         enabled = enabled,
         interactionSource = interactionSource,
         modifier = modifier
             .heightIn(min = minHeight)
-            .graphicsLayer { translationY = -press.toPx() }
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .then(
                 if (enabled) {
                     Modifier.shadow(
                         elevation = AugustElevation.ButtonShadowElevation,
-                        shape = RoundedCornerShape(AugustRadius.Button),
-                        ambientColor = AugustElevation.ButtonShadowColor.copy(alpha = AugustElevation.ButtonShadowAlpha),
-                        spotColor = AugustElevation.ButtonShadowColor.copy(alpha = AugustElevation.ButtonShadowAlpha)
+                        shape = shape,
+                        ambientColor = AugustElevation.ButtonShadowColor.copy(
+                            alpha = AugustElevation.ButtonShadowAlpha
+                        ),
+                        spotColor = AugustElevation.ButtonShadowColor.copy(
+                            alpha = AugustElevation.ButtonShadowAlpha
+                        )
                     )
                 } else {
                     Modifier
                 }
             ),
-        shape = RoundedCornerShape(AugustRadius.Button),
-        colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White),
+        shape = shape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = AugustColor.Lime,
+            contentColor = AugustColor.LimeInk,
+            disabledContainerColor = AugustColor.Soft,
+            disabledContentColor = AugustColor.Muted
+        ),
+        border = if (focused) BorderStroke(2.dp, AugustColor.Purple) else null,
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 0.dp,
             pressedElevation = 0.dp,
             disabledElevation = 0.dp
         ),
-        contentPadding = if (compact) PaddingValues(horizontal = 12.dp, vertical = 6.dp) else ButtonDefaults.ContentPadding
-    ) { Text(text, fontWeight = FontWeight.ExtraBold, fontSize = if (compact) 12.sp else 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        contentPadding = if (compact) {
+            PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        } else {
+            ButtonDefaults.ContentPadding
+        }
+    ) {
+        Text(
+            text = text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = if (compact) 12.sp else 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
 }
 
-/**
- * August design system integration, phase 3 (see AugustTokens.kt). Section
- * 9's component table: "Secondary button | 40px minimum height | White
- * surface, subtle border, dark text." Introduced this phase for
- * SettingsConnectionCard's secondary action slot (e.g. "Refresh status"
- * next to "Connect"), which previously rendered as a second identical
- * PrimaryButton -- two equally-loud purple actions side by side, when only
- * one of them is really the primary action. No shadow, matching section
- * 9.1 (only Primary gets the accent shadow) and 6.4's "zero or one shadow"
- * -- a bordered, unshadowed button reads as secondary next to a shadowed
- * filled one without needing a second visual language.
- */
+/** August v3 neutral secondary action with Purple focus. */
 @Composable
 private fun SecondaryButton(
     text: String,
@@ -2080,29 +2074,63 @@ private fun SecondaryButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val press by animateDpAsState(
-        targetValue = if (pressed) 1.dp else 0.dp,
+    val focused by interactionSource.collectIsFocusedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.98f else 1f,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
-        label = "secondaryButtonPress"
+        label = "secondaryButtonScale"
     )
-    val minHeight = if (compact) 36.dp else 40.dp
+    val minHeight = 44.dp
+    val shape = RoundedCornerShape(AugustRadius.Button)
+
     Button(
         onClick = onClick,
         enabled = enabled,
         interactionSource = interactionSource,
         modifier = modifier
             .heightIn(min = minHeight)
-            .graphicsLayer { translationY = -press.toPx() },
-        shape = RoundedCornerShape(AugustRadius.Button),
-        colors = ButtonDefaults.buttonColors(containerColor = palette.card, contentColor = palette.text),
-        border = BorderStroke(1.dp, palette.stroke),
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
+        shape = shape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (palette.dark) AugustColor.NavySoft else AugustColor.Soft,
+            contentColor = if (palette.dark) AugustColor.Surface else AugustColor.Ink,
+            disabledContainerColor = if (palette.dark) {
+                AugustColor.NavySoft.copy(alpha = 0.55f)
+            } else {
+                AugustColor.Soft.copy(alpha = 0.65f)
+            },
+            disabledContentColor = if (palette.dark) {
+                AugustColor.DarkSecondaryText.copy(alpha = 0.70f)
+            } else {
+                AugustColor.Muted.copy(alpha = 0.75f)
+            }
+        ),
+        border = BorderStroke(
+            width = if (focused) 2.dp else 1.dp,
+            color = if (focused) AugustColor.Purple else palette.stroke
+        ),
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 0.dp,
             pressedElevation = 0.dp,
             disabledElevation = 0.dp
         ),
-        contentPadding = if (compact) PaddingValues(horizontal = 12.dp, vertical = 6.dp) else ButtonDefaults.ContentPadding
-    ) { Text(text, fontWeight = FontWeight.ExtraBold, fontSize = if (compact) 12.sp else 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        contentPadding = if (compact) {
+            PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        } else {
+            ButtonDefaults.ContentPadding
+        }
+    ) {
+        Text(
+            text = text,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = if (compact) 12.sp else 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
 }
 
 @Composable
@@ -2128,7 +2156,6 @@ private fun MinimalTopBar(
         )
         PrimaryButton(
             text = action,
-            accent = HealthAccent.activity,
             modifier = Modifier.wrapContentWidth(),
             onClick = onAction
         )
@@ -2321,7 +2348,7 @@ private fun MinimalMetricCard(
         }
         if (onClick != null) {
             Spacer(Modifier.height(10.dp))
-            PrimaryButton(text = unit, accent = accent, onClick = onClick)
+            PrimaryButton(text = unit, onClick = onClick)
         }
     }
 }
@@ -2540,7 +2567,6 @@ private fun SettingsConnectionCard(
         ) {
             PrimaryButton(
                 text = primaryAction,
-                accent = accent,
                 compact = true,
                 modifier = Modifier.weight(1f),
                 onClick = onPrimaryAction
