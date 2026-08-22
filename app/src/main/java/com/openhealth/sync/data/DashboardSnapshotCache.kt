@@ -36,19 +36,37 @@ class DashboardSnapshotCache(
         Context.MODE_PRIVATE
     )
 
-    /** Persists [snapshot] plus the moment it was captured (epoch millis). */
-    fun save(snapshot: GoogleDashboardSnapshot) {
-        try {
+    /**
+     * Persists the latest cache read time and separately tracks when the
+     * underlying dashboard values last changed. Background refreshes therefore
+     * keep cache freshness semantics intact without making the UI claim that
+     * unchanged data became new simply because the app was opened.
+     *
+     * @return epoch millis when the currently displayed data first changed.
+     */
+    fun save(snapshot: GoogleDashboardSnapshot): Long {
+        val previous = try { load() } catch (_: Exception) { null }
+        val now = System.currentTimeMillis()
+        val dataChangedAtMs = if (previous?.snapshot == snapshot && previous.dataChangedAtMs > 0L) {
+            previous.dataChangedAtMs
+        } else {
+            now
+        }
+
+        return try {
             val json = snapshotToJson(snapshot)
             prefs.edit()
                 .putString(sourceKey(KEY_SNAPSHOT_JSON), json.toString())
-                .putLong(sourceKey(KEY_SNAPSHOT_SAVED_AT_MS), System.currentTimeMillis())
+                .putLong(sourceKey(KEY_SNAPSHOT_SAVED_AT_MS), now)
+                .putLong(sourceKey(KEY_SNAPSHOT_DATA_CHANGED_AT_MS), dataChangedAtMs)
                 .apply()
-            AppLogger.d(TAG, "Dashboard snapshot cached (stepsToday=${snapshot.stepsToday})")
+            AppLogger.d(TAG, "Dashboard snapshot cached (stepsToday=${snapshot.stepsToday}, dataChangedAtMs=$dataChangedAtMs)")
+            dataChangedAtMs
         } catch (e: Exception) {
             // Caching is a best-effort optimization. A failure here must never
             // crash sync or the dashboard load path.
             AppLogger.e(TAG, "Failed to cache dashboard snapshot: ${e.message}", e)
+            previous?.dataChangedAtMs ?: 0L
         }
     }
 
@@ -56,9 +74,10 @@ class DashboardSnapshotCache(
     fun load(): CachedSnapshot? {
         val raw = prefs.getString(sourceKey(KEY_SNAPSHOT_JSON), null) ?: return null
         val savedAtMs = prefs.getLong(sourceKey(KEY_SNAPSHOT_SAVED_AT_MS), 0L)
+        val dataChangedAtMs = prefs.getLong(sourceKey(KEY_SNAPSHOT_DATA_CHANGED_AT_MS), savedAtMs)
         return try {
             val snapshot = snapshotFromJson(JSONObject(raw))
-            CachedSnapshot(snapshot = snapshot, savedAtMs = savedAtMs)
+            CachedSnapshot(snapshot = snapshot, savedAtMs = savedAtMs, dataChangedAtMs = dataChangedAtMs)
         } catch (e: Exception) {
             AppLogger.e(TAG, "Cached dashboard snapshot is corrupt; ignoring: ${e.message}", e)
             null
@@ -69,6 +88,7 @@ class DashboardSnapshotCache(
         prefs.edit()
             .remove(sourceKey(KEY_SNAPSHOT_JSON))
             .remove(sourceKey(KEY_SNAPSHOT_SAVED_AT_MS))
+            .remove(sourceKey(KEY_SNAPSHOT_DATA_CHANGED_AT_MS))
             .apply()
     }
 
@@ -149,6 +169,9 @@ class DashboardSnapshotCache(
                 put("title", w.title)
                 put("exerciseType", w.exerciseType)
                 w.distanceMeters?.let { put("distanceMeters", it) }
+                w.activeCaloriesKcal?.let { put("activeCaloriesKcal", it) }
+                w.elevationMeters?.let { put("elevationMeters", it) }
+                w.steps?.let { put("steps", it) }
             })
         }
         return arr
@@ -168,7 +191,10 @@ class DashboardSnapshotCache(
                         "exerciseType",
                         androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
                     ),
-                    distanceMeters = if (item.has("distanceMeters")) item.optDouble("distanceMeters") else null
+                    distanceMeters = if (item.has("distanceMeters")) item.optDouble("distanceMeters") else null,
+                    activeCaloriesKcal = if (item.has("activeCaloriesKcal")) item.optDouble("activeCaloriesKcal") else null,
+                    elevationMeters = if (item.has("elevationMeters")) item.optDouble("elevationMeters") else null,
+                    steps = if (item.has("steps")) item.optLong("steps") else null
                 )
             )
         }
@@ -178,11 +204,13 @@ class DashboardSnapshotCache(
     companion object {
         private const val KEY_SNAPSHOT_JSON = "dashboard_snapshot_cache_json"
         private const val KEY_SNAPSHOT_SAVED_AT_MS = "dashboard_snapshot_cache_saved_at_ms"
+        private const val KEY_SNAPSHOT_DATA_CHANGED_AT_MS = "dashboard_snapshot_data_changed_at_ms"
     }
 }
 
-/** A cached snapshot plus when it was captured, so the UI can show e.g. "updated 4m ago". */
+/** Cache transport freshness and semantic data freshness are intentionally separate. */
 data class CachedSnapshot(
     val snapshot: GoogleDashboardSnapshot,
-    val savedAtMs: Long
+    val savedAtMs: Long,
+    val dataChangedAtMs: Long
 )

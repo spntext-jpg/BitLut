@@ -72,7 +72,10 @@ data class ActivitySessionData(
     val endTimeMs: Long,
     val title: String = "Huawei activity",
     val exerciseType: Int = ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT,
-    val distanceMeters: Double? = null
+    val distanceMeters: Double? = null,
+    val activeCaloriesKcal: Double? = null,
+    val elevationMeters: Double? = null,
+    val steps: Long? = null
 )
 
 /** One row of the CSV export (sprint 2026-07-14): a single calendar day's
@@ -559,13 +562,13 @@ class GoogleHealthManager(
             // This keeps all insight cards consistent with the raw records that
             // were just written, avoiding Health Connect aggregate-cache lag.
             val recentWorkouts = readRecentWorkouts(200)
-            val dailyActivity = readDailyActivitySummaries(
+            val activityWindow = readDailyActivitySummaries(
                 client = client,
                 daysBack = DASHBOARD_HISTORY_DAYS,
                 workouts = recentWorkouts
             )
             val today = LocalDate.now()
-            val todayActivity = dailyActivity.firstOrNull { it.date == today }
+            val todayActivity = activityWindow.dailyActivity.firstOrNull { it.date == today }
 
             GoogleDashboardSnapshot(
                 stepsToday = todayActivity?.steps ?: 0L,
@@ -573,8 +576,8 @@ class GoogleHealthManager(
                 caloriesKcal = todayActivity?.caloriesKcal ?: 0.0,
                 workoutMinutesToday = todayActivity?.workoutMinutes ?: 0L,
                 activeHoursToday = 0,
-                recentWorkouts = recentWorkouts.take(2),
-                dailyActivity = dailyActivity
+                recentWorkouts = activityWindow.workouts.take(2),
+                dailyActivity = activityWindow.dailyActivity
             )
         } catch (e: CancellationException) {
             throw e
@@ -588,17 +591,29 @@ class GoogleHealthManager(
         }
     }
 
+    private data class SessionMetricAccumulator(
+        var steps: Double = 0.0,
+        var distanceMeters: Double = 0.0,
+        var activeCaloriesKcal: Double = 0.0,
+        var elevationMeters: Double = 0.0
+    )
+
+    private data class DashboardActivityWindow(
+        val dailyActivity: List<DailyActivitySummary>,
+        val workouts: List<ActivitySessionData>
+    )
+
     /**
-     * Reads the already-approved activity records once for a bounded window
-     * and groups them by local calendar day. Records crossing midnight are
-     * attributed to their start day, matching the existing CSV/dashboard
-     * convention and Huawei's normal daily record shape.
+     * Reads each already-approved activity stream once for the dashboard window,
+     * groups it by day, and attributes overlapping records to the two workout
+     * cards that are actually displayed. This avoids one Health Connect query
+     * per workout and does not request any new health category.
      */
     private suspend fun readDailyActivitySummaries(
         client: HealthConnectClient,
         daysBack: Int,
         workouts: List<ActivitySessionData>
-    ): List<DailyActivitySummary> {
+    ): DashboardActivityWindow {
         val safeDays = daysBack.coerceIn(14, 60)
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now()
@@ -618,8 +633,21 @@ class GoogleHealthManager(
         val workoutCountByDay = dates.associateWith { 0 }.toMutableMap()
         val longestWorkoutByDay = dates.associateWith { 0L }.toMutableMap()
 
+        val displayedWorkouts = workouts.take(2)
+        val sessionMetrics = displayedWorkouts.associate {
+            Pair(it.startTimeMs, it.endTimeMs) to SessionMetricAccumulator()
+        }.toMutableMap()
+
         fun dateOf(epochMs: Long): LocalDate =
             Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate()
+
+        fun overlapFraction(recordStartMs: Long, recordEndMs: Long, session: ActivitySessionData): Double {
+            if (recordEndMs <= recordStartMs || session.endTimeMs <= session.startTimeMs) return 0.0
+            val overlapStart = maxOf(recordStartMs, session.startTimeMs)
+            val overlapEnd = minOf(recordEndMs, session.endTimeMs)
+            if (overlapEnd <= overlapStart) return 0.0
+            return (overlapEnd - overlapStart).toDouble() / (recordEndMs - recordStartMs).toDouble()
+        }
 
         client.readRecords(
             ReadRecordsRequest(
@@ -630,6 +658,15 @@ class GoogleHealthManager(
         ).records.forEach { record ->
             val date = record.startTime.atZone(zone).toLocalDate()
             if (date in stepsByDay) stepsByDay[date] = (stepsByDay[date] ?: 0L) + record.count
+            val startMs = record.startTime.toEpochMilli()
+            val endMs = record.endTime.toEpochMilli()
+            displayedWorkouts.forEach { session ->
+                val fraction = overlapFraction(startMs, endMs, session)
+                if (fraction > 0.0) {
+                    sessionMetrics[Pair(session.startTimeMs, session.endTimeMs)]?.steps =
+                        (sessionMetrics[Pair(session.startTimeMs, session.endTimeMs)]?.steps ?: 0.0) + record.count.toDouble() * fraction
+                }
+            }
         }
 
         client.readRecords(
@@ -641,6 +678,15 @@ class GoogleHealthManager(
         ).records.forEach { record ->
             val date = record.startTime.atZone(zone).toLocalDate()
             if (date in distanceByDay) distanceByDay[date] = (distanceByDay[date] ?: 0.0) + record.distance.inMeters
+            val startMs = record.startTime.toEpochMilli()
+            val endMs = record.endTime.toEpochMilli()
+            displayedWorkouts.forEach { session ->
+                val fraction = overlapFraction(startMs, endMs, session)
+                if (fraction > 0.0) {
+                    sessionMetrics[Pair(session.startTimeMs, session.endTimeMs)]?.distanceMeters =
+                        (sessionMetrics[Pair(session.startTimeMs, session.endTimeMs)]?.distanceMeters ?: 0.0) + record.distance.inMeters * fraction
+                }
+            }
         }
 
         client.readRecords(
@@ -652,6 +698,15 @@ class GoogleHealthManager(
         ).records.forEach { record ->
             val date = record.startTime.atZone(zone).toLocalDate()
             if (date in caloriesByDay) caloriesByDay[date] = (caloriesByDay[date] ?: 0.0) + record.energy.inKilocalories
+            val startMs = record.startTime.toEpochMilli()
+            val endMs = record.endTime.toEpochMilli()
+            displayedWorkouts.forEach { session ->
+                val fraction = overlapFraction(startMs, endMs, session)
+                if (fraction > 0.0) {
+                    sessionMetrics[Pair(session.startTimeMs, session.endTimeMs)]?.activeCaloriesKcal =
+                        (sessionMetrics[Pair(session.startTimeMs, session.endTimeMs)]?.activeCaloriesKcal ?: 0.0) + record.energy.inKilocalories * fraction
+                }
+            }
         }
 
         client.readRecords(
@@ -663,6 +718,15 @@ class GoogleHealthManager(
         ).records.forEach { record ->
             val date = record.startTime.atZone(zone).toLocalDate()
             if (date in elevationByDay) elevationByDay[date] = (elevationByDay[date] ?: 0.0) + record.elevation.inMeters
+            val startMs = record.startTime.toEpochMilli()
+            val endMs = record.endTime.toEpochMilli()
+            displayedWorkouts.forEach { session ->
+                val fraction = overlapFraction(startMs, endMs, session)
+                if (fraction > 0.0) {
+                    sessionMetrics[Pair(session.startTimeMs, session.endTimeMs)]?.elevationMeters =
+                        (sessionMetrics[Pair(session.startTimeMs, session.endTimeMs)]?.elevationMeters ?: 0.0) + record.elevation.inMeters * fraction
+                }
+            }
         }
 
         client.readRecords(
@@ -689,7 +753,7 @@ class GoogleHealthManager(
                 longestWorkoutByDay[date] = maxOf(longestWorkoutByDay[date] ?: 0L, duration)
             }
 
-        return dates.map { date ->
+        val dailyActivity = dates.map { date ->
             DailyActivitySummary(
                 date = date,
                 steps = stepsByDay[date] ?: 0L,
@@ -702,6 +766,22 @@ class GoogleHealthManager(
                 longestWorkoutMinutes = longestWorkoutByDay[date] ?: 0L
             )
         }
+
+        val enrichedWorkouts = workouts.map { workout ->
+            val metrics = sessionMetrics[Pair(workout.startTimeMs, workout.endTimeMs)]
+            if (metrics == null) {
+                workout
+            } else {
+                workout.copy(
+                    distanceMeters = metrics.distanceMeters.takeIf { it > 0.0 } ?: workout.distanceMeters,
+                    activeCaloriesKcal = metrics.activeCaloriesKcal.takeIf { it > 0.0 },
+                    elevationMeters = metrics.elevationMeters.takeIf { it > 0.0 },
+                    steps = metrics.steps.toLong().takeIf { it > 0L }
+                )
+            }
+        }
+
+        return DashboardActivityWindow(dailyActivity = dailyActivity, workouts = enrichedWorkouts)
     }
 
     /**

@@ -183,7 +183,7 @@ class DashboardViewModel(
             hasPermissions = true,
             permissionsChecked = false,
             isFromCache = true,
-            lastUpdatedAtMs = cached.savedAtMs
+            lastUpdatedAtMs = cached.dataChangedAtMs
         )
     }
 
@@ -260,14 +260,14 @@ class DashboardViewModel(
                     // data (cached or previously loaded) rather than blanking the UI.
                     current.copy(isLoading = false, hasPermissions = true, permissionsChecked = true)
                 } else {
-                    snapshotCache.save(snapshot)
+                    val dataChangedAtMs = snapshotCache.save(snapshot)
                     updateAchievementsFor(snapshot)
                     readAchievementsIntoState(
                         current.withSnapshot(snapshot).copy(
                             hasPermissions = true,
                             permissionsChecked = true,
                             isFromCache = false,
-                            lastUpdatedAtMs = System.currentTimeMillis()
+                            lastUpdatedAtMs = dataChangedAtMs
                         )
                     )
                 }

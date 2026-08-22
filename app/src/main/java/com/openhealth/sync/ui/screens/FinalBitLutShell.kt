@@ -194,7 +194,7 @@ fun FinalBitLutShell(
                 )
             } else when (selected) {
                 MainTab.Today -> SummaryScreen(
-                    palette, dashboardState, syncState.selectedDataSource, syncState.lastSyncTime, onRefresh, wrappedOnRequestGoogle,
+                    palette, dashboardState, syncState.selectedDataSource, onRefresh, wrappedOnRequestGoogle,
                     onEditLayout = { showCardLayoutEditor = true },
                     cardLayoutVersion = cardLayoutVersion
                 )
@@ -475,7 +475,6 @@ private fun SummaryScreen(
     palette: BitPalette,
     state: DashboardUiState,
     dataSource: HealthDataSource,
-    lastSyncTime: String,
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit,
     onEditLayout: () -> Unit,
@@ -494,7 +493,11 @@ private fun SummaryScreen(
             MinimalHeader(
                 palette = palette,
                 title = stringResource(R.string.summary_short_title),
-                trailing = formatDashboardSourceStatus(dataSource, lastSyncTime),
+                trailing = formatDashboardSourceStatus(
+                    source = dataSource,
+                    lastUpdatedAtMs = state.lastUpdatedAtMs,
+                    isFromCache = state.isFromCache
+                ),
                 onEditClick = onEditLayout
             )
         }
@@ -817,11 +820,103 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
 }
 
 /**
- * Premium summary of one of the two most recent exercise sessions. Health
- * Connect exposes the session title/type and start/end timestamps here; the
- * card deliberately does not invent distance or calories that are not linked
- * to the session by the current data model.
+ * Four deliberately type-aware metrics per workout. Values are either read
+ * from already-imported Health Connect streams or derived from real distance +
+ * duration; unavailable values render as an em dash instead of being invented.
  */
+private data class WorkoutMetricDisplay(val label: String, val value: String)
+
+@Composable
+private fun workoutMetricDisplays(session: ActivitySessionData, durationMinutes: Long): List<WorkoutMetricDisplay> {
+    val noData = stringResource(R.string.no_data_short)
+    val distanceMeters = session.distanceMeters?.takeIf { it > 0.0 }
+    val distanceKm = distanceMeters?.div(1000.0)
+    val calories = session.activeCaloriesKcal?.takeIf { it > 0.0 }
+    val elevation = session.elevationMeters?.takeIf { it > 0.0 }
+    val steps = session.steps?.takeIf { it > 0L }
+    val durationHours = (session.endTimeMs - session.startTimeMs).toDouble() / 3_600_000.0
+    val averageSpeedKmh = if (distanceKm != null && durationHours > 0.0 && distanceMeters >= MIN_DISTANCE_METERS_FOR_SPEED) {
+        distanceKm / durationHours
+    } else null
+    val paceMinutesPerKm = if (distanceKm != null && distanceMeters >= MIN_DISTANCE_METERS_FOR_PACE && durationMinutes > 0L) {
+        durationMinutes.toDouble() / distanceKm
+    } else null
+    val swimPaceMinutesPer100m = if (distanceMeters != null && distanceMeters >= MIN_DISTANCE_METERS_FOR_SWIM_PACE && durationMinutes > 0L) {
+        durationMinutes.toDouble() / (distanceMeters / 100.0)
+    } else null
+
+    @Composable
+    fun duration() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_duration_label),
+        stringResource(R.string.workout_duration_value, durationMinutes)
+    )
+    @Composable
+    fun distance() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_distance_label),
+        distanceKm?.let { stringResource(R.string.distance_today_value, formatOneDecimal(it)) } ?: noData
+    )
+    @Composable
+    fun caloriesMetric() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_calories_label),
+        calories?.let { stringResource(R.string.workout_calories_value, it.toLong()) } ?: noData
+    )
+    @Composable
+    fun elevationMetric() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_elevation_label),
+        elevation?.let { stringResource(R.string.workout_elevation_value, it.toLong()) } ?: noData
+    )
+    @Composable
+    fun stepsMetric() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_steps_label),
+        steps?.let(::formatNumber) ?: noData
+    )
+    @Composable
+    fun started() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_started_label),
+        formatWorkoutDateTime(session.startTimeMs)
+    )
+    @Composable
+    fun ended() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_ended_label),
+        formatWorkoutClockTime(session.endTimeMs)
+    )
+    @Composable
+    fun pace() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_pace_label),
+        paceMinutesPerKm?.let { stringResource(R.string.workout_pace_value, formatPace(it)) } ?: noData
+    )
+    @Composable
+    fun speed() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_speed_label),
+        averageSpeedKmh?.let { stringResource(R.string.workout_speed_value, formatOneDecimal(it)) } ?: noData
+    )
+    @Composable
+    fun swimPace() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_swim_pace_label),
+        swimPaceMinutesPer100m?.let { stringResource(R.string.workout_swim_pace_value, formatPace(it)) } ?: noData
+    )
+
+    return when (session.exerciseType) {
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> listOf(duration(), distance(), pace(), caloriesMetric())
+
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> listOf(duration(), distance(), speed(), elevationMetric())
+
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> listOf(duration(), distance(), elevationMetric(), caloriesMetric())
+
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> listOf(duration(), distance(), swimPace(), caloriesMetric())
+
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
+        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> listOf(duration(), caloriesMetric(), stepsMetric(), started())
+
+        ExerciseSessionRecord.EXERCISE_TYPE_YOGA,
+        ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> listOf(duration(), caloriesMetric(), started(), ended())
+
+        else -> listOf(duration(), distance(), caloriesMetric(), started())
+    }
+}
+
 @Composable
 private fun WorkoutRecencyCard(
     palette: BitPalette,
@@ -844,7 +939,7 @@ private fun WorkoutRecencyCard(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             Box(
                 modifier = Modifier
@@ -878,12 +973,7 @@ private fun WorkoutRecencyCard(
                             .background(accent.copy(alpha = 0.14f))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
-                        Text(
-                            text = "#$position",
-                            color = accent,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 10.sp
-                        )
+                        Text(text = "#$position", color = accent, fontWeight = FontWeight.Black, fontSize = 10.sp)
                     }
                 }
                 Spacer(Modifier.height(7.dp))
@@ -895,25 +985,12 @@ private fun WorkoutRecencyCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(9.dp))
+                Spacer(Modifier.height(12.dp))
                 if (session != null && durationMinutes != null) {
-                    val distanceKm = session.distanceMeters?.takeIf { it > 0.0 }?.let { it / 1000.0 }
-                    val paceMinutesPerKm = if (
-                        durationMinutes > 0 &&
-                        session.distanceMeters != null &&
-                        session.distanceMeters >= MIN_DISTANCE_METERS_FOR_PACE
-                    ) {
-                        durationMinutes.toDouble() / (session.distanceMeters / 1000.0)
-                    } else {
-                        null
-                    }
                     WorkoutStatsGrid(
                         palette = palette,
                         accent = accent,
-                        whenText = formatWorkoutDateTime(session.startTimeMs),
-                        durationMinutes = durationMinutes,
-                        distanceKm = distanceKm,
-                        paceMinutesPerKm = paceMinutesPerKm
+                        metrics = workoutMetricDisplays(session, durationMinutes)
                     )
                 } else {
                     Text(
@@ -929,59 +1006,28 @@ private fun WorkoutRecencyCard(
     }
 }
 
-/**
- * Up to 4 stat slots for a workout card, matching the "no more than 4 main
- * parameters" limit: when + duration are always shown (every session has
- * them), distance + pace only appear when the session actually has a
- * meaningful distance -- strength training, yoga, etc. simply show the
- * first two and skip the second row entirely, rather than inventing a
- * "0.0 km" that isn't real.
- */
 @Composable
 private fun WorkoutStatsGrid(
     palette: BitPalette,
     accent: Color,
-    whenText: String,
-    durationMinutes: Long,
-    distanceKm: Double?,
-    paceMinutesPerKm: Double?
+    metrics: List<WorkoutMetricDisplay>
 ) {
-    Column {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            WorkoutStat(
-                modifier = Modifier.weight(1f),
-                palette = palette,
-                valueColor = palette.text,
-                label = stringResource(R.string.workout_stat_when_label),
-                value = whenText
-            )
-            WorkoutStat(
-                modifier = Modifier.weight(1f),
-                palette = palette,
-                valueColor = accent,
-                label = stringResource(R.string.workout_stat_duration_label),
-                value = stringResource(R.string.workout_duration_value, durationMinutes)
-            )
-        }
-        if (distanceKm != null || paceMinutesPerKm != null) {
-            Spacer(Modifier.height(10.dp))
-            Row(modifier = Modifier.fillMaxWidth()) {
-                WorkoutStat(
-                    modifier = Modifier.weight(1f),
-                    palette = palette,
-                    valueColor = accent,
-                    label = stringResource(R.string.workout_stat_distance_label),
-                    value = distanceKm?.let { stringResource(R.string.distance_today_value, formatOneDecimal(it)) }
-                        ?: stringResource(R.string.no_data_short)
-                )
-                WorkoutStat(
-                    modifier = Modifier.weight(1f),
-                    palette = palette,
-                    valueColor = accent,
-                    label = stringResource(R.string.workout_stat_pace_label),
-                    value = paceMinutesPerKm?.let { stringResource(R.string.workout_pace_value, formatPace(it)) }
-                        ?: stringResource(R.string.no_data_short)
-                )
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        metrics.take(4).chunked(2).forEach { rowMetrics ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                rowMetrics.forEach { metric ->
+                    WorkoutStat(
+                        modifier = Modifier.weight(1f),
+                        palette = palette,
+                        valueColor = accent,
+                        label = metric.label,
+                        value = metric.value
+                    )
+                }
+                if (rowMetrics.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -1004,28 +1050,34 @@ private fun WorkoutStat(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(3.dp))
         Text(
             text = value,
             color = valueColor,
-            fontWeight = FontWeight.Black,
-            fontSize = 13.sp,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 14.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
 
-/** Pace shown as "M:SS" per km, e.g. "5:32". Truncates rather than rounds -- off by at most 1 second, not worth a new import for. */
-private fun formatPace(minutesPerKm: Double): String {
-    val totalSeconds = (minutesPerKm * 60.0).toInt().coerceAtLeast(0)
+/** Pace shown as M:SS per unit distance. */
+private fun formatPace(minutesPerUnit: Double): String {
+    val totalSeconds = (minutesPerUnit * 60.0).toInt().coerceAtLeast(0)
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
-/** Below this, a computed pace is more noise than signal (GPS drift, a few meters of wandering before/after the real activity). */
 private const val MIN_DISTANCE_METERS_FOR_PACE = 500.0
+private const val MIN_DISTANCE_METERS_FOR_SPEED = 500.0
+private const val MIN_DISTANCE_METERS_FOR_SWIM_PACE = 100.0
+
+private fun formatWorkoutClockTime(epochMs: Long): String =
+    java.time.Instant.ofEpochMilli(epochMs)
+        .atZone(java.time.ZoneId.systemDefault())
+        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault()))
 
 private fun formatWorkoutDateTime(epochMs: Long): String =
     java.time.Instant.ofEpochMilli(epochMs)
@@ -2222,12 +2274,16 @@ private fun MinimalHeader(
 }
 
 @Composable
-private fun formatDashboardSourceStatus(source: HealthDataSource, lastSyncTime: String): String {
+private fun formatDashboardSourceStatus(
+    source: HealthDataSource,
+    lastUpdatedAtMs: Long,
+    isFromCache: Boolean
+): String {
     val sourceName = when (source) {
         HealthDataSource.HUAWEI_HEALTH -> stringResource(R.string.data_source_huawei_title)
         HealthDataSource.GOOGLE_FIT -> stringResource(R.string.data_source_google_fit_title)
     }
-    val whenText = lastSyncTime.takeIf { it.isNotBlank() && it != "sync_no_data" }
+    val whenText = formatUpdatedAgo(lastUpdatedAtMs, isFromCache)
         ?: stringResource(R.string.no_data_short)
     return "$sourceName · $whenText"
 }
