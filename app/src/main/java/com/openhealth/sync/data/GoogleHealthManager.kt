@@ -42,7 +42,7 @@ private const val READ_PAGE_SIZE = 1000
 private const val TRANSIENT_PERMISSION_RETRY_DELAY_MS = 400L
 /** Sprint 2026-07-10: how long a permission-check result is trusted before
  *  a fresh one is required -- see [GoogleHealthManager.grantedPermissionsOrEmpty]. */
-private const val PERMISSION_CACHE_TTL_MS = 3_000L
+private const val PERMISSION_CACHE_TTL_MS = 30_000L
 private val SYNTHETIC_WORKOUT_TITLE = Regex("^sporthealth\\d+$", RegexOption.IGNORE_CASE)
 
 private val HC_PACKAGES = listOf(
@@ -242,6 +242,7 @@ class GoogleHealthManager(
     }
 
     private suspend fun grantedPermissionsOrEmpty(): Set<String> {
+        val stalePermissions = cachedPermissions.get()?.first
         cachedPermissions.get()?.let { (granted, atMs) ->
             if (System.currentTimeMillis() - atMs < PERMISSION_CACHE_TTL_MS) return granted
         }
@@ -278,8 +279,16 @@ class GoogleHealthManager(
                 } catch (e2: CancellationException) {
                     throw e2
                 } catch (e2: Exception) {
-                    AppLogger.e(TAG, "Permission snapshot failed twice; treating as denied: ${e2.message}", e2)
-                    emptySet()
+                    if (stalePermissions != null) {
+                        AppLogger.w(
+                            TAG,
+                            "Permission snapshot temporarily unavailable; preserving last-known permissions instead of treating a rate limit as denial: ${e2.message}"
+                        )
+                        stalePermissions
+                    } else {
+                        AppLogger.e(TAG, "Permission snapshot failed with no last-known state: ${e2.message}", e2)
+                        throw e2
+                    }
                 }
             }
             cachedPermissions.set(granted to System.currentTimeMillis())
@@ -593,38 +602,31 @@ class GoogleHealthManager(
     }
 
     /**
-     * Health Connect ReadRecordsRequest returns at most pageSize records and
-     * exposes the continuation through response.pageToken. Dashboard windows
-     * are intentionally bounded, but high-frequency streams (especially
-     * distance/steps) can still exceed one page within 30 days. Always drain
-     * the requested window so recent workout enrichment cannot disappear once
-     * older records fill the first page.
+     * Dashboard reads must stay quota-bounded. A previous sprint drained every
+     * Health Connect page for five 30-day streams; a single UI refresh could
+     * therefore expand into many provider calls, and overlapping refresh
+     * triggers quickly exhausted Health Connect's request quota.
+     *
+     * For the dashboard we only need the newest records, especially for the
+     * two latest workout cards. Read exactly one newest-first page per stream.
+     * CSV export remains a separate explicit-user action and is intentionally
+     * outside this hot path.
      */
-    private suspend fun <T : Record> readAllRecords(
+    private suspend fun <T : Record> readBoundedRecentRecords(
         client: HealthConnectClient,
         recordType: KClass<T>,
         timeRangeFilter: TimeRangeFilter,
         dataOriginFilter: Set<DataOrigin>,
-        ascendingOrder: Boolean = true
-    ): List<T> {
-        val records = mutableListOf<T>()
-        var pageToken: String? = null
-        do {
-            val response = client.readRecords(
-                ReadRecordsRequest(
-                    recordType = recordType,
-                    timeRangeFilter = timeRangeFilter,
-                    dataOriginFilter = dataOriginFilter,
-                    ascendingOrder = ascendingOrder,
-                    pageSize = READ_PAGE_SIZE,
-                    pageToken = pageToken
-                )
-            )
-            records.addAll(response.records)
-            pageToken = response.pageToken
-        } while (pageToken != null)
-        return records
-    }
+        pageSize: Int = READ_PAGE_SIZE
+    ): List<T> = client.readRecords(
+        ReadRecordsRequest(
+            recordType = recordType,
+            timeRangeFilter = timeRangeFilter,
+            dataOriginFilter = dataOriginFilter,
+            ascendingOrder = false,
+            pageSize = pageSize.coerceIn(1, READ_PAGE_SIZE)
+        )
+    ).records
 
     private data class SessionMetricAccumulator(
         var steps: Double = 0.0,
@@ -684,7 +686,7 @@ class GoogleHealthManager(
             return (overlapEnd - overlapStart).toDouble() / (recordEndMs - recordStartMs).toDouble()
         }
 
-        readAllRecords(
+        readBoundedRecentRecords(
             client = client,
             recordType = StepsRecord::class,
             timeRangeFilter = range,
@@ -703,7 +705,7 @@ class GoogleHealthManager(
             }
         }
 
-        readAllRecords(
+        readBoundedRecentRecords(
             client = client,
             recordType = DistanceRecord::class,
             timeRangeFilter = range,
@@ -722,7 +724,7 @@ class GoogleHealthManager(
             }
         }
 
-        readAllRecords(
+        readBoundedRecentRecords(
             client = client,
             recordType = ActiveCaloriesBurnedRecord::class,
             timeRangeFilter = range,
@@ -741,7 +743,7 @@ class GoogleHealthManager(
             }
         }
 
-        readAllRecords(
+        readBoundedRecentRecords(
             client = client,
             recordType = ElevationGainedRecord::class,
             timeRangeFilter = range,
@@ -760,7 +762,7 @@ class GoogleHealthManager(
             }
         }
 
-        readAllRecords(
+        readBoundedRecentRecords(
             client = client,
             recordType = FloorsClimbedRecord::class,
             timeRangeFilter = range,
@@ -938,12 +940,12 @@ class GoogleHealthManager(
         return try {
             val start = LocalDate.now().minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant()
             val end = Instant.now()
-            readAllRecords(
+            readBoundedRecentRecords(
                 client = client,
                 recordType = ExerciseSessionRecord::class,
                 timeRangeFilter = TimeRangeFilter.between(start, end),
                 dataOriginFilter = selectedDataOrigins(),
-                ascendingOrder = false
+                pageSize = limit.coerceIn(1, 100)
             )
                 .take(limit)
                 .map {

@@ -97,8 +97,11 @@ class MainActivity : ComponentActivity() {
     ) { granted ->
         awaitingSystemResult = false
         AppLogger.i("MainActivity", "Health Connect permissions returned: $granted")
-        syncViewModel.refreshStatuses()
-        dashboardViewModel.refresh()
+        // Permission screens are explicit state transitions, so bypass
+        // normal status throttling and perform one authoritative dashboard read.
+        syncViewModel.googleManager.invalidateClientCache()
+        syncViewModel.refreshStatuses(force = true)
+        dashboardViewModel.refresh(force = true)
 
         if (!granted.containsAll(syncViewModel.googleManager.permissions)) {
             Toast.makeText(this, getString(R.string.toast_hc_permissions), Toast.LENGTH_LONG).show()
@@ -165,8 +168,8 @@ class MainActivity : ComponentActivity() {
                         syncViewModel.uiState.collectAsStateWithLifecycle().value
                     },
                     onRefresh = {
-                        syncViewModel.refreshStatuses()
-                        dashboardViewModel.refresh()
+                        syncViewModel.refreshStatuses(force = true)
+                        dashboardViewModel.refreshFromCache()
                     },
                     onRequestGoogle = { requestGoogleHealthPermissions() },
                     onRequestHuawei = { startHuaweiAuthorization() },
@@ -216,8 +219,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshUiStatusOnLaunch() {
+        // DashboardViewModel already starts from the last successful cache.
+        // Automatic sync below owns the fresh provider read and will refresh
+        // this UI from that cache when WorkManager completes.
         syncViewModel.refreshStatuses()
-        dashboardViewModel.refresh()
     }
 
     private fun requestGoogleHealthPermissions() {
@@ -338,7 +343,7 @@ class MainActivity : ComponentActivity() {
                     AppLogger.i("MainActivity", "Skipping automatic launch sync: Health Connect permissions not granted yet")
                 },
                 onCompleted = { success -> syncViewModel.markSyncCompleted(success) },
-                onDashboardRefresh = { dashboardViewModel.refresh() }
+                onDashboardRefresh = { dashboardViewModel.refreshFromCache() }
             )
         }
     }
@@ -357,7 +362,7 @@ class MainActivity : ComponentActivity() {
                     requestGoogleHealthPermissions()
                 },
                 onCompleted = { success -> syncViewModel.markSyncCompleted(success) },
-                onDashboardRefresh = { dashboardViewModel.refresh() }
+                onDashboardRefresh = { dashboardViewModel.refreshFromCache() }
             )
         }
     }

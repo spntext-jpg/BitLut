@@ -140,8 +140,10 @@ fun FinalBitLutShell(
     var showLogViewer by rememberSaveable { mutableStateOf(false) }
     val dashboardState = dashboardStateProvider()
     val syncState = syncStateProvider()
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val palette = remember(isDark) { if (isDark) BitPalette.dark() else BitPalette.light() }
+    // August v3 uses a stable light Canvas + White Surface architecture.
+    // Dark styling belongs only to explicit semantic anchors (hero/nav), not
+    // to every card when the OS happens to be in dark mode.
+    val palette = remember { BitPalette.light() }
 
     // Sprint 7: the first time someone would trigger the real Health Connect
     // permission request, show a plain-language rationale screen instead --
@@ -2028,9 +2030,12 @@ private fun WidgetVisibilityRow(
  * Lime + Ink through PrimaryButton.
  */
 internal object HealthAccent {
-    val activity = AugustColor.Purple
-    val violet = AugustColor.PurpleDark
-    val mind = AugustColor.PurpleDark
+    // Legacy names retained for source compatibility only. Metric/card
+    // decoration is neutral InkSoft in August v3; Purple is reserved for
+    // focus, links and explicit secondary interaction states.
+    val activity = AugustColor.InkSoft
+    val violet = AugustColor.InkSoft
+    val mind = AugustColor.InkSoft
 }
 
 /**

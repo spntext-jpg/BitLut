@@ -109,10 +109,43 @@ class DashboardViewModel(
 
     private var loadJob: Job? = null
     private var loadGeneration: Long = 0L
+    private var lastLiveLoadStartedAtMs: Long = 0L
 
-    init { load() }
+    init {
+        // A warm cache is already the last successful SyncWorker snapshot.
+        // Do not immediately duplicate that background read on every cold
+        // launch; automatic sync will refresh the cache and notify this VM.
+        val hasWarmCache = try { snapshotCache.load() != null } catch (_: Exception) { false }
+        if (!hasWarmCache) load(force = true)
+    }
 
-    fun refresh() { load() }
+    fun refresh(force: Boolean = false) { load(force) }
+
+    /**
+     * SyncWorker refreshes DashboardSnapshotCache before WorkManager reports
+     * success. UI completion callbacks should consume that snapshot locally
+     * instead of issuing another identical Health Connect read.
+     */
+    fun refreshFromCache() {
+        val cached = try {
+            snapshotCache.load()
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Failed to read post-sync dashboard cache: ${e.message}", e)
+            null
+        } ?: return
+
+        _state.update { current ->
+            readAchievementsIntoState(
+                current.withSnapshot(cached.snapshot).copy(
+                    isLoading = false,
+                    hasPermissions = true,
+                    permissionsChecked = true,
+                    isFromCache = false,
+                    lastUpdatedAtMs = cached.dataChangedAtMs
+                )
+            )
+        }
+    }
 
     /** Rebuilds state from the newly selected source's own cache and achievement
      *  namespace before starting a live Health Connect read. This prevents even
@@ -121,7 +154,7 @@ class DashboardViewModel(
     fun onDataSourceChanged() {
         loadJob?.cancel()
         _state.value = buildInitialState()
-        load()
+        load(force = true)
     }
 
     /** Called from the Settings widget-visibility toggles. Persists immediately and
@@ -209,9 +242,19 @@ class DashboardViewModel(
         state
     }
 
-    fun load() {
+    fun load(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && loadJob?.isActive == true) {
+            AppLogger.d(TAG, "Dashboard live refresh coalesced: read already in progress")
+            return
+        }
+        if (!force && now - lastLiveLoadStartedAtMs < MIN_LIVE_REFRESH_INTERVAL_MS) {
+            AppLogger.d(TAG, "Dashboard live refresh throttled")
+            return
+        }
+        lastLiveLoadStartedAtMs = now
         val generation = ++loadGeneration
-        loadJob?.cancel()
+        if (force) loadJob?.cancel()
         loadJob = viewModelScope.launch {
             val hasPerms = try {
                 googleManager.hasAllPermissions()
@@ -346,6 +389,8 @@ class DashboardViewModel(
     }
 
     companion object {
+        private const val MIN_LIVE_REFRESH_INTERVAL_MS = 5_000L
+
         fun provideFactory(
             googleManager: HealthConnectManager,
             widgetVisibilityPrefs: WidgetVisibilityPrefs,

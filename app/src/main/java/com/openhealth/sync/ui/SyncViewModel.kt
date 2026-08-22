@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.openhealth.sync.data.HealthConnectStatus
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,10 +43,17 @@ class SyncViewModel(
     private val _uiState = MutableStateFlow(SyncUiState())
     val uiState: StateFlow<SyncUiState> = _uiState.asStateFlow()
 
-    init { refreshStatuses() }
+    private var statusJob: Job? = null
+    private var lastStatusRefreshAtMs: Long = 0L
 
-    fun refreshStatuses() {
-        viewModelScope.launch {
+    init { refreshStatuses(force = true) }
+
+    fun refreshStatuses(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && statusJob?.isActive == true) return
+        if (!force && now - lastStatusRefreshAtMs < STATUS_REFRESH_MIN_INTERVAL_MS) return
+        lastStatusRefreshAtMs = now
+        statusJob = viewModelScope.launch {
             val isAvailable = googleManager.getStatus() == HealthConnectStatus.AVAILABLE
             val hasPerms = googleManager.hasAllPermissions()
             val savedTime = prefs.getString("last_sync_time", "sync_no_data") ?: "sync_no_data"
@@ -90,10 +98,14 @@ class SyncViewModel(
         val time = if (success) SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()) else _uiState.value.lastSyncTime
         if (success) prefs.edit().putString("last_sync_time", time).apply()
         _uiState.update { it.copy(isSyncing = false, syncStatus = statusMsg, lastSyncTime = time) }
-        refreshStatuses()
+        // Do not re-query Health Connect permissions here. A completed sync
+        // already proved the provider path; repeating the permission snapshot
+        // was one contributor to the quota storm.
     }
 
     companion object {
+        private const val STATUS_REFRESH_MIN_INTERVAL_MS = 10_000L
+
         fun provideFactory(
             googleManager: HealthConnectManager,
             huaweiHealthManager: HuaweiHealthReader,
