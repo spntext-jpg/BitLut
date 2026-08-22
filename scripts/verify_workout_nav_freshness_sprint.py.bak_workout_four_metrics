@@ -50,15 +50,10 @@ require("workoutMetricDisplays" in shell, "type-aware workout metrics missing")
 for marker in [
     "EXERCISE_TYPE_RUNNING", "EXERCISE_TYPE_WALKING", "EXERCISE_TYPE_BIKING",
     "EXERCISE_TYPE_HIKING", "EXERCISE_TYPE_SWIMMING_POOL", "EXERCISE_TYPE_STRENGTH_TRAINING",
-    "workout_stat_speed_label"
+    "workout_stat_speed_label", "workout_stat_calories_label", "workout_stat_elevation_label"
 ]:
     require(marker in shell, f"workout UI marker missing: {marker}")
 require("metrics.take(4).chunked(2)" in shell, "workout cards are not capped to four metrics")
-for retired in ["workout_stat_calories_label", "workout_stat_elevation_label"]:
-    require(
-        retired not in shell,
-        f"retired workout UI marker still present in card composable: {retired}"
-    )
 require("state.lastUpdatedAtMs" in shell, "header does not use displayed-data freshness")
 require("syncState.lastSyncTime" not in shell, "header still depends on sync-completion clock")
 
@@ -72,19 +67,13 @@ require("navigationBarsPadding()" in nav, "gesture-navigation inset handling mis
 require("dev.chrisbanes.haze" not in nav and "dev.chrisbanes.haze" not in app_gradle, "Haze was reintroduced")
 
 for key in [
-    "workout_stat_speed_label", "workout_stat_steps_label", "workout_stat_started_label",
-    "workout_stat_ended_label", "workout_stat_swim_pace_label", "workout_speed_value",
-    "workout_swim_pace_value"
+    "workout_stat_speed_label", "workout_stat_calories_label", "workout_stat_elevation_label",
+    "workout_stat_steps_label", "workout_stat_started_label", "workout_stat_ended_label",
+    "workout_stat_swim_pace_label", "workout_speed_value", "workout_calories_value",
+    "workout_elevation_value", "workout_swim_pace_value"
 ]:
     require(f'name="{key}"' in strings_en, f"English string missing: {key}")
     require(f'name="{key}"' in strings_ru, f"Russian string missing: {key}")
-
-for retired in [
-    "workout_stat_calories_label", "workout_stat_elevation_label",
-    "workout_calories_value", "workout_elevation_value"
-]:
-    require(f'name="{retired}"' not in strings_en, f"retired English string still present: {retired}")
-    require(f'name="{retired}"' not in strings_ru, f"retired Russian string still present: {retired}")
 
 for forbidden in ["HeartRateRecord", "SleepSessionRecord", "OxygenSaturationRecord"]:
     require(forbidden not in google, f"new out-of-scope health category leaked in: {forbidden}")

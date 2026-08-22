@@ -818,18 +818,9 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
 }
 
 /**
- * Four consistent metrics on every workout card, for every exercise type.
- * Values come from real imported Health Connect data; average speed is
- * derived only from real distance and duration. Missing source values
- * remain an em dash.
- *
- * Active calories and elevation were dropped from the card entirely
- * (2026-08-22 product decision) -- not just hidden when missing. Huawei
- * activeCalories is frequently scope-denied (50005) and elevation is rarely
- * populated for the same reason, so the six-slot layout mostly showed four
- * real values and two permanent dashes. [ActivitySessionData.activeCaloriesKcal]
- * and [.elevationMeters] are still read/synced for CSV export and daily
- * totals; only this card's display was narrowed.
+ * Six consistent metrics on every workout card. Values come from real imported
+ * Health Connect data; average speed is derived only from real distance and
+ * duration. Missing source values remain an em dash.
  */
 private data class WorkoutMetricDisplay(val label: String, val value: String)
 
@@ -841,6 +832,8 @@ private fun workoutMetricDisplays(
     val noData = stringResource(R.string.no_data_short)
     val distanceMeters = session.distanceMeters?.takeIf { it > 0.0 }
     val distanceKm = distanceMeters?.div(1000.0)
+    val calories = session.activeCaloriesKcal?.takeIf { it > 0.0 }
+    val elevation = session.elevationMeters?.takeIf { it > 0.0 }
     val steps = session.steps?.takeIf { it > 0L }
     val durationHours =
         (session.endTimeMs - session.startTimeMs).toDouble() / 3_600_000.0
@@ -874,6 +867,18 @@ private fun workoutMetricDisplays(
         WorkoutMetricDisplay(
             stringResource(R.string.workout_stat_steps_label),
             steps?.let(::formatNumber) ?: noData
+        ),
+        WorkoutMetricDisplay(
+            stringResource(R.string.workout_stat_calories_label),
+            calories?.let {
+                stringResource(R.string.workout_calories_value, it.toLong())
+            } ?: noData
+        ),
+        WorkoutMetricDisplay(
+            stringResource(R.string.workout_stat_elevation_label),
+            elevation?.let {
+                stringResource(R.string.workout_elevation_value, it.toLong())
+            } ?: noData
         )
     )
 }
@@ -984,10 +989,7 @@ private fun WorkoutStatsGrid(
     metrics: List<WorkoutMetricDisplay>
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // Four-metric contract (2026-08-22): Duration, Distance, Avg speed,
-        // Steps for every exercise type. take(4) documents that cap explicitly
-        // rather than relying on workoutMetricDisplays() always returning 4.
-        metrics.take(4).chunked(2).forEach { rowMetrics ->
+        metrics.take(6).chunked(2).forEach { rowMetrics ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
