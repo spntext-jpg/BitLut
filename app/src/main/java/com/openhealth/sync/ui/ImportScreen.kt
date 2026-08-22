@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openhealth.sync.R
 import com.openhealth.sync.data.import.HuaweiExportSummary
+import com.openhealth.sync.ui.theme.AugustColor
+import com.openhealth.sync.ui.theme.AugustRadius
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -123,9 +125,9 @@ private fun IdleContent(onPickFile: () -> Unit) {
         Spacer(Modifier.height(8.dp))
 
         Card(
-            shape = RoundedCornerShape(32.dp),
+            shape = RoundedCornerShape(AugustRadius.Hero),
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            colors = CardDefaults.cardColors(containerColor = AugustColor.NavyRaised)
         ) {
             Column(
                 modifier = Modifier.padding(28.dp),
@@ -138,14 +140,14 @@ private fun IdleContent(onPickFile: () -> Unit) {
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = AugustColor.Surface
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.import_hero_body),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = AugustColor.DarkSecondaryText
                 )
             }
         }
@@ -163,7 +165,7 @@ private fun IdleContent(onPickFile: () -> Unit) {
         InstructionStep("5", stringResource(R.string.import_step5_title), stringResource(R.string.import_step5_body))
 
         Card(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(AugustRadius.Card),
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
         ) {
@@ -187,7 +189,7 @@ private fun IdleContent(onPickFile: () -> Unit) {
         Button(
             onClick = onPickFile,
             modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(AugustRadius.Button)
         ) {
             Icon(Icons.Rounded.FileOpen, contentDescription = null)
             Spacer(Modifier.width(10.dp))
@@ -273,7 +275,7 @@ private fun PreviewContent(
             DataSummaryCard({ Icon(Icons.Rounded.DirectionsRun, null, tint = MaterialTheme.colorScheme.tertiary) }, stringResource(R.string.import_preview_activities), summary.activityCount)
 
         if (summary.filesFound.isNotEmpty()) {
-            Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Card(shape = RoundedCornerShape(AugustRadius.Card), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(stringResource(R.string.import_files_found), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
@@ -286,13 +288,13 @@ private fun PreviewContent(
 
         Spacer(Modifier.height(8.dp))
 
-        Button(onClick = onConfirm, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp)) {
+        Button(onClick = onConfirm, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(AugustRadius.Button)) {
             Icon(Icons.Rounded.CheckCircle, contentDescription = null)
             Spacer(Modifier.width(10.dp))
             Text(stringResource(R.string.import_confirm_button), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
 
-        OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(20.dp)) {
+        OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(AugustRadius.Button)) {
             Text(stringResource(R.string.import_pick_another))
         }
 
@@ -302,13 +304,13 @@ private fun PreviewContent(
 
 @Composable
 private fun DataSummaryCard(icon: @Composable () -> Unit, label: String, count: Int) {
-    Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+    Card(shape = RoundedCornerShape(AugustRadius.Card), modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Row(modifier = Modifier.padding(20.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 icon()
                 Text(label, style = MaterialTheme.typography.bodyLarge)
             }
-            Text(count.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text(count.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -326,14 +328,14 @@ private fun SuccessContent(state: ImportState.Success, onDone: () -> Unit) {
             modifier = Modifier.size(88.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
+            Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(52.dp))
         }
         Spacer(Modifier.height(24.dp))
         Text(stringResource(R.string.import_success_title), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.import_success_body), style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(32.dp))
-        Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+        Card(shape = RoundedCornerShape(AugustRadius.Card), modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (state.stepsWritten > 0)     ResultRow("👣", stringResource(R.string.import_preview_steps), state.stepsWritten)
                 if (state.distancesWritten > 0) ResultRow("📍", stringResource(R.string.import_preview_distance), state.distancesWritten)
@@ -342,7 +344,7 @@ private fun SuccessContent(state: ImportState.Success, onDone: () -> Unit) {
             }
         }
         Spacer(Modifier.height(32.dp))
-        Button(onClick = onDone, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp)) {
+        Button(onClick = onDone, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(AugustRadius.Button)) {
             Text(stringResource(R.string.import_done), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
     }
@@ -355,7 +357,7 @@ private fun ResultRow(emoji: String, label: String, count: Int) {
             Text(emoji, fontSize = 20.sp)
             Text(label, style = MaterialTheme.typography.bodyLarge)
         }
-        Text(count.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Text(count.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -390,11 +392,11 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         Text(stringResource(R.string.import_error_title), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(12.dp))
-        Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+        Card(shape = RoundedCornerShape(AugustRadius.Card), modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
             Text(resolveErrorMessage(message), modifier = Modifier.padding(20.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
         }
         Spacer(Modifier.height(32.dp))
-        FilledTonalButton(onClick = onRetry, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp)) {
+        FilledTonalButton(onClick = onRetry, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(AugustRadius.Button)) {
             Icon(Icons.Rounded.Refresh, null)
             Spacer(Modifier.width(10.dp))
             Text(stringResource(R.string.import_retry), fontSize = 16.sp)

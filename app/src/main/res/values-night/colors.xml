@@ -11,7 +11,7 @@
   contrast-checked) instead of their own independently-set hexes.
 -->
 <resources>
-    <color name="widget_card">#FF252739</color>
+    <color name="widget_card">#FF1C1E33</color>
     <color name="widget_text">#FFFFFFFF</color>
-    <color name="widget_secondary_text">#FFBEC3D4</color>
+    <color name="widget_secondary_text">#FFB8BDCE</color>
 </resources>

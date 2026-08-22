@@ -526,7 +526,7 @@ private fun SummaryScreen(
                         title = stringResource(R.string.steps_today),
                         value = formatNumber(state.stepsToday),
                         unit = "${stringResource(R.string.steps_unit)} · ${stringResource(R.string.distance_today_value, formatOneDecimal(state.distanceMeters / 1000.0))}",
-                        accent = HealthAccent.activity,
+                        accent = AugustColor.Lime,
                         progress = state.stepsProgress,
                         progressText = stepsGoalProgressText(state.stepsToday, state.stepsGoal),
                         hero = true,
@@ -896,24 +896,33 @@ private fun workoutMetricDisplays(session: ActivitySessionData, durationMinutes:
         swimPaceMinutesPer100m?.let { stringResource(R.string.workout_swim_pace_value, formatPace(it)) } ?: noData
     )
 
+    fun prefer(primary: WorkoutMetricDisplay, fallback: WorkoutMetricDisplay): WorkoutMetricDisplay =
+        if (primary.value != noData) primary else fallback
+
     return when (session.exerciseType) {
         ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
-        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> listOf(duration(), distance(), pace(), caloriesMetric())
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING ->
+            listOf(duration(), distance(), pace(), prefer(caloriesMetric(), started()))
 
-        ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> listOf(duration(), distance(), speed(), elevationMetric())
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING ->
+            listOf(duration(), distance(), speed(), prefer(elevationMetric(), started()))
 
-        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> listOf(duration(), distance(), elevationMetric(), caloriesMetric())
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING ->
+            listOf(duration(), distance(), prefer(elevationMetric(), started()), prefer(caloriesMetric(), ended()))
 
         ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
-        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> listOf(duration(), distance(), swimPace(), caloriesMetric())
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL ->
+            listOf(duration(), distance(), swimPace(), prefer(caloriesMetric(), started()))
 
         ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
-        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> listOf(duration(), caloriesMetric(), stepsMetric(), started())
+        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING ->
+            listOf(duration(), prefer(caloriesMetric(), stepsMetric()), started(), ended())
 
         ExerciseSessionRecord.EXERCISE_TYPE_YOGA,
-        ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> listOf(duration(), caloriesMetric(), started(), ended())
+        ExerciseSessionRecord.EXERCISE_TYPE_PILATES ->
+            listOf(duration(), started(), ended(), prefer(caloriesMetric(), stepsMetric()))
 
-        else -> listOf(duration(), distance(), caloriesMetric(), started())
+        else -> listOf(duration(), distance(), started(), prefer(caloriesMetric(), ended()))
     }
 }
 
@@ -985,6 +994,16 @@ private fun WorkoutRecencyCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (session != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = formatWorkoutDateTime(session.startTimeMs),
+                        color = palette.secondaryText,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.sp,
+                        maxLines = 1
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
                 if (session != null && durationMinutes != null) {
                     WorkoutStatsGrid(
@@ -1022,7 +1041,7 @@ private fun WorkoutStatsGrid(
                     WorkoutStat(
                         modifier = Modifier.weight(1f),
                         palette = palette,
-                        valueColor = accent,
+                        valueColor = palette.text,
                         label = metric.label,
                         value = metric.value
                     )
@@ -1842,14 +1861,14 @@ private fun HuaweiAuthIssueCard(palette: BitPalette, reason: HuaweiAuthFailureRe
                     Box(
                         modifier = Modifier
                             .pressScale(interactionSource)
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(HealthAccent.activity)
+                            .clip(RoundedCornerShape(AugustRadius.Button))
+                            .background(AugustColor.Lime)
                             .clickable(interactionSource = interactionSource, indication = null) { onRetryConnect() }
                             .padding(horizontal = 16.dp, vertical = 9.dp)
                     ) {
                         Text(
                             text = stringResource(R.string.huawei_retry_connect),
-                            color = Color.White,
+                            color = AugustColor.LimeInk,
                             fontWeight = FontWeight.Black,
                             fontSize = 13.sp
                         )
@@ -1901,8 +1920,8 @@ private fun DataSourceToggleRow(
                 if (checked || !selected) onSelect()
             },
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = accent,
+                checkedThumbColor = AugustColor.Surface,
+                checkedTrackColor = AugustColor.Purple,
                 uncheckedThumbColor = Color.White,
                 uncheckedTrackColor = palette.stroke
             )
@@ -1989,8 +2008,8 @@ private fun WidgetVisibilityRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = accent,
+                checkedThumbColor = AugustColor.Surface,
+                checkedTrackColor = AugustColor.Purple,
                 uncheckedThumbColor = Color.White,
                 uncheckedTrackColor = palette.stroke
             )
@@ -2315,6 +2334,10 @@ private fun MinimalMetricCard(
     onClick: (() -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val resolvedAccent = if (hero) AugustColor.Lime else accent
+    val titleColor = if (hero) AugustColor.DarkSecondaryText else palette.secondaryText
+    val valueColor = if (hero) AugustColor.Surface else palette.text
+    val supportingColor = if (hero) AugustColor.DarkSecondaryText else palette.secondaryText
     val cardModifier = if (onClick != null) {
         Modifier
             .fillMaxWidth()
@@ -2326,7 +2349,7 @@ private fun MinimalMetricCard(
     SoftCard(
         palette = palette,
         modifier = cardModifier,
-        accent = accent,
+        accent = resolvedAccent,
         hero = hero,
         tintWithAccent = true,
         pressLift = pressLift
@@ -2341,8 +2364,8 @@ private fun MinimalMetricCard(
             Column(Modifier.weight(1f)) {
                 Text(
                     text = title.uppercase(Locale.getDefault()),
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Bold,
+                    color = titleColor,
+                    fontWeight = FontWeight.Black,
                     fontSize = 12.sp
                 )
                 Spacer(Modifier.height(4.dp))
@@ -2358,7 +2381,7 @@ private fun MinimalMetricCard(
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = value,
-                        color = palette.text,
+                        color = valueColor,
                         fontWeight = FontWeight.Black,
                         fontSize = valueFontSize,
                         lineHeight = valueFontSize,
@@ -2370,7 +2393,7 @@ private fun MinimalMetricCard(
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = unit,
-                        color = accent,
+                        color = resolvedAccent,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(bottom = 6.dp)
@@ -2378,16 +2401,16 @@ private fun MinimalMetricCard(
                 }
             }
             if (progress != null) {
-                ProgressRingChip(progress = progress, accent = accent, size = 52.dp)
+                ProgressRingChip(progress = progress, accent = resolvedAccent, size = 52.dp)
             } else if (icon != null) {
                 Box(
                     modifier = Modifier
                         .size(52.dp)
                         .clip(RoundedCornerShape(26.dp))
-                        .background(accent.copy(alpha = 0.16f)),
+                        .background(resolvedAccent.copy(alpha = if (hero) 1f else 0.16f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
+                    Icon(icon, contentDescription = null, tint = if (hero) AugustColor.LimeInk else resolvedAccent, modifier = Modifier.size(24.dp))
                 }
             }
         }
@@ -2395,7 +2418,7 @@ private fun MinimalMetricCard(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = progressText,
-                color = palette.secondaryText,
+                color = supportingColor,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 12.sp,
                 maxLines = 1,
@@ -2534,7 +2557,7 @@ private fun ProgressRingChip(
     centerText: String? = null
 ) {
     val resolvedCenterText = centerText ?: "${(progress.coerceIn(0f, 1f) * 100).toInt()}%"
-    val glowColors = remember(accent) { listOf(accent.copy(alpha = 0.30f), Color.Transparent) }
+    val glowColors = remember(accent) { listOf(accent.copy(alpha = 0.14f), Color.Transparent) }
 
     Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.matchParentSize()) {
@@ -2669,7 +2692,7 @@ internal data class BitPalette(
             stroke = AugustColor.BorderLight,
             activity = HealthAccent.activity,
             mind = HealthAccent.mind,
-            backgroundBrush = Brush.verticalGradient(listOf(AugustColor.Canvas, AugustColor.Surface))
+            backgroundBrush = Brush.verticalGradient(listOf(AugustColor.Canvas, AugustColor.Canvas))
         )
         // dark() reuses HealthAccent directly (single source of truth) rather
         // than redeclaring near-duplicate hex values that could drift apart.

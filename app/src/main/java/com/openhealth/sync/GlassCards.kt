@@ -23,9 +23,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.openhealth.sync.ui.theme.AugustColor
 import com.openhealth.sync.ui.theme.AugustElevation
 import com.openhealth.sync.ui.theme.AugustMotion
 import com.openhealth.sync.ui.theme.AugustRadius
@@ -48,12 +48,10 @@ import com.openhealth.sync.ui.theme.AugustSpace
  * for this rewrite. Two of those parameters do mean something different now
  * than before, both toward the same "quiet depth" principle:
  *
- *   - tintWithAccent no longer tints the card's background fill (background
- *     is always palette.card now, a plain Surface/Dark-Panel color -- the
- *     accent-wash background was exactly the "glass-heavy" look August's
- *     non-goals rule out). It now strengthens the BORDER toward the card's
- *     accent color instead, which is still "border before shadow" -- a more
- *     emphasized border, not a colored fill.
+ *   - tintWithAccent remains in the public signature only for compatibility
+ *     with existing call sites. August v3 keeps card fill and border neutral;
+ *     semantic Lime/Purple accents belong to content, progress, focus, or
+ *     actions inside the surface instead of tinting every card boundary.
  *   - pressLift no longer scales the card or re-tints its background on
  *     press, just a small upward translate (2dp, matching the doc's "-2px
  *     for cards" hover translation) on a plain tween instead of a spring.
@@ -78,16 +76,13 @@ internal fun SoftCard(
     )
 
     val bg by animateColorAsState(
-        targetValue = palette.card,
+        targetValue = if (hero) AugustColor.NavyRaised else palette.card,
         animationSpec = tween(AugustMotion.FastMs),
         label = "softCardBg"
     )
-
-    val borderColor = if (tintWithAccent) {
-        lerp(palette.stroke, accent, if (palette.dark) 0.55f else 0.45f)
-    } else {
-        palette.stroke
-    }
+    // August v3: cards use quiet neutral borders. Brand colors belong inside
+    // the component (icon/progress/action), not around every surface.
+    val borderColor = if (hero) AugustColor.BorderDark else palette.stroke
 
     val shadowColor = if (hero) AugustElevation.HeroShadowColor else AugustElevation.CardShadowColor
     val shadowAlpha = if (hero) AugustElevation.HeroShadowAlpha else AugustElevation.CardShadowAlpha

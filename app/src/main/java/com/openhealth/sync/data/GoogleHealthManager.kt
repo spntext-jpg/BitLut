@@ -36,6 +36,7 @@ import kotlin.reflect.KClass
 private const val TAG = "GoogleHealthManager"
 private const val WRITE_BATCH_SIZE = 400
 private const val DASHBOARD_HISTORY_DAYS = 30
+private const val READ_PAGE_SIZE = 1000
 /** Sprint 2026-07-08: single quick retry delay for a transient permission-
  *  check failure -- see [GoogleHealthManager.grantedPermissionsOrEmpty]. */
 private const val TRANSIENT_PERMISSION_RETRY_DELAY_MS = 400L
@@ -591,6 +592,40 @@ class GoogleHealthManager(
         }
     }
 
+    /**
+     * Health Connect ReadRecordsRequest returns at most pageSize records and
+     * exposes the continuation through response.pageToken. Dashboard windows
+     * are intentionally bounded, but high-frequency streams (especially
+     * distance/steps) can still exceed one page within 30 days. Always drain
+     * the requested window so recent workout enrichment cannot disappear once
+     * older records fill the first page.
+     */
+    private suspend fun <T : Record> readAllRecords(
+        client: HealthConnectClient,
+        recordType: KClass<T>,
+        timeRangeFilter: TimeRangeFilter,
+        dataOriginFilter: Set<DataOrigin>,
+        ascendingOrder: Boolean = true
+    ): List<T> {
+        val records = mutableListOf<T>()
+        var pageToken: String? = null
+        do {
+            val response = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = recordType,
+                    timeRangeFilter = timeRangeFilter,
+                    dataOriginFilter = dataOriginFilter,
+                    ascendingOrder = ascendingOrder,
+                    pageSize = READ_PAGE_SIZE,
+                    pageToken = pageToken
+                )
+            )
+            records.addAll(response.records)
+            pageToken = response.pageToken
+        } while (pageToken != null)
+        return records
+    }
+
     private data class SessionMetricAccumulator(
         var steps: Double = 0.0,
         var distanceMeters: Double = 0.0,
@@ -649,13 +684,12 @@ class GoogleHealthManager(
             return (overlapEnd - overlapStart).toDouble() / (recordEndMs - recordStartMs).toDouble()
         }
 
-        client.readRecords(
-            ReadRecordsRequest(
-                recordType = StepsRecord::class,
-                timeRangeFilter = range,
-                dataOriginFilter = origins
-            )
-        ).records.forEach { record ->
+        readAllRecords(
+            client = client,
+            recordType = StepsRecord::class,
+            timeRangeFilter = range,
+            dataOriginFilter = origins
+        ).forEach { record ->
             val date = record.startTime.atZone(zone).toLocalDate()
             if (date in stepsByDay) stepsByDay[date] = (stepsByDay[date] ?: 0L) + record.count
             val startMs = record.startTime.toEpochMilli()
@@ -669,13 +703,12 @@ class GoogleHealthManager(
             }
         }
 
-        client.readRecords(
-            ReadRecordsRequest(
-                recordType = DistanceRecord::class,
-                timeRangeFilter = range,
-                dataOriginFilter = origins
-            )
-        ).records.forEach { record ->
+        readAllRecords(
+            client = client,
+            recordType = DistanceRecord::class,
+            timeRangeFilter = range,
+            dataOriginFilter = origins
+        ).forEach { record ->
             val date = record.startTime.atZone(zone).toLocalDate()
             if (date in distanceByDay) distanceByDay[date] = (distanceByDay[date] ?: 0.0) + record.distance.inMeters
             val startMs = record.startTime.toEpochMilli()
@@ -689,13 +722,12 @@ class GoogleHealthManager(
             }
         }
 
-        client.readRecords(
-            ReadRecordsRequest(
-                recordType = ActiveCaloriesBurnedRecord::class,
-                timeRangeFilter = range,
-                dataOriginFilter = origins
-            )
-        ).records.forEach { record ->
+        readAllRecords(
+            client = client,
+            recordType = ActiveCaloriesBurnedRecord::class,
+            timeRangeFilter = range,
+            dataOriginFilter = origins
+        ).forEach { record ->
             val date = record.startTime.atZone(zone).toLocalDate()
             if (date in caloriesByDay) caloriesByDay[date] = (caloriesByDay[date] ?: 0.0) + record.energy.inKilocalories
             val startMs = record.startTime.toEpochMilli()
@@ -709,13 +741,12 @@ class GoogleHealthManager(
             }
         }
 
-        client.readRecords(
-            ReadRecordsRequest(
-                recordType = ElevationGainedRecord::class,
-                timeRangeFilter = range,
-                dataOriginFilter = origins
-            )
-        ).records.forEach { record ->
+        readAllRecords(
+            client = client,
+            recordType = ElevationGainedRecord::class,
+            timeRangeFilter = range,
+            dataOriginFilter = origins
+        ).forEach { record ->
             val date = record.startTime.atZone(zone).toLocalDate()
             if (date in elevationByDay) elevationByDay[date] = (elevationByDay[date] ?: 0.0) + record.elevation.inMeters
             val startMs = record.startTime.toEpochMilli()
@@ -729,13 +760,12 @@ class GoogleHealthManager(
             }
         }
 
-        client.readRecords(
-            ReadRecordsRequest(
-                recordType = FloorsClimbedRecord::class,
-                timeRangeFilter = range,
-                dataOriginFilter = origins
-            )
-        ).records.forEach { record ->
+        readAllRecords(
+            client = client,
+            recordType = FloorsClimbedRecord::class,
+            timeRangeFilter = range,
+            dataOriginFilter = origins
+        ).forEach { record ->
             val date = record.startTime.atZone(zone).toLocalDate()
             if (date in floorsByDay) floorsByDay[date] = (floorsByDay[date] ?: 0.0) + record.floors
         }
@@ -774,9 +804,9 @@ class GoogleHealthManager(
             } else {
                 workout.copy(
                     distanceMeters = metrics.distanceMeters.takeIf { it > 0.0 } ?: workout.distanceMeters,
-                    activeCaloriesKcal = metrics.activeCaloriesKcal.takeIf { it > 0.0 },
-                    elevationMeters = metrics.elevationMeters.takeIf { it > 0.0 },
-                    steps = metrics.steps.toLong().takeIf { it > 0L }
+                    activeCaloriesKcal = metrics.activeCaloriesKcal.takeIf { it > 0.0 } ?: workout.activeCaloriesKcal,
+                    elevationMeters = metrics.elevationMeters.takeIf { it > 0.0 } ?: workout.elevationMeters,
+                    steps = metrics.steps.toLong().takeIf { it > 0L } ?: workout.steps
                 )
             }
         }
@@ -908,90 +938,28 @@ class GoogleHealthManager(
         return try {
             val start = LocalDate.now().minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant()
             val end = Instant.now()
-            val sessions = client.readRecords(
-                ReadRecordsRequest(
-                    recordType = ExerciseSessionRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, end),
-                    dataOriginFilter = selectedDataOrigins()
-                )
-            ).records
-                .sortedByDescending { it.startTime }
+            readAllRecords(
+                client = client,
+                recordType = ExerciseSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end),
+                dataOriginFilter = selectedDataOrigins(),
+                ascendingOrder = false
+            )
                 .take(limit)
-
-            val distanceBySessionId = if (sessions.isEmpty()) emptyMap() else readDistanceForSessions(client, sessions, start, end)
-
-            sessions.map {
-                ActivitySessionData(
-                    startTimeMs = it.startTime.toEpochMilli(),
-                    endTimeMs = it.endTime.toEpochMilli(),
-                    title = workoutDisplayName(it.title, it.exerciseType),
-                    exerciseType = it.exerciseType,
-                    distanceMeters = distanceBySessionId[it.metadata.id]
-                )
-            }
+                .map {
+                    ActivitySessionData(
+                        startTimeMs = it.startTime.toEpochMilli(),
+                        endTimeMs = it.endTime.toEpochMilli(),
+                        title = workoutDisplayName(it.title, it.exerciseType),
+                        exerciseType = it.exerciseType
+                    )
+                }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "readRecentWorkouts failed: ${e.message}", e)
             emptyList()
         }
-    }
-
-    /**
-     * Health Connect's ExerciseSessionRecord carries no distance of its own --
-     * only DistanceRecord does, as a separate stream. Computing a per-workout
-     * distance (for the pace shown on the workout card) by querying
-     * DistanceRecord once per session would multiply into up to `limit` extra
-     * Health Connect calls per sync, which risks the rate-limit cascade
-     * documented in CLAUDE.md Gotcha 4. Instead this reads DistanceRecord
-     * ONCE for the whole window and locally attributes each record's meters
-     * to whichever session(s) it overlaps in time, weighted by the fraction
-     * of the record's own duration that falls inside that session. Huawei's
-     * distance is written from a continuous delta stream (see
-     * HuaweiHealthManager.readDistance), not one blob per day, so this
-     * attribution is meaningfully accurate rather than smearing a whole
-     * day's distance onto one short workout.
-     */
-    private suspend fun readDistanceForSessions(
-        client: HealthConnectClient,
-        sessions: List<ExerciseSessionRecord>,
-        start: Instant,
-        end: Instant
-    ): Map<String, Double> {
-        val distanceRecords = try {
-            client.readRecords(
-                ReadRecordsRequest(
-                    recordType = DistanceRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, end),
-                    dataOriginFilter = selectedDataOrigins()
-                )
-            ).records
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "readDistanceForSessions failed: ${e.message}", e)
-            return emptyMap()
-        }
-
-        if (distanceRecords.isEmpty()) return emptyMap()
-
-        val result = HashMap<String, Double>(sessions.size)
-        for (session in sessions) {
-            var totalMeters = 0.0
-            for (record in distanceRecords) {
-                val overlapStart = maxOf(record.startTime, session.startTime)
-                val overlapEnd = minOf(record.endTime, session.endTime)
-                if (!overlapEnd.isAfter(overlapStart)) continue
-                val recordDurationMs = (record.endTime.toEpochMilli() - record.startTime.toEpochMilli()).coerceAtLeast(1L)
-                val overlapMs = overlapEnd.toEpochMilli() - overlapStart.toEpochMilli()
-                val overlapFraction = overlapMs.toDouble() / recordDurationMs.toDouble()
-                totalMeters += record.distance.inMeters * overlapFraction
-            }
-            if (totalMeters > 0.0) {
-                result[session.metadata.id] = totalMeters
-            }
-        }
-        return result
     }
 
     /**

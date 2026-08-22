@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#0D0D0D</color>
+    <color name="ic_launcher_background">#151728</color>
     <!-- Sprint (2026-07-16): home screen widget colors, light (day)
          variant: see values-night/colors.xml for the dark counterpart.
          Resource-qualified files, not Glance's ColorProvider(day=, night=)
@@ -13,6 +13,6 @@
          are now August's Ink/Muted tokens (see AugustTokens.kt) instead of
          their own independently-set hexes. -->
     <color name="widget_card">#FFFFFFFF</color>
-    <color name="widget_text">#FF171927</color>
-    <color name="widget_secondary_text">#FF697084</color>
+    <color name="widget_text">#FF151728</color>
+    <color name="widget_secondary_text">#FF6F7385</color>
 </resources>
