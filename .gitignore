@@ -40,3 +40,6 @@ hotfix.sh
 __pycache__/
 *.pyc
 *.tmp
+
+# Catch backup-suffix variants beyond the literal *.bak case
+*.bak_*
