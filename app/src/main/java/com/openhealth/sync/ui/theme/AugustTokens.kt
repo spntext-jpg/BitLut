@@ -46,6 +46,30 @@ internal object AugustColor {
     val PurpleDark = Color(0xFF5140DC)
     val PurpleSoft = Color(0xFFEEEAFF)
 
+    // Tangerine (2026-08-22): trending warm-orange "on/active" signal for two
+    // specific spots -- Settings toggle "on" track and the bottom nav's
+    // Refresh action fill -- replacing Purple in those two roles only.
+    // Purple keeps its existing focus-ring/link/selection-detail role
+    // everywhere else (including the nav bar's own focus-visible ring,
+    // deliberately left untouched here); Tangerine is not a second primary
+    // CTA color competing with Lime, just a distinct accent for these two
+    // toggle-like "this is currently on/active" cases.
+    //
+    // #F28500 is the commonly documented "Tangerine" named color (matches
+    // ColorHexa/Wikipedia's canonical value) rather than any single
+    // company's specific brand orange, since a design-system token named
+    // after a generic color word shouldn't quietly be someone else's logo
+    // color. TangerineActive is derived, not eyeballed: same relative
+    // HSV saturation/value shift that produces LimeActive from Lime,
+    // applied to Tangerine (source Lime->LimeActive ratios: s x1.256,
+    // v x0.914), landing on #DD7A00. Ink-on-Tangerine clears ~6.9:1 and
+    // Ink-on-TangerineActive ~5.8:1 (WCAG AA); white-on-Tangerine fails
+    // (~2.6:1), so anything filled Tangerine keeps Ink content, matching
+    // Lime's own existing contract -- no separate "TangerineInk" alias is
+    // introduced since Ink already is that color.
+    val Tangerine = Color(0xFFF28500)
+    val TangerineActive = Color(0xFFDD7A00)
+
     // Dark architectural anchor.
     val Navy = Color(0xFF151728)
     val NavyRaised = Color(0xFF1C1E33)

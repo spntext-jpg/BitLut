@@ -527,15 +527,15 @@ private fun SummaryScreen(
 
             else -> {
                 item {
-                    MinimalMetricCard(
+                    StepsHeroCard(
                         palette = palette,
                         title = stringResource(R.string.steps_today),
-                        value = formatNumber(state.stepsToday),
-                        unit = "${stringResource(R.string.steps_unit)} · ${stringResource(R.string.distance_today_value, formatOneDecimal(state.distanceMeters / 1000.0))}",
-                        accent = AugustColor.Lime,
+                        stepsValue = formatNumber(state.stepsToday),
+                        stepsUnit = stringResource(R.string.steps_unit),
+                        distanceValue = formatOneDecimal(state.distanceMeters / 1000.0),
+                        distanceUnit = stringResource(R.string.distance_unit_km),
                         progress = state.stepsProgress,
                         progressText = stepsGoalProgressText(state.stepsToday, state.stepsGoal),
-                        hero = true,
                         pressLift = true
                     )
                 }
@@ -1865,7 +1865,7 @@ private fun DataSourceToggleRow(
             },
             colors = SwitchDefaults.colors(
                 checkedThumbColor = AugustColor.Surface,
-                checkedTrackColor = AugustColor.Purple,
+                checkedTrackColor = AugustColor.Tangerine,
                 uncheckedThumbColor = Color.White,
                 uncheckedTrackColor = palette.stroke
             )
@@ -1950,7 +1950,7 @@ private fun WidgetVisibilityRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = AugustColor.Surface,
-                checkedTrackColor = AugustColor.Purple,
+                checkedTrackColor = AugustColor.Tangerine,
                 uncheckedThumbColor = Color.White,
                 uncheckedTrackColor = palette.stroke
             )
@@ -2372,6 +2372,136 @@ private fun MinimalMetricCard(
         if (onClick != null) {
             Spacer(Modifier.height(10.dp))
             PrimaryButton(text = unit, onClick = onClick)
+        }
+    }
+}
+
+/**
+ * Two-metric Steps Hero card (2026-08-22): Steps and Distance are each
+ * rendered as their own big-number + small-unit pair, side by side, instead
+ * of Distance being folded into Steps' small unit string
+ * ("steps · 0.1 km") the way MinimalMetricCard's generic hero mode did
+ * before this. Distance now gets equal visual weight to Steps rather than
+ * reading as an afterthought.
+ *
+ * The steps-goal progress ring moves below both numbers instead of sitting
+ * beside them in the same row (confirmed layout decision, 2026-08-22) --
+ * two big-number blocks plus a ring all competing for one row was too tight
+ * once Distance became a first-class value instead of trailing text.
+ *
+ * MinimalMetricCard itself is untouched and stays in use for every other
+ * single-value card (the Connect Google lock screen, the Distance card at
+ * DashboardOrderedCard, etc.) -- this is a dedicated Hero-only composable,
+ * not a generalization of the existing one, since no other card needs two
+ * equal-weight big numbers side by side.
+ */
+@Composable
+private fun StepsHeroCard(
+    palette: BitPalette,
+    title: String,
+    stepsValue: String,
+    stepsUnit: String,
+    distanceValue: String,
+    distanceUnit: String,
+    progress: Float?,
+    progressText: String?,
+    pressLift: Boolean = false
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    SoftCard(
+        palette = palette,
+        modifier = Modifier
+            .fillMaxWidth()
+            .pressScale(interactionSource),
+        accent = AugustColor.Lime,
+        hero = true,
+        tintWithAccent = true,
+        pressLift = pressLift
+    ) {
+        Text(
+            text = title.uppercase(Locale.getDefault()),
+            color = AugustColor.DarkSecondaryText,
+            fontWeight = FontWeight.Black,
+            fontSize = 12.sp
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            HeroMetricBlock(
+                value = stepsValue,
+                unit = stepsUnit,
+                modifier = Modifier.weight(1f)
+            )
+            HeroMetricBlock(
+                value = distanceValue,
+                unit = distanceUnit,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        if (progress != null || progressText != null) {
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (progress != null) {
+                    ProgressRingChip(progress = progress, accent = AugustColor.Lime, size = 40.dp)
+                    Spacer(Modifier.width(12.dp))
+                }
+                if (progressText != null) {
+                    Text(
+                        text = progressText,
+                        color = AugustColor.DarkSecondaryText,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One big-number + small-unit pair inside [StepsHeroCard]. Font size steps
+ * down for longer formatted values -- same overflow-safety rule
+ * MinimalMetricCard already used (sprint 2026-07-09), reused here rather
+ * than re-derived, since two narrower half-width columns are actually more
+ * overflow-prone than MinimalMetricCard's single full-width value ever was.
+ */
+@Composable
+private fun HeroMetricBlock(
+    value: String,
+    unit: String,
+    modifier: Modifier = Modifier
+) {
+    val valueFontSize = when {
+        value.length > 7 -> 28.sp
+        value.length > 5 -> 34.sp
+        else -> 40.sp
+    }
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = value,
+                color = AugustColor.Surface,
+                fontWeight = FontWeight.Black,
+                fontSize = valueFontSize,
+                lineHeight = valueFontSize,
+                letterSpacing = (-1).sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = unit,
+                color = AugustColor.Lime,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 13.sp,
+                maxLines = 1,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
         }
     }
 }

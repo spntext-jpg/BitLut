@@ -45,10 +45,20 @@ import androidx.compose.ui.unit.sp
 import com.openhealth.sync.ui.theme.AugustColor
 import com.openhealth.sync.ui.theme.AugustElevation
 import com.openhealth.sync.ui.theme.AugustMotion
-import com.openhealth.sync.ui.theme.AugustRadius
 
 private const val SECRET_TAP_COUNT = 5
 private const val SECRET_TAP_WINDOW_MS = 2000L
+
+// Nav bar outer margin (2026-08-22): was a flat 16.dp on both axes. Bumped
+// horizontally only, to 24.dp, so the two side destination buttons (each
+// weight(1f) inside the Row) shrink and the whole pill reads narrower --
+// a deliberately conservative first pass rather than the ~44.dp a literal
+// "20% narrower" derivation would produce on a typical ~400.dp-wide screen,
+// since that number can't be visually verified in this environment. Tune
+// this single constant after checking on-device; nothing else needs to
+// change to adjust the width further in either direction.
+private val NAV_BAR_OUTER_HORIZONTAL_MARGIN = 24.dp
+private val NAV_BAR_OUTER_VERTICAL_MARGIN = 8.dp
 
 /**
  * Compact August v3 navigation dock inspired by the 2026 Material 3 Expressive
@@ -83,7 +93,7 @@ internal fun AugustBottomNav(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = NAV_BAR_OUTER_HORIZONTAL_MARGIN, vertical = NAV_BAR_OUTER_VERTICAL_MARGIN),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -231,14 +241,21 @@ private fun AugustSyncAction(onClick: () -> Unit) {
         label = "syncPressRotation"
     )
     val fill by animateColorAsState(
-        targetValue = if (pressed) AugustColor.LimeActive else AugustColor.Lime,
+        // Tangerine (2026-08-22), was Lime/LimeActive. Size bumped 15%
+        // (58.dp -> 67.dp, icon 27.dp -> 31.dp: 58*1.15=66.7 rounded to
+        // 67.dp) to read as the visually dominant middle action against the
+        // now-narrower side destination buttons. The existing press
+        // animation (scale to 0.94, -24deg icon rotation, fill darkening)
+        // is unchanged -- it already covers the "light press animation"
+        // this button needed; only the color/size changed.
+        targetValue = if (pressed) AugustColor.TangerineActive else AugustColor.Tangerine,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "syncFill"
     )
 
     Box(
         modifier = Modifier
-            .size(58.dp)
+            .size(67.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -247,8 +264,8 @@ private fun AugustSyncAction(onClick: () -> Unit) {
             .shadow(
                 elevation = AugustElevation.ButtonShadowElevation,
                 shape = shape,
-                ambientColor = AugustColor.Lime.copy(alpha = 0.18f),
-                spotColor = AugustColor.Lime.copy(alpha = 0.18f)
+                ambientColor = AugustColor.Tangerine.copy(alpha = 0.18f),
+                spotColor = AugustColor.Tangerine.copy(alpha = 0.18f)
             )
             .clip(shape)
             .background(fill)
@@ -268,9 +285,9 @@ private fun AugustSyncAction(onClick: () -> Unit) {
         Icon(
             imageVector = Icons.Rounded.Refresh,
             contentDescription = stringResource(R.string.sync_now),
-            tint = AugustColor.LimeInk,
+            tint = AugustColor.Ink,
             modifier = Modifier
-                .size(27.dp)
+                .size(31.dp)
                 .graphicsLayer { rotationZ = rotation }
         )
     }
