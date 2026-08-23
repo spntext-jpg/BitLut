@@ -145,12 +145,13 @@ class MainActivity : ComponentActivity() {
         // which would otherwise render with old-style opaque system bars,
         // and (b) correct light/dark status- and navigation-bar icon
         // contrast that auto-follows system dark mode, matching how
-        // isDark is computed in FinalBitLutShell (isSystemInDarkTheme()) --
-        // no manual SystemBarStyle wiring needed since both use the same
-        // system signal. The root Scaffold in FinalBitLutShell already
-        // applies M3's default contentWindowInsets, and the bottom nav bar
-        // already calls navigationBarsPadding() itself, so no other insets
-        // work was needed for this.
+        // isSystemInDarkTheme() is read in BitLutExpressiveTheme (status/nav
+        // bar icon contrast) and in FinalBitLutShell (card palette, since
+        // 2026-08-22's dark theme) -- no manual SystemBarStyle wiring needed
+        // since all three read the same system signal. The root Scaffold in
+        // FinalBitLutShell already applies M3's default contentWindowInsets,
+        // and the bottom nav bar already calls navigationBarsPadding()
+        // itself, so no other insets work was needed for this.
         enableEdgeToEdge()
 
         setupPeriodicSync()

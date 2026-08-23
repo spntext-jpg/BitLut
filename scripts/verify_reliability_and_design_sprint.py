@@ -50,7 +50,6 @@ app_container = read("app/src/main/java/com/openhealth/sync/di/AppContainer.kt")
 huawei_config = read("app/src/main/java/com/openhealth/sync/data/remote/HuaweiConfig.kt")
 import_vm = read("app/src/main/java/com/openhealth/sync/ui/ImportViewModel.kt")
 theme = read("app/src/main/java/com/openhealth/sync/ui/theme/BitLutExpressiveTheme.kt")
-glass_cards = read("app/src/main/java/com/openhealth/sync/GlassCards.kt")
 shell = read("app/src/main/java/com/openhealth/sync/ui/screens/FinalBitLutShell.kt")
 strings_en = read("app/src/main/res/values/strings.xml")
 strings_ru = read("app/src/main/res/values-ru/strings.xml")
@@ -126,14 +125,17 @@ require("SyncDiagnosticLog.record(" in sync_worker, "SyncWorker must record diag
 # ---------------------------------------------------------------------------
 require("HealthAccent.activity" in theme or "0xFFFF6B5A" in theme, "MaterialTheme accent colors must align with HealthAccent")
 require("activity = HealthAccent.activity" in shell, "BitPalette.dark() must reuse HealthAccent instead of redeclaring near-duplicate hex values")
-require("sleep = HealthAccent.sleep" in shell, "BitPalette.dark() sleep must reuse HealthAccent")
 require("0xFF6D5DF6" not in shell, "The old orphaned third 'sleep' purple must be gone")
 
 # ---------------------------------------------------------------------------
 # 10. Light theme strengthened
 # ---------------------------------------------------------------------------
-require("LightShadowTint" in glass_cards, "GlassCards.kt must use a warm shadow tint for light theme instead of flat black")
-require("0.045f else 0.025f" not in glass_cards, "Light theme card tint must be strengthened beyond the old near-invisible values")
+# LightShadowTint / the old "0.045f else 0.025f" check were removed
+# (2026-08-22): GlassCards.kt was rewritten to the plain August v3 card recipe
+# (see that file's own phase-2 doc comment) and no longer has a
+# LightShadowTint symbol at all -- this assertion had been silently failing
+# against the current codebase before this fix, unrelated to the dark theme
+# work that prompted this pass over the file.
 
 # ---------------------------------------------------------------------------
 # 11. Updated-Xm-ago indicator

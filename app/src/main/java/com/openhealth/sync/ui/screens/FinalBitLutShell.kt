@@ -106,6 +106,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.health.connect.client.records.ExerciseSessionRecord
@@ -140,10 +141,17 @@ fun FinalBitLutShell(
     var showLogViewer by rememberSaveable { mutableStateOf(false) }
     val dashboardState = dashboardStateProvider()
     val syncState = syncStateProvider()
-    // August v3 uses a stable light Canvas + White Surface architecture.
-    // Dark styling belongs only to explicit semantic anchors (hero/nav), not
-    // to every card when the OS happens to be in dark mode.
-    val palette = remember { BitPalette.light() }
+    // August v3 dark theme (2026-08-22): non-hero cards now follow the OS
+    // appearance setting via BitPalette.dark()/light(). The Hero card itself
+    // is unaffected either way -- SoftCard's `hero` branch hardcodes
+    // AugustColor.NavyRaised directly, independent of `palette`, since the
+    // Steps card was always meant to read as the dark architectural anchor
+    // in both modes (confirmed product decision, not a default carried over
+    // by omission).
+    val isDarkTheme = isSystemInDarkTheme()
+    val palette = remember(isDarkTheme) {
+        if (isDarkTheme) BitPalette.dark() else BitPalette.light()
+    }
 
     // Sprint 7: the first time someone would trigger the real Health Connect
     // permission request, show a plain-language rationale screen instead --
@@ -2642,7 +2650,7 @@ internal data class BitPalette(
             dark = true,
             systemBackground = AugustColor.Navy,
             card = AugustColor.DarkPanel,
-            text = Color.White,
+            text = AugustColor.Surface,
             secondaryText = AugustColor.DarkSecondaryText,
             stroke = AugustColor.BorderDark,
             activity = HealthAccent.activity,
