@@ -1,5 +1,184 @@
 # Changelog
 
+## 2026-08-22 (d) -- dark-mode invisible icons/text, navbar bounce on every button, biking's 4th metric fixed
+
+Fourth patch of the day, on real-device feedback after the dark theme and
+Tangerine/navbar work shipped: several elements were still unreadable in
+dark mode, and a bike workout card showed "Steps" as its 4th metric, which
+made no sense for cycling.
+
+- Root cause for all dark-mode gray text/icons (Last 7 Days card numbers,
+  Personal Records trophy/flame icons, workout-type icons on
+  WorkoutRecencyCard, several Settings/onboarding icons): `HealthAccent`
+  (`activity`/`mind`/`violet`) was a single fixed `AugustColor.InkSoft`
+  alias, correct against light mode's white Surface but never made
+  theme-aware. Measured against dark mode's NavyRaised card background,
+  InkSoft contrasts at ~1.2:1 -- effectively invisible, matching the report
+  exactly. `palette.secondaryText` (used for some of the same labels) was
+  already correctly theme-aware before this fix and needed no change --
+  the bug was entirely in `HealthAccent`.
+- `HealthAccent`'s three properties became `@Composable` functions reading
+  `isSystemInDarkTheme()` directly (`HealthAccent.activity` ->
+  `HealthAccent.activity()`, etc.), resolving to Lime in dark mode
+  (~14.5:1 contrast against NavyRaised, contrast-checked) and unchanged
+  InkSoft in light mode. All ~43 call sites across ~15 composables were
+  converted from property access to function calls in the same patch.
+  `BitPalette.light()`/`dark()` -- plain non-composable factory functions
+  that previously also read `HealthAccent.activity`/`.mind` -- could not
+  follow the same conversion (a non-composable function cannot call a
+  `@Composable` one), so each now hardcodes its own already-correct value
+  directly instead (InkSoft for `light()`, Lime for `dark()`).
+- Navbar: all three buttons' press-release scale animation changed from a
+  flat `tween` to a `spring` (`Spring.DampingRatioMediumBouncy`,
+  `Spring.StiffnessMedium`), producing a slight overshoot-then-settle "light
+  bounce" on release, as requested for every button. The two side
+  destination buttons (Today/Settings) also gained a small icon tilt
+  (-8 degrees on press, same spring) as their own distinct press flourish,
+  echoing but not literally copying the Refresh button's existing -24-degree
+  rotation, which is unchanged.
+- Biking's 4th workout-card metric: `workoutMetricDisplays()` now takes the
+  session's `exerciseType` and swaps Steps for Elevation gain specifically
+  for `EXERCISE_TYPE_BIKING` (confirmed choice over Active Calories --
+  elevation is more semantically meaningful for cycling despite being, like
+  Steps, frequently unpopulated for a given ride; falls back to `--` same as
+  every other slot). This re-introduces `workout_stat_elevation_label` /
+  `workout_elevation_value` to `strings.xml` (en+ru), correctly removed as
+  dead code by the four-metrics patch three days ago -- a deliberate,
+  same-project follow-up reversal driven by new product direction, not an
+  accidental duplicate of already-completed work. Active Calories is
+  untouched: still dropped from the card entirely everywhere else, still
+  scope-denied by Huawei independent of exercise type.
+- Found and fixed in passing: `scripts/verify_workout_nav_freshness_sprint.py`
+  still asserted the retired `AugustColor.LimeActive` string for the navbar
+  Refresh button's pressed-fill token -- the Tangerine patch earlier this
+  week (see below) changed that token to `AugustColor.TangerineActive` but
+  never updated this assertion, which had been silently failing since that
+  patch landed. Unrelated to today's five requests; fixed while already in
+  this exact file for the elevation-related assertion updates.
+
+## 2026-08-22 (c) -- Steps Hero two-value layout, Tangerine accent, narrower navbar
+
+Third patch of the day. Three independent, confirmed UI changes.
+
+- Steps Hero card: Distance now renders as its own big-number +
+  small-"km" block, the same visual weight as Steps, instead of being
+  folded into Steps' small trailing unit string ("steps · 0.1 km"). New
+  `StepsHeroCard`/`HeroMetricBlock` composables handle this; `MinimalMetricCard`
+  itself is untouched and stays in use everywhere else it already appeared
+  (Connect Google lock screen, the Distance card inside
+  `DashboardOrderedCard`, etc.) -- this is a dedicated Hero-only composable,
+  not a generalization of the existing one. The steps-goal progress ring
+  moved below both numbers instead of sitting beside them, since two
+  big-number blocks plus a ring all competing for one row was too tight
+  once Distance became first-class instead of trailing text. Added
+  `distance_unit_km` string (en+ru) -- `distance_today_value` bundles the
+  number and "km" into one template string, which is exactly why Distance
+  couldn't be split into a big number + small unit before this patch.
+- New `AugustColor.Tangerine`/`TangerineActive` tokens: replaces Purple as
+  the "on/active" signal in exactly two places -- the two Settings toggle
+  tracks (`DataSourceToggleRow`, `WidgetVisibilityRow`) and the navbar's
+  center Refresh button fill (was Lime). Purple keeps every other existing
+  role (focus rings, links, selection detail) untouched, including the
+  navbar's own focus-visible ring. `#F28500` is the commonly documented
+  "Tangerine" named color (ColorHexa/Wikipedia's canonical value), not any
+  single company's brand orange. `TangerineActive` (`#DD7A00`, the Refresh
+  button's pressed-state fill) is derived by applying the same relative HSV
+  saturation/value shift that produces `LimeActive` from `Lime`, not
+  eyeballed. Ink-on-Tangerine clears ~6.9:1 WCAG AA; white-on-Tangerine
+  fails at ~2.6:1, so the Refresh icon moved from `LimeInk` to the
+  equivalent `Ink`.
+- Navbar: outer horizontal margin increased 16.dp -> 24.dp
+  (`NAV_BAR_OUTER_HORIZONTAL_MARGIN`) so the two side destination buttons
+  shrink and the pill reads narrower -- a deliberately conservative first
+  pass, not the ~44.dp a literal "20% narrower" derivation would produce on
+  a typical ~400.dp-wide screen, since that number could not be visually
+  verified in this environment. The Refresh button itself grew 15%
+  (58.dp -> 67.dp, icon 27.dp -> 31.dp) to read as the dominant middle
+  action against the now-narrower side buttons.
+- Found and fixed in passing: one pre-existing unused import
+  (`AugustColor.AugustRadius`) in `GlassNavigation.kt` -- every shape in
+  that file uses a raw `RoundedCornerShape(N.dp)` literal, never
+  `AugustRadius.*`, verified by grep before removal.
+
+## 2026-08-22 (b) -- August v3 dark theme activated, driven by system appearance
+
+Second patch of the day. `BitPalette.dark()` already existed in
+`FinalBitLutShell.kt` but was completely unreachable: the one call site was
+hardcoded to `BitPalette.light()`, and two separate verify-script guardrails
+explicitly asserted that OS dark mode must NOT be wired up. This was mostly
+"finish and activate a dark theme someone already half-built," not a
+from-scratch design.
+
+- New `AugustDarkScheme` (`darkColorScheme(...)`) in `BitLutExpressiveTheme.kt`,
+  wired to `isSystemInDarkTheme()`; status bar color and icon contrast now
+  follow the active scheme. Dark Canvas = Navy, dark Surface = NavyRaised,
+  dark Soft = NavySoft -- extending the existing Navy ramp's role rather
+  than inventing a second, unrelated dark palette, matching the light
+  scheme's own Canvas -> Surface -> Soft elevation relationship, just
+  inverted. The source August v3 doc (re-attached this session) has no
+  "dark mode" section of its own -- it only specifies Navy as a permanent
+  architectural anchor inside an otherwise light-canvas product (a
+  different product, a web media tool) -- so this dark theme's actual
+  surface mapping is this session's own design decision, not a literal
+  doc translation.
+- Every reused color pairing checked against real WCAG contrast math before
+  reuse, not eyeballed: Surface/DarkSecondaryText/Lime/Ink all clear 7:1+
+  against Navy/NavyRaised/NavySoft. `DangerFg` (tuned for white) drops to
+  2.62:1 on NavyRaised and was deliberately NOT reused for dark error text;
+  `AugustColor`'s pre-existing but previously-unused `DarkErrorContainerFg`
+  (`#FFC9C9`) is used instead, clearing 11:1+ against both Navy and
+  NavyRaised.
+- Confirmed product decisions (not inferred): Lime stays a filled surface
+  with Ink text in both modes; the Steps Hero card stays NavyRaised
+  unchanged in both modes (`SoftCard`'s `hero` branch in `GlassCards.kt`
+  already hardcoded `NavyRaised` independent of `palette`, so it needed no
+  change at all).
+- Flipped the two verify-script guardrails in
+  `scripts/verify_sync_august_v3_recovery.py` that explicitly forbade dark
+  mode; added assertions for the new `AugustDarkScheme` content itself.
+- Found and fixed in passing: a stale comment in `MainActivity.kt` that
+  described an `isSystemInDarkTheme()` call inside `FinalBitLutShell` which
+  did not actually exist anywhere in the codebase before this patch; two
+  already-broken, unrelated verify-script assertions in
+  `scripts/verify_reliability_and_design_sprint.py` (a `sleep =
+  HealthAccent.sleep` check referencing a field removed by an earlier
+  sleep-feature removal, and a `LightShadowTint` check referencing a symbol
+  that no longer exists after `GlassCards.kt`'s phase-2 rewrite); one
+  now-dead `glass_cards` file-read variable in that same verify script,
+  orphaned by removing its only two checks.
+
+## 2026-08-22 (a) -- workout cards narrowed to four metrics for every exercise type
+
+First patch of the day, prompted by a real-device diagnostic log review.
+The log's "last workout shows wrong steps, no distance" turned out to be
+confirmed-expected data staleness, not a bug: that workout was more than 7
+days old, outside BitLut's continuous per-minute Huawei sync window, and its
+`steps=251` figure was a legitimate Health Connect aggregate over a
+historical interval with genuinely sparse underlying Huawei source data
+(0 distance points, 0 activeCalories, separately scope-denied). No code
+path was misbehaving; this matches the project's own "do not reopen the
+workout-distance fallback" rule.
+
+- The requested change instead: `workoutMetricDisplays()` rewritten to drop
+  Active Calories and Elevation gain from the workout card display
+  entirely (not conditionally hidden -- removed as a display contract) for
+  ALL exercise types, leaving Duration, Distance, Avg speed, Steps.
+  Rationale: Huawei `activeCalories` is frequently scope-denied (50005) and
+  elevation is rarely populated for the same reason, so the old six-slot
+  layout mostly showed four real values and two permanent dashes.
+  `ActivitySessionData.activeCaloriesKcal`/`.elevationMeters` are unchanged
+  -- still read/synced for CSV export and daily totals; only this card's
+  display was narrowed.
+- `WorkoutStatsGrid`'s cap changed from `metrics.take(6)` to `metrics.take(4)`.
+- Removed the now-dead `workout_stat_calories_label`/`workout_calories_value`/
+  `workout_stat_elevation_label`/`workout_elevation_value` strings (en+ru) --
+  nothing referenced them after the display change. (Two of these four were
+  re-added three patches later the same day for biking's 4th metric; see
+  2026-08-22 (d) above -- a deliberate follow-up, not a mistake undone.)
+- Updated `scripts/verify_workout_nav_freshness_sprint.py`, which had
+  hard-coded the old six-slot contract as a regression gate; left unpatched
+  it would have permanently failed after this legitimate change.
+
 ## 2026-07-22 -- partial Huawei scope denial no longer discards the whole sync
 
 Real device log evidence this time: `localHuaweiAuthorized=true`, with
