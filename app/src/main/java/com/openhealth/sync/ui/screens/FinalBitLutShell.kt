@@ -827,31 +827,32 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
 
 /**
  * Four consistent metrics on every workout card. Duration/Distance/Avg
- * speed are the same for every exercise type; the 4th slot is type-aware
- * (2026-08-22 fix): Steps for walking/running/hiking/etc, but Elevation
- * gain for biking, since a cycling session showing "Steps: 0" read as
- * broken rather than just empty. Elevation was chosen over Active Calories
- * for this slot specifically because it's more semantically meaningful for
- * cycling (climbing) even though it, like Steps, is frequently unpopulated
- * for a given ride and falls back to an em dash -- an honest "we don't have
- * that data" rather than a wrong-looking zero. Active Calories keeps its
- * existing behavior everywhere: dropped from this card entirely (see the
- * historical note below), since Huawei frequently scope-denies it (50005)
- * independent of exercise type.
+ * speed are the same for every exercise type; the 4th slot is type-aware:
+ * Steps for walking/running/hiking/etc, but Active Calories for biking,
+ * since a cycling session showing "Steps: 0" read as broken rather than
+ * just empty.
+ *
+ * Biking's 4th slot was Elevation gain for a few hours on 2026-08-22, then
+ * hotfixed to Active Calories the same day after real-device testing showed
+ * elevation basically never renders (the underlying elevationMeters field
+ * is even more rarely populated than anticipated -- this was flagged as a
+ * real risk when elevation was first chosen, and the risk materialized).
+ * Active Calories is not risk-free either -- Huawei frequently scope-denies
+ * it (error 50005) independent of exercise type -- but it is populated far
+ * more often in practice than elevation was. Elevation is no longer shown
+ * anywhere on this card for any exercise type; ActivitySessionData still
+ * carries elevationMeters for CSV export and daily totals, untouched.
  *
  * Values come from real imported Health Connect data; average speed is
  * derived only from real distance and duration. Missing source values
  * remain an em dash.
  *
- * Active calories and elevation were dropped from the card entirely
- * (2026-08-22 product decision) -- not just hidden when missing. Huawei
- * activeCalories is frequently scope-denied (50005) and elevation is rarely
- * populated for the same reason, so the six-slot layout mostly showed four
- * real values and two permanent dashes. [ActivitySessionData.activeCaloriesKcal]
- * and [.elevationMeters] are still read/synced for CSV export and daily
- * totals; elevation returns to this specific card for biking only, as of
- * this same-day follow-up fix -- the two changes happened in the same
- * session, not a reversal of a settled decision days later.
+ * History: Active Calories and Elevation were both dropped from this card
+ * entirely on 2026-08-22 (six-slot -> four-slot patch), then Elevation
+ * alone came back the same day for biking only, then was swapped for
+ * Active Calories a few hours later per the note above. Active Calories
+ * everywhere else on this card (all non-biking exercise types) has stayed
+ * dropped throughout.
  */
 private data class WorkoutMetricDisplay(val label: String, val value: String)
 
@@ -865,7 +866,7 @@ private fun workoutMetricDisplays(
     val distanceMeters = session.distanceMeters?.takeIf { it > 0.0 }
     val distanceKm = distanceMeters?.div(1000.0)
     val steps = session.steps?.takeIf { it > 0L }
-    val elevationMeters = session.elevationMeters?.takeIf { it > 0.0 }
+    val activeCaloriesKcal = session.activeCaloriesKcal?.takeIf { it > 0.0 }
     val durationHours =
         (session.endTimeMs - session.startTimeMs).toDouble() / 3_600_000.0
     val averageSpeedKmh = if (
@@ -881,9 +882,9 @@ private fun workoutMetricDisplays(
 
     val fourthSlot = if (isBiking) {
         WorkoutMetricDisplay(
-            stringResource(R.string.workout_stat_elevation_label),
-            elevationMeters?.let {
-                stringResource(R.string.workout_elevation_value, it.toLong())
+            stringResource(R.string.workout_stat_calories_label),
+            activeCaloriesKcal?.let {
+                stringResource(R.string.workout_calories_value, it.toLong())
             } ?: noData
         )
     } else {

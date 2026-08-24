@@ -39,13 +39,13 @@
     <string name="workout_duration_value">%1$d мин</string>
     <string name="workout_pace_value">%1$s /км</string>
     <string name="workout_stat_speed_label">Ср. скорость</string>
-    <string name="workout_stat_elevation_label">Набор высоты</string>
+    <string name="workout_stat_calories_label">Калории</string>
     <string name="workout_stat_steps_label">Шаги</string>
     <string name="workout_stat_started_label">Начало</string>
     <string name="workout_stat_ended_label">Финиш</string>
     <string name="workout_stat_swim_pace_label">Темп / 100 м</string>
     <string name="workout_speed_value">%1$s км/ч</string>
-    <string name="workout_elevation_value">%1$d м</string>
+    <string name="workout_calories_value">%1$d ккал</string>
     <string name="workout_swim_pace_value">%1$s /100 м</string>
     <string name="workout_filter_section_title">Фильтр тренировок</string>
     <string name="workout_filter_section_body">Выбери, какие тренировки синкать отдельными карточками. Шаги, дистанция и калории за это время синкаются в любом случае.</string>
