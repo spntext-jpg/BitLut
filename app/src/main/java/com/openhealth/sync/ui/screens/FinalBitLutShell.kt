@@ -355,7 +355,7 @@ private fun PermissionsOnboardingScreen(palette: BitPalette, onContinue: () -> U
                 Icon(
                     Icons.Rounded.Cloud,
                     contentDescription = null,
-                    tint = HealthAccent.mind,
+                    tint = HealthAccent.mind(),
                     modifier = Modifier.size(40.dp)
                 )
                 Spacer(Modifier.height(20.dp))
@@ -401,7 +401,7 @@ private fun OnboardingScopeRow(palette: BitPalette, icon: ImageVector, text: Str
         modifier = Modifier.padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(16.dp))
+        Icon(icon, contentDescription = null, tint = HealthAccent.activity(), modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
         Text(text, color = palette.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
     }
@@ -434,7 +434,7 @@ private fun DataScopesScreen(palette: BitPalette, onClose: () -> Unit) {
                 Icon(
                     Icons.Rounded.Cloud,
                     contentDescription = null,
-                    tint = HealthAccent.mind,
+                    tint = HealthAccent.mind(),
                     modifier = Modifier.size(40.dp)
                 )
                 Spacer(Modifier.height(20.dp))
@@ -515,7 +515,7 @@ private fun SummaryScreen(
                     title = stringResource(R.string.connect_google_title),
                     value = stringResource(R.string.no_data_short),
                     unit = stringResource(R.string.connect_google_button),
-                    accent = HealthAccent.mind,
+                    accent = HealthAccent.mind(),
                     icon = Icons.Rounded.Cloud,
                     onClick = onRequestGoogle
                 )
@@ -561,7 +561,7 @@ private fun DashboardOrderedCard(palette: BitPalette, state: DashboardUiState, c
                 emptyText = stringResource(R.string.dashboard_workout_empty_latest),
                 position = 1,
                 session = state.recentWorkouts.getOrNull(0),
-                accent = HealthAccent.mind
+                accent = HealthAccent.mind()
             )
 
         com.openhealth.sync.config.DashboardCardType.WORKOUT_PREVIOUS ->
@@ -571,7 +571,7 @@ private fun DashboardOrderedCard(palette: BitPalette, state: DashboardUiState, c
                 emptyText = stringResource(R.string.dashboard_workout_empty_previous),
                 position = 2,
                 session = state.recentWorkouts.getOrNull(1),
-                accent = HealthAccent.violet
+                accent = HealthAccent.violet()
             )
 
         com.openhealth.sync.config.DashboardCardType.LAST_7_DAYS ->
@@ -682,7 +682,7 @@ private fun CardLayoutRow(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit
 ) {
-    SoftCard(palette = palette, accent = HealthAccent.activity) {
+    SoftCard(palette = palette, accent = HealthAccent.activity()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = label,
@@ -720,7 +720,7 @@ private fun CardLayoutRow(
                 onCheckedChange = onToggleVisible,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = HealthAccent.activity,
+                    checkedTrackColor = HealthAccent.activity(),
                     uncheckedThumbColor = Color.White,
                     uncheckedTrackColor = palette.stroke
                 )
@@ -740,9 +740,9 @@ private fun dashboardCardLabel(type: com.openhealth.sync.config.DashboardCardTyp
 
 @Composable
 private fun LastSevenDaysCard(palette: BitPalette, state: DashboardUiState) {
-    SoftCard(palette = palette, accent = HealthAccent.mind, tintWithAccent = true, pressLift = true) {
+    SoftCard(palette = palette, accent = HealthAccent.mind(), tintWithAccent = true, pressLift = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.Schedule, contentDescription = null, tint = HealthAccent.mind, modifier = Modifier.size(20.dp))
+            Icon(Icons.Rounded.Schedule, contentDescription = null, tint = HealthAccent.mind(), modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 text = stringResource(R.string.dashboard_last_7_days_title),
@@ -759,7 +759,7 @@ private fun LastSevenDaysCard(palette: BitPalette, state: DashboardUiState) {
                 label = stringResource(R.string.dashboard_average_steps),
                 value = formatNumber(state.averageSteps7d),
                 detail = stringResource(R.string.steps_unit),
-                accent = HealthAccent.mind
+                accent = HealthAccent.mind()
             )
             SevenDayStat(
                 modifier = Modifier.weight(1f),
@@ -767,7 +767,7 @@ private fun LastSevenDaysCard(palette: BitPalette, state: DashboardUiState) {
                 label = stringResource(R.string.dashboard_best_day),
                 value = state.bestStepsDay7d?.let { formatNumber(it.value.toLong()) } ?: stringResource(R.string.no_data_short),
                 detail = state.bestStepsDay7d?.let { formatRecordDate(it.date) } ?: "",
-                accent = HealthAccent.activity
+                accent = HealthAccent.activity()
             )
             val change = state.stepsChangeVsPrevious7d
             SevenDayStat(
@@ -776,7 +776,7 @@ private fun LastSevenDaysCard(palette: BitPalette, state: DashboardUiState) {
                 label = stringResource(R.string.dashboard_vs_previous_7_days),
                 value = change?.let { "${if (it >= 0) "+" else ""}$it%" } ?: stringResource(R.string.no_data_short),
                 detail = if (change == null) stringResource(R.string.dashboard_no_baseline) else "",
-                accent = if ((change ?: 0) >= 0) HealthAccent.mind else palette.secondaryText
+                accent = if ((change ?: 0) >= 0) HealthAccent.mind() else palette.secondaryText
             )
         }
     }
@@ -826,7 +826,19 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
 }
 
 /**
- * Four consistent metrics on every workout card, for every exercise type.
+ * Four consistent metrics on every workout card. Duration/Distance/Avg
+ * speed are the same for every exercise type; the 4th slot is type-aware
+ * (2026-08-22 fix): Steps for walking/running/hiking/etc, but Elevation
+ * gain for biking, since a cycling session showing "Steps: 0" read as
+ * broken rather than just empty. Elevation was chosen over Active Calories
+ * for this slot specifically because it's more semantically meaningful for
+ * cycling (climbing) even though it, like Steps, is frequently unpopulated
+ * for a given ride and falls back to an em dash -- an honest "we don't have
+ * that data" rather than a wrong-looking zero. Active Calories keeps its
+ * existing behavior everywhere: dropped from this card entirely (see the
+ * historical note below), since Huawei frequently scope-denies it (50005)
+ * independent of exercise type.
+ *
  * Values come from real imported Health Connect data; average speed is
  * derived only from real distance and duration. Missing source values
  * remain an em dash.
@@ -837,19 +849,23 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
  * populated for the same reason, so the six-slot layout mostly showed four
  * real values and two permanent dashes. [ActivitySessionData.activeCaloriesKcal]
  * and [.elevationMeters] are still read/synced for CSV export and daily
- * totals; only this card's display was narrowed.
+ * totals; elevation returns to this specific card for biking only, as of
+ * this same-day follow-up fix -- the two changes happened in the same
+ * session, not a reversal of a settled decision days later.
  */
 private data class WorkoutMetricDisplay(val label: String, val value: String)
 
 @Composable
 private fun workoutMetricDisplays(
     session: ActivitySessionData,
-    durationMinutes: Long
+    durationMinutes: Long,
+    exerciseType: Int?
 ): List<WorkoutMetricDisplay> {
     val noData = stringResource(R.string.no_data_short)
     val distanceMeters = session.distanceMeters?.takeIf { it > 0.0 }
     val distanceKm = distanceMeters?.div(1000.0)
     val steps = session.steps?.takeIf { it > 0L }
+    val elevationMeters = session.elevationMeters?.takeIf { it > 0.0 }
     val durationHours =
         (session.endTimeMs - session.startTimeMs).toDouble() / 3_600_000.0
     val averageSpeedKmh = if (
@@ -860,6 +876,21 @@ private fun workoutMetricDisplays(
         distanceKm / durationHours
     } else {
         null
+    }
+    val isBiking = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_BIKING
+
+    val fourthSlot = if (isBiking) {
+        WorkoutMetricDisplay(
+            stringResource(R.string.workout_stat_elevation_label),
+            elevationMeters?.let {
+                stringResource(R.string.workout_elevation_value, it.toLong())
+            } ?: noData
+        )
+    } else {
+        WorkoutMetricDisplay(
+            stringResource(R.string.workout_stat_steps_label),
+            steps?.let(::formatNumber) ?: noData
+        )
     }
 
     return listOf(
@@ -879,10 +910,7 @@ private fun workoutMetricDisplays(
                 stringResource(R.string.workout_speed_value, formatOneDecimal(it))
             } ?: noData
         ),
-        WorkoutMetricDisplay(
-            stringResource(R.string.workout_stat_steps_label),
-            steps?.let(::formatNumber) ?: noData
-        )
+        fourthSlot
     )
 }
 
@@ -969,7 +997,7 @@ private fun WorkoutRecencyCard(
                     WorkoutStatsGrid(
                         palette = palette,
                         accent = accent,
-                        metrics = workoutMetricDisplays(session, durationMinutes)
+                        metrics = workoutMetricDisplays(session, durationMinutes, session.exerciseType)
                     )
                 } else {
                     Text(
@@ -1096,11 +1124,11 @@ private fun DashboardWidgetGrid(
 ) {
     val tiles = listOfNotNull(
         if (state.isWidgetVisible(DashboardWidget.CALORIES))
-            Triple(stringResource(R.string.calories_active_title), "${state.caloriesKcal.toLong()}", stringResource(R.string.kcal_unit)) to HealthAccent.activity else null,
+            Triple(stringResource(R.string.calories_active_title), "${state.caloriesKcal.toLong()}", stringResource(R.string.kcal_unit)) to HealthAccent.activity() else null,
         if (state.isWidgetVisible(DashboardWidget.WORKOUT_MINUTES))
-            Triple(stringResource(R.string.workout_minutes_title), "${state.workoutMinutesToday}", stringResource(R.string.minutes_short)) to HealthAccent.activity else null,
+            Triple(stringResource(R.string.workout_minutes_title), "${state.workoutMinutesToday}", stringResource(R.string.minutes_short)) to HealthAccent.activity() else null,
         if (state.isWidgetVisible(DashboardWidget.ACTIVE_HOURS))
-            Triple(stringResource(R.string.active_hours_title), "${state.activeHoursToday}", stringResource(R.string.hours_short)) to HealthAccent.mind else null
+            Triple(stringResource(R.string.active_hours_title), "${state.activeHoursToday}", stringResource(R.string.hours_short)) to HealthAccent.mind() else null
     )
 
     if (tiles.isEmpty()) return
@@ -1156,9 +1184,9 @@ private fun MiniMetricWidget(
  */
 @Composable
 private fun WeeklyComparisonCard(palette: BitPalette, comparison: WeekComparison) {
-    SoftCard(palette = palette, accent = HealthAccent.mind, tintWithAccent = true) {
+    SoftCard(palette = palette, accent = HealthAccent.mind(), tintWithAccent = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.TrendingUp, contentDescription = null, tint = HealthAccent.mind, modifier = Modifier.size(18.dp))
+            Icon(Icons.Rounded.TrendingUp, contentDescription = null, tint = HealthAccent.mind(), modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 text = stringResource(R.string.insights_week_comparison_title),
@@ -1222,13 +1250,15 @@ private fun WeekChangeStat(
                 // a small dark-backed badge, not bare colored text on the
                 // ambient card. A bare Lime number on this app's white/light
                 // cards measures at 1.14:1 contrast (computed) -- unreadable
-                // -- which is why [mind]/HealthAccent still aliases to
-                // Accent Dark rather than Lime (see HealthAccent's doc
-                // comment): Lime needs its own dark backing per call site,
-                // not a global color swap. Navy is used as a fixed badge
-                // color in both light and dark theme, matching the doc's
-                // literal "Lime with Navy text" pairing rather than
-                // following the surrounding card's theme.
+                // -- which is why this badge uses its own fixed Navy backing
+                // rather than relying on HealthAccent.mind() (Lime only in
+                // dark mode as of 2026-08-22; still InkSoft in light mode,
+                // so it was never a Lime-on-white risk for HealthAccent
+                // itself, but Lime needs its own dark backing per call site
+                // regardless of theme, not a global color swap). Navy is
+                // used as a fixed badge color in both light and dark theme,
+                // matching the doc's literal "Lime with Navy text" pairing
+                // rather than following the surrounding card's theme.
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(AugustRadius.Pill))
@@ -1318,7 +1348,7 @@ private fun PersonalRecordsCard(
 
     SoftCard(
         palette = palette,
-        accent = HealthAccent.activity,
+        accent = HealthAccent.activity(),
         tintWithAccent = true,
         pressLift = true
     ) {
@@ -1327,10 +1357,10 @@ private fun PersonalRecordsCard(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(HealthAccent.activity.copy(alpha = 0.16f)),
+                    .background(HealthAccent.activity().copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.EmojiEvents, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.EmojiEvents, contentDescription = null, tint = HealthAccent.activity(), modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(10.dp))
             Text(
@@ -1343,10 +1373,10 @@ private fun PersonalRecordsCard(
             if (isStepsRecordToday) {
                 Box(
                     modifier = Modifier
-                        .background(HealthAccent.activity.copy(alpha = 0.18f), shape = RoundedCornerShape(20.dp))
+                        .background(HealthAccent.activity().copy(alpha = 0.18f), shape = RoundedCornerShape(20.dp))
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
-                    Text(stringResource(R.string.insights_new_record_badge), color = HealthAccent.activity, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                    Text(stringResource(R.string.insights_new_record_badge), color = HealthAccent.activity(), fontWeight = FontWeight.Black, fontSize = 10.sp)
                 }
             }
         }
@@ -1392,9 +1422,9 @@ private fun PersonalRecordRow(palette: BitPalette, item: PersonalRecordDisplay) 
  */
 @Composable
 private fun StreakCard(palette: BitPalette, streak: StreakState, stepsGoal: Long) {
-    SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
+    SoftCard(palette = palette, accent = HealthAccent.activity(), hero = false, tintWithAccent = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.LocalFireDepartment, contentDescription = null, tint = HealthAccent.activity, modifier = Modifier.size(22.dp))
+            Icon(Icons.Rounded.LocalFireDepartment, contentDescription = null, tint = HealthAccent.activity(), modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -1498,7 +1528,7 @@ private fun SettingsScreen(
             fontWeight = FontWeight.ExtraBold,
             fontSize = 18.sp
         )
-        SoftCard(palette = palette, accent = HealthAccent.violet, hero = false, tintWithAccent = true) {
+        SoftCard(palette = palette, accent = HealthAccent.violet(), hero = false, tintWithAccent = true) {
             Text(
                 text = stringResource(R.string.data_source_section_body),
                 color = palette.secondaryText,
@@ -1511,7 +1541,7 @@ private fun SettingsScreen(
                 palette = palette,
                 title = stringResource(R.string.data_source_huawei_title),
                 subtitle = stringResource(R.string.data_source_huawei_body),
-                accent = HealthAccent.activity,
+                accent = HealthAccent.activity(),
                 selected = syncState.selectedDataSource == HealthDataSource.HUAWEI_HEALTH,
                 onSelect = { onDataSourceSelected(HealthDataSource.HUAWEI_HEALTH) }
             )
@@ -1519,7 +1549,7 @@ private fun SettingsScreen(
                 palette = palette,
                 title = stringResource(R.string.data_source_google_fit_title),
                 subtitle = stringResource(R.string.data_source_google_fit_body),
-                accent = HealthAccent.mind,
+                accent = HealthAccent.mind(),
                 selected = syncState.selectedDataSource == HealthDataSource.GOOGLE_FIT,
                 onSelect = { onDataSourceSelected(HealthDataSource.GOOGLE_FIT) },
                 isLast = true
@@ -1529,7 +1559,7 @@ private fun SettingsScreen(
         SettingsConnectionCard(
             palette = palette,
             title = stringResource(R.string.google_health_connect),
-            accent = HealthAccent.mind,
+            accent = HealthAccent.mind(),
             icon = Icons.Rounded.Cloud,
             primaryAction = stringResource(R.string.connect_google_button),
             onPrimaryAction = onRequestGoogle,
@@ -1540,7 +1570,7 @@ private fun SettingsScreen(
         SettingsConnectionCard(
             palette = palette,
             title = stringResource(R.string.huawei_health_title),
-            accent = HealthAccent.activity,
+            accent = HealthAccent.activity(),
             icon = Icons.Rounded.Watch,
             primaryAction = stringResource(R.string.connect_huawei_button),
             onPrimaryAction = onRequestHuawei,
@@ -1565,7 +1595,7 @@ private fun SettingsScreen(
         SettingsConnectionCard(
             palette = palette,
             title = stringResource(R.string.manual_sync_title),
-            accent = HealthAccent.violet,
+            accent = HealthAccent.violet(),
             icon = Icons.Rounded.CloudSync,
             primaryAction = stringResource(R.string.sync_now),
             onPrimaryAction = onSyncNow,
@@ -1581,7 +1611,7 @@ private fun SettingsScreen(
         )
         SoftCard(
             palette = palette,
-            accent = HealthAccent.activity,
+            accent = HealthAccent.activity(),
             tintWithAccent = true
         ) {
             Text(
@@ -1594,7 +1624,7 @@ private fun SettingsScreen(
             Spacer(Modifier.height(14.dp))
             GoalStepperRow(
                 palette = palette,
-                accent = HealthAccent.activity,
+                accent = HealthAccent.activity(),
                 label = stringResource(R.string.dashboard_rings_steps),
                 valueText = formatNumber(stepsGoal),
                 onDecrease = {
@@ -1619,7 +1649,7 @@ private fun SettingsScreen(
             fontWeight = FontWeight.ExtraBold,
             fontSize = 18.sp
         )
-        SoftCard(palette = palette, accent = HealthAccent.activity, tintWithAccent = true) {
+        SoftCard(palette = palette, accent = HealthAccent.activity(), tintWithAccent = true) {
             val context = LocalContext.current
             val workoutFilterPrefs = remember { com.openhealth.sync.config.WorkoutFilterPrefs(context) }
             var minDurationMinutes by remember { mutableStateOf(workoutFilterPrefs.minDurationMinutes()) }
@@ -1646,7 +1676,7 @@ private fun SettingsScreen(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(99.dp))
-                            .background(if (selected) HealthAccent.activity else palette.stroke.copy(alpha = 0.3f))
+                            .background(if (selected) HealthAccent.activity() else palette.stroke.copy(alpha = 0.3f))
                             .clickable {
                                 minDurationMinutes = minutes
                                 workoutFilterPrefs.setMinDurationMinutes(minutes)
@@ -1682,7 +1712,7 @@ private fun SettingsScreen(
                 WidgetVisibilityRow(
                     palette = palette,
                     label = label,
-                    accent = HealthAccent.activity,
+                    accent = HealthAccent.activity(),
                     checked = exerciseTypes.none { it in excludedTypes },
                     onCheckedChange = { checked ->
                         val updated = if (checked) {
@@ -1775,12 +1805,12 @@ private fun HuaweiAuthIssueCard(palette: BitPalette, reason: HuaweiAuthFailureRe
         }
     }
 
-    SoftCard(palette = palette, accent = HealthAccent.activity, hero = false, tintWithAccent = true) {
+    SoftCard(palette = palette, accent = HealthAccent.activity(), hero = false, tintWithAccent = true) {
         Row(verticalAlignment = Alignment.Top) {
             Icon(
                 Icons.Rounded.Schedule,
                 contentDescription = null,
-                tint = HealthAccent.activity,
+                tint = HealthAccent.activity(),
                 modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.width(10.dp))
@@ -1968,13 +1998,38 @@ private fun WidgetVisibilityRow(
  * dashboard file. Primary actions do not consume this object; they are always
  * Lime + Ink through PrimaryButton.
  */
+/**
+ * HealthAccent (2026-08-22 dark-theme fix): activity/mind/violet were all a
+ * single fixed InkSoft alias, correct for light mode (a dark neutral against
+ * white Surface) but never made theme-aware -- against dark mode's
+ * NavyRaised card background, InkSoft measures ~1.2:1 contrast, effectively
+ * invisible. This affected every icon tint, badge, and value-number color
+ * that routed through HealthAccent: workout-type icons (bike/run/etc via
+ * WorkoutRecencyCard's `accent` param), the Last 7 Days card's big numbers
+ * and Schedule icon, Personal Records' trophy icon and flame icon, and
+ * several Settings/onboarding icons.
+ *
+ * Converted from a plain object with fixed Color properties to
+ * @Composable accessor functions reading isSystemInDarkTheme() directly,
+ * since call sites span ~15 different composables and the object itself
+ * has no other reasonable way to know which theme is active. Every
+ * property-access call site (e.g. accessing `mind` as a plain field)
+ * became a function call instead, once this conversion below is applied.
+ *
+ * Dark-mode value is Lime (confirmed direction: "all icons should be Lime
+ * in dark theme"), contrast-checked at ~14.5:1 against NavyRaised -- not
+ * eyeballed. Light mode keeps the original InkSoft neutral, unchanged
+ * behavior for anyone not in dark mode.
+ */
 internal object HealthAccent {
-    // Legacy names retained for source compatibility only. Metric/card
-    // decoration is neutral InkSoft in August v3; Purple is reserved for
-    // focus, links and explicit secondary interaction states.
-    val activity = AugustColor.InkSoft
-    val violet = AugustColor.InkSoft
-    val mind = AugustColor.InkSoft
+    @Composable
+    fun activity(): Color = if (isSystemInDarkTheme()) AugustColor.Lime else AugustColor.InkSoft
+
+    @Composable
+    fun violet(): Color = if (isSystemInDarkTheme()) AugustColor.Lime else AugustColor.InkSoft
+
+    @Composable
+    fun mind(): Color = if (isSystemInDarkTheme()) AugustColor.Lime else AugustColor.InkSoft
 }
 
 /**
@@ -2515,7 +2570,7 @@ private fun HeroMetricBlock(
  */
 @Composable
 private fun DashboardLoadingCard(palette: BitPalette) {
-    SoftCard(palette = palette, accent = HealthAccent.mind, hero = false, tintWithAccent = true) {
+    SoftCard(palette = palette, accent = HealthAccent.mind(), hero = false, tintWithAccent = true) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2524,7 +2579,7 @@ private fun DashboardLoadingCard(palette: BitPalette) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             CircularProgressIndicator(
-                color = HealthAccent.mind,
+                color = HealthAccent.mind(),
                 strokeWidth = 3.dp,
                 modifier = Modifier.size(28.dp)
             )
@@ -2750,13 +2805,17 @@ internal data class BitPalette(
 ) {
     companion object {
         // August design system integration, phase 1 (see AugustTokens.kt).
-        // light() previously used its own hand-tuned accent hexes rather than
-        // HealthAccent's verbatim, because the old warm-orange/teal accents
-        // read as "chalky" against white without per-theme tuning. August's
-        // Accent/Accent Dark tokens don't have that problem -- the doc's own
-        // contrast numbers (4.64:1 / 6.74:1) are already computed against a
-        // white surface -- so light() now reuses HealthAccent directly too,
-        // same as dark() already did.
+        // activity/mind here are fixed InkSoft, matching HealthAccent's own
+        // light-mode value directly rather than calling
+        // HealthAccent.activity()/.mind() -- those became @Composable
+        // functions in the 2026-08-22 dark-theme icon fix, and light()/
+        // dark() are plain non-composable functions that cannot call them.
+        // Each palette hardcodes its own correct value instead; the actual
+        // single source of truth for "what color is activity/mind" is now
+        // HealthAccent's @Composable accessors for direct call sites, and
+        // this literal duplication for the two BitPalette factories, kept
+        // deliberately identical to HealthAccent's own if/else so they
+        // cannot drift silently.
         fun light(): BitPalette = BitPalette(
             dark = false,
             systemBackground = AugustColor.Canvas,
@@ -2764,18 +2823,20 @@ internal data class BitPalette(
             text = AugustColor.Ink,
             secondaryText = AugustColor.Muted,
             stroke = AugustColor.BorderLight,
-            activity = HealthAccent.activity,
-            mind = HealthAccent.mind,
+            activity = AugustColor.InkSoft,
+            mind = AugustColor.InkSoft,
             backgroundBrush = Brush.verticalGradient(listOf(AugustColor.Canvas, AugustColor.Canvas))
         )
-        // dark() reuses HealthAccent directly (single source of truth) rather
-        // than redeclaring near-duplicate hex values that could drift apart.
-        // systemBackground/card/text/secondaryText/stroke follow August's own
-        // dark-surface rule (section 3.1: "Navy or Dark Panel with white
-        // primary text and #BEC3D4 secondary text") -- see AugustColor's
-        // DarkPanel/AccentLight doc comments for how those specific values
-        // were derived and contrast-checked, since the source doc describes
-        // Navy as a component-level anchor, not a full app dark theme.
+        // dark(): activity/mind are Lime, matching HealthAccent's dark-mode
+        // value (~14.5:1 contrast against NavyRaised, contrast-checked, not
+        // eyeballed) -- see HealthAccent's own doc comment for the full
+        // rationale. systemBackground/card/text/secondaryText/stroke follow
+        // August's own dark-surface rule (section 3.1: "Navy or Dark Panel
+        // with white primary text and #BEC3D4 secondary text") -- see
+        // AugustColor's DarkPanel/AccentLight doc comments for how those
+        // specific values were derived and contrast-checked, since the
+        // source doc describes Navy as a component-level anchor, not a
+        // full app dark theme.
         fun dark(): BitPalette = BitPalette(
             dark = true,
             systemBackground = AugustColor.Navy,
@@ -2783,8 +2844,8 @@ internal data class BitPalette(
             text = AugustColor.Surface,
             secondaryText = AugustColor.DarkSecondaryText,
             stroke = AugustColor.BorderDark,
-            activity = HealthAccent.activity,
-            mind = HealthAccent.mind,
+            activity = AugustColor.Lime,
+            mind = AugustColor.Lime,
             backgroundBrush = Brush.verticalGradient(listOf(AugustColor.Navy, AugustColor.DarkPanel))
         )
     }

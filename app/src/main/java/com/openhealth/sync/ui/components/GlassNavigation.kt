@@ -1,8 +1,10 @@
 package com.openhealth.sync
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -166,8 +168,30 @@ private fun AugustDestination(
     )
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.96f else 1f,
-        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
+        // Light bounce (2026-08-22): spring instead of a flat tween, so
+        // releasing the press overshoots slightly past 1f before settling --
+        // a "light bounce effect" on every nav bar button, matching the
+        // Refresh button's own long-standing press flourish (rotation +
+        // fill change) in spirit without literally copying rotation onto
+        // Today/Settings, which would look identical to Refresh and less
+        // distinct as three separate actions. dampingRatio is deliberately
+        // MediumBouncy, not HighBouncy -- "light", per the request, not a
+        // showy wobble -- and this intentionally departs from the source
+        // design doc's general "no gratuitous bouncing" guidance (section
+        // 12) for this one specific, explicitly requested interaction.
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
         label = "destinationPressScale"
+    )
+    val iconTilt by animateFloatAsState(
+        targetValue = if (pressed) -8f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "destinationIconTilt"
     )
     val iconSize by animateDpAsState(
         targetValue = if (selected) 21.dp else 20.dp,
@@ -210,7 +234,9 @@ private fun AugustDestination(
                 imageVector = tab.icon,
                 contentDescription = label,
                 tint = if (selected) AugustColor.LimeInk else contentColor,
-                modifier = Modifier.size(iconSize)
+                modifier = Modifier
+                    .size(iconSize)
+                    .graphicsLayer { rotationZ = iconTilt }
             )
         }
         Spacer(Modifier.height(3.dp))
@@ -232,7 +258,15 @@ private fun AugustSyncAction(onClick: () -> Unit) {
     val shape = remember { RoundedCornerShape(20.dp) }
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.94f else 1f,
-        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
+        // Light bounce (2026-08-22): spring, matching the same treatment
+        // applied to AugustDestination's press scale, so all three nav bar
+        // buttons share one consistent "release overshoots slightly" feel
+        // rather than Refresh alone staying a flat tween while the side
+        // tabs bounce.
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
         label = "syncPressScale"
     )
     val rotation by animateFloatAsState(
@@ -244,10 +278,10 @@ private fun AugustSyncAction(onClick: () -> Unit) {
         // Tangerine (2026-08-22), was Lime/LimeActive. Size bumped 15%
         // (58.dp -> 67.dp, icon 27.dp -> 31.dp: 58*1.15=66.7 rounded to
         // 67.dp) to read as the visually dominant middle action against the
-        // now-narrower side destination buttons. The existing press
-        // animation (scale to 0.94, -24deg icon rotation, fill darkening)
-        // is unchanged -- it already covers the "light press animation"
-        // this button needed; only the color/size changed.
+        // now-narrower side destination buttons. Rotation and fill
+        // darkening on press are unchanged from before this session; the
+        // scale animation above was upgraded to a spring (bounce) in this
+        // same pass.
         targetValue = if (pressed) AugustColor.TangerineActive else AugustColor.Tangerine,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "syncFill"

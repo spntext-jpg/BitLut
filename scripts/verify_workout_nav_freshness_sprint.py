@@ -54,11 +54,11 @@ for marker in [
 ]:
     require(marker in shell, f"workout UI marker missing: {marker}")
 require("metrics.take(4).chunked(2)" in shell, "workout cards are not capped to four metrics")
-for retired in ["workout_stat_calories_label", "workout_stat_elevation_label"]:
-    require(
-        retired not in shell,
-        f"retired workout UI marker still present in card composable: {retired}"
-    )
+require("workout_stat_calories_label" not in shell, "retired workout UI marker still present in card composable: workout_stat_calories_label")
+require(
+    "workout_stat_elevation_label" in shell,
+    "biking's 4th metric slot (Elevation gain, reintroduced 2026-08-22) is missing from the card composable"
+)
 require("state.lastUpdatedAtMs" in shell, "header does not use displayed-data freshness")
 require("syncState.lastSyncTime" not in shell, "header still depends on sync-completion clock")
 
@@ -66,7 +66,7 @@ require("Compact August v3 navigation dock" in nav, "new navigation dock missing
 require("text = label" in nav, "destination labels are not persistently rendered")
 require("destinationPressScale" in nav, "destination press motion missing")
 require("syncPressRotation" in nav, "sync press rotation missing")
-require("AugustColor.LimeActive" in nav, "sync active state missing")
+require("AugustColor.TangerineActive" in nav, "sync active state missing")
 require("Role.Tab" in nav and "Role.Button" in nav, "navigation semantics missing")
 require("navigationBarsPadding()" in nav, "gesture-navigation inset handling missing")
 require("dev.chrisbanes.haze" not in nav and "dev.chrisbanes.haze" not in app_gradle, "Haze was reintroduced")
@@ -74,15 +74,12 @@ require("dev.chrisbanes.haze" not in nav and "dev.chrisbanes.haze" not in app_gr
 for key in [
     "workout_stat_speed_label", "workout_stat_steps_label", "workout_stat_started_label",
     "workout_stat_ended_label", "workout_stat_swim_pace_label", "workout_speed_value",
-    "workout_swim_pace_value"
+    "workout_swim_pace_value", "workout_stat_elevation_label", "workout_elevation_value"
 ]:
     require(f'name="{key}"' in strings_en, f"English string missing: {key}")
     require(f'name="{key}"' in strings_ru, f"Russian string missing: {key}")
 
-for retired in [
-    "workout_stat_calories_label", "workout_stat_elevation_label",
-    "workout_calories_value", "workout_elevation_value"
-]:
+for retired in ["workout_stat_calories_label", "workout_calories_value"]:
     require(f'name="{retired}"' not in strings_en, f"retired English string still present: {retired}")
     require(f'name="{retired}"' not in strings_ru, f"retired Russian string still present: {retired}")
 
