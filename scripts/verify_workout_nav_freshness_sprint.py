@@ -55,10 +55,12 @@ for marker in [
     require(marker in shell, f"workout UI marker missing: {marker}")
 require("metrics.take(4).chunked(2)" in shell, "workout cards are not capped to four metrics")
 require("workout_stat_elevation_label" not in shell, "retired workout UI marker still present in card composable: workout_stat_elevation_label")
+require("workout_stat_calories_label" not in shell, "retired workout UI marker still present in card composable: workout_stat_calories_label")
 require(
-    "workout_stat_calories_label" in shell,
-    "biking's 4th metric slot (Active Calories, hotfixed 2026-08-22) is missing from the card composable"
+    "val fourthSlot = if (isBiking) {\n        null\n    } else {" in shell,
+    "biking must have no 4th metric slot (both Elevation and Active Calories were tried and confirmed empty in practice)"
 )
+require("listOfNotNull(" in shell, "workoutMetricDisplays must tolerate a variable-length (3 or 4) metric list")
 require("state.lastUpdatedAtMs" in shell, "header does not use displayed-data freshness")
 require("syncState.lastSyncTime" not in shell, "header still depends on sync-completion clock")
 
@@ -74,12 +76,15 @@ require("dev.chrisbanes.haze" not in nav and "dev.chrisbanes.haze" not in app_gr
 for key in [
     "workout_stat_speed_label", "workout_stat_steps_label", "workout_stat_started_label",
     "workout_stat_ended_label", "workout_stat_swim_pace_label", "workout_speed_value",
-    "workout_swim_pace_value", "workout_stat_calories_label", "workout_calories_value"
+    "workout_swim_pace_value"
 ]:
     require(f'name="{key}"' in strings_en, f"English string missing: {key}")
     require(f'name="{key}"' in strings_ru, f"Russian string missing: {key}")
 
-for retired in ["workout_stat_elevation_label", "workout_elevation_value"]:
+for retired in [
+    "workout_stat_elevation_label", "workout_elevation_value",
+    "workout_stat_calories_label", "workout_calories_value"
+]:
     require(f'name="{retired}"' not in strings_en, f"retired English string still present: {retired}")
     require(f'name="{retired}"' not in strings_ru, f"retired Russian string still present: {retired}")
 

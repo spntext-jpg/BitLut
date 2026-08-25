@@ -826,33 +826,36 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
 }
 
 /**
- * Four consistent metrics on every workout card. Duration/Distance/Avg
- * speed are the same for every exercise type; the 4th slot is type-aware:
- * Steps for walking/running/hiking/etc, but Active Calories for biking,
- * since a cycling session showing "Steps: 0" read as broken rather than
- * just empty.
+ * Duration/Distance/Avg speed on every workout card, for every exercise
+ * type. The 4th slot (Steps) is shown for every type EXCEPT biking.
  *
- * Biking's 4th slot was Elevation gain for a few hours on 2026-08-22, then
- * hotfixed to Active Calories the same day after real-device testing showed
- * elevation basically never renders (the underlying elevationMeters field
- * is even more rarely populated than anticipated -- this was flagged as a
- * real risk when elevation was first chosen, and the risk materialized).
- * Active Calories is not risk-free either -- Huawei frequently scope-denies
- * it (error 50005) independent of exercise type -- but it is populated far
- * more often in practice than elevation was. Elevation is no longer shown
- * anywhere on this card for any exercise type; ActivitySessionData still
- * carries elevationMeters for CSV export and daily totals, untouched.
+ * Biking has no 4th slot at all as of this hotfix (2026-08-22, third
+ * revision same day): Steps is semantically wrong for cycling (that's what
+ * started this whole chain of fixes), but neither of the two logical
+ * alternatives -- Elevation gain, then Active Calories -- actually renders
+ * in practice on real devices. ActivitySessionData only carries four data
+ * fields total (distanceMeters, activeCaloriesKcal, elevationMeters,
+ * steps); Distance is already slot 2, so Elevation and Active Calories
+ * were the only two candidates left for a biking-specific 4th slot, and
+ * both came back empty on confirmed real bike-ride data. Rather than pick
+ * a metric that's "logical" but shows an em dash almost every time, biking
+ * cards now show three real metrics instead of four possibly-empty ones.
+ * WorkoutStatsGrid's chunked(2) layout already handled odd-length lists
+ * correctly before this change (a lone last-row item gets a balancing
+ * Spacer(weight(1f)), not a full-width stretch) -- see WorkoutStatsGrid's
+ * own logic -- so no layout change was needed for the 3-metric case.
+ *
+ * History, all same day (2026-08-22): six-slot -> four-slot (dropped
+ * Active Calories and Elevation everywhere); biking's slot 4 became
+ * Elevation gain; hotfixed to Active Calories after Elevation didn't
+ * render; hotfixed again to no 4th slot at all after Active Calories
+ * didn't render either. Both fields are untouched in ActivitySessionData
+ * itself -- still read/synced for CSV export and daily totals; only this
+ * card's biking-specific display narrowed further.
  *
  * Values come from real imported Health Connect data; average speed is
  * derived only from real distance and duration. Missing source values
  * remain an em dash.
- *
- * History: Active Calories and Elevation were both dropped from this card
- * entirely on 2026-08-22 (six-slot -> four-slot patch), then Elevation
- * alone came back the same day for biking only, then was swapped for
- * Active Calories a few hours later per the note above. Active Calories
- * everywhere else on this card (all non-biking exercise types) has stayed
- * dropped throughout.
  */
 private data class WorkoutMetricDisplay(val label: String, val value: String)
 
@@ -866,7 +869,6 @@ private fun workoutMetricDisplays(
     val distanceMeters = session.distanceMeters?.takeIf { it > 0.0 }
     val distanceKm = distanceMeters?.div(1000.0)
     val steps = session.steps?.takeIf { it > 0L }
-    val activeCaloriesKcal = session.activeCaloriesKcal?.takeIf { it > 0.0 }
     val durationHours =
         (session.endTimeMs - session.startTimeMs).toDouble() / 3_600_000.0
     val averageSpeedKmh = if (
@@ -881,12 +883,7 @@ private fun workoutMetricDisplays(
     val isBiking = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_BIKING
 
     val fourthSlot = if (isBiking) {
-        WorkoutMetricDisplay(
-            stringResource(R.string.workout_stat_calories_label),
-            activeCaloriesKcal?.let {
-                stringResource(R.string.workout_calories_value, it.toLong())
-            } ?: noData
-        )
+        null
     } else {
         WorkoutMetricDisplay(
             stringResource(R.string.workout_stat_steps_label),
@@ -894,7 +891,7 @@ private fun workoutMetricDisplays(
         )
     }
 
-    return listOf(
+    return listOfNotNull(
         WorkoutMetricDisplay(
             stringResource(R.string.workout_stat_duration_label),
             stringResource(R.string.workout_duration_value, durationMinutes)
@@ -1021,9 +1018,10 @@ private fun WorkoutStatsGrid(
     metrics: List<WorkoutMetricDisplay>
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // Four-metric contract (2026-08-22): Duration, Distance, Avg speed,
-        // Steps for every exercise type. take(4) documents that cap explicitly
-        // rather than relying on workoutMetricDisplays() always returning 4.
+        // Four-metric contract for most exercise types, three for biking
+        // (2026-08-22, see workoutMetricDisplays()'s doc comment for why).
+        // take(4) is a cap, not a guarantee -- workoutMetricDisplays() may
+        // return 3 or 4 items depending on exercise type.
         metrics.take(4).chunked(2).forEach { rowMetrics ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
