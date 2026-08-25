@@ -143,7 +143,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.appcompat:appcompat:1.7.0")
 
-    implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha12")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
     implementation("com.huawei.hms:health:6.11.0.303")

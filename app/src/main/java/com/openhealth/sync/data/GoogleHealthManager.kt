@@ -12,6 +12,7 @@ import androidx.health.connect.client.records.FloorsClimbedRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.metadata.DataOrigin
+import androidx.health.connect.client.records.metadata.Device
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -1355,13 +1356,36 @@ class GoogleHealthManager(
         return "bitlut_${type}_${startTimeMs}_${endTimeMs}${suffix}"
     }
 
+    /**
+     * Sprint 2026-08-25: every BitLut-written record is device-sourced Huawei
+     * activity data relayed automatically -- never typed in by the user, and
+     * never actively recorded by BitLut itself as a live sensor. Health
+     * Connect's own `Metadata(...)` constructor defaults `recordingMethod` to
+     * `RECORDING_METHOD_UNKNOWN` unless a factory method says otherwise, and
+     * that was the value every BitLut record carried before this fix (see
+     * [bitlutDailyStepMetadata] and [bitlutMetadata] below, which previously
+     * called the raw constructor). Health Connect's own UI and Google Fit
+     * display RECORDING_METHOD_UNKNOWN records without filtering, which is
+     * why they showed up correctly there -- but a third-party reader app is
+     * free to treat RECORDING_METHOD_UNKNOWN as untrustworthy and skip
+     * importing it, which matches a real corporate-app report of BitLut's
+     * synced workouts being invisible there despite being visible in Google
+     * Fit. `Device(type = Device.TYPE_UNKNOWN)` is used rather than guessing
+     * a manufacturer/model: BitLut runs on the phone relaying data that
+     * Huawei Health already attributed to whatever wearable or phone
+     * actually recorded it, so BitLut has no reliable device-type signal of
+     * its own to report.
+     */
+    private val bitlutRecordingDevice = Device(type = Device.TYPE_UNKNOWN)
+
     private fun bitlutDailyStepMetadata(sourceId: String, version: Long): Metadata {
         val safeSourceId = sourceId
             .replace(Regex("[^A-Za-z0-9_-]"), "_")
             .take(64)
-        return Metadata(
+        return Metadata.autoRecorded(
             clientRecordId = "bitlut_steps_daily_$safeSourceId",
-            clientRecordVersion = version
+            clientRecordVersion = version,
+            device = bitlutRecordingDevice
         )
     }
 
@@ -1371,9 +1395,10 @@ class GoogleHealthManager(
         endTimeMs: Long,
         discriminator: String = "",
         version: Long = 1L
-    ): Metadata = Metadata(
+    ): Metadata = Metadata.autoRecorded(
         clientRecordId = generateRecordId(type, startTimeMs, endTimeMs, discriminator),
-        clientRecordVersion = version
+        clientRecordVersion = version,
+        device = bitlutRecordingDevice
     )
 
     private fun offset(instant: Instant): ZoneOffset = zoneRules.getOffset(instant)
