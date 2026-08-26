@@ -11,6 +11,7 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.records.metadata.Device
 import androidx.health.connect.client.records.metadata.Metadata
@@ -500,8 +501,8 @@ class GoogleHealthManager(
         // timestamp version ensures the same stable clientRecordId upserts the
         // real type/title over records written by older BitLut builds.
         val version = System.currentTimeMillis()
-        val valid = records
-            .filter { it.startTimeMs < it.endTimeMs }
+        val validSessions = records.filter { it.startTimeMs < it.endTimeMs }
+        val valid = validSessions
             .map {
                 val start = Instant.ofEpochMilli(it.startTimeMs)
                 val end = Instant.ofEpochMilli(it.endTimeMs)
@@ -521,7 +522,112 @@ class GoogleHealthManager(
                 )
             }
 
-        return replaceRecords("activitySessions", valid, ExerciseSessionRecord::class)
+        val sessionsWritten = replaceRecords("activitySessions", valid, ExerciseSessionRecord::class)
+
+        // Sprint 2026-08-25: attach an estimated TotalCaloriesBurnedRecord to
+        // every session. Huawei's real activeCalories category is
+        // permanently denied for this individual-developer account (error
+        // 50005 -- see writeActiveCaloriesBatch), so before this, every
+        // ExerciseSessionRecord BitLut wrote carried no calorie data
+        // whatsoever. A bare session with nothing attached to it is a
+        // documented reason real third-party Health Connect readers silently
+        // decline to import a workout (e.g. MyFitnessPal requires calories
+        // before importing cardio sessions synced through Health Connect).
+        // estimatedTotalCaloriesKcal() is a MET-formula estimate, not
+        // measured data -- see its own doc comment for the caveats and why
+        // TotalCaloriesBurnedRecord (not the still-unavailable
+        // ActiveCaloriesBurnedRecord) is used. This does not touch
+        // ActivitySessionData.activeCaloriesKcal or BitLut's own dashboard,
+        // which continue to show "--" for calories exactly as before, since
+        // BitLut still has no real measured figure for its own display.
+        val caloriesValid = validSessions.mapNotNull {
+            val kcal = estimatedTotalCaloriesKcal(it.exerciseType, it.startTimeMs, it.endTimeMs)
+                ?: return@mapNotNull null
+            val start = Instant.ofEpochMilli(it.startTimeMs)
+            val end = Instant.ofEpochMilli(it.endTimeMs)
+            TotalCaloriesBurnedRecord(
+                startTime = start,
+                endTime = end,
+                startZoneOffset = offset(start),
+                endZoneOffset = offset(end),
+                energy = Energy.kilocalories(kcal),
+                metadata = bitlutMetadata(
+                    "exercise_calories_estimate",
+                    start.toEpochMilli(),
+                    end.toEpochMilli(),
+                    version = version
+                )
+            )
+        }
+        replaceRecords("activitySessionEstimatedCalories", caloriesValid, TotalCaloriesBurnedRecord::class)
+
+        return sessionsWritten
+    }
+
+    /**
+     * MET-formula estimate of total calories burned for a workout, used only
+     * to give third-party Health Connect readers something non-zero to
+     * import (see the call site in [writeActivitySessionsBatch] for why).
+     * This is NOT measured data: Huawei's real per-workout calorie figure is
+     * gated behind the same activeCalories scope that returns error 50005
+     * for this account (see [writeActiveCaloriesBatch] above, and
+     * HuaweiHealthManager's activeCalories read path), and nothing
+     * about that is expected to change. The formula itself --
+     * kcal = MET * 3.5 * weightKg * minutes / 200 -- and the MET values below
+     * are drawn from the Compendium of Physical Activities (Ainsworth et al.),
+     * the standard reference most fitness calorie calculators cite. Reference
+     * body weight is fixed at 70 kg, the conventional default used across MET
+     * calculators when no real weight is available -- BitLut has no access to
+     * the user's actual weight and adding that would be a new data category,
+     * which this sprint's fix is explicitly scoped to avoid.
+     *
+     * MET values are the "general/moderate" variant for each activity where
+     * the Compendium lists multiple intensity bands, since Huawei's activity
+     * records carry no intensity signal to pick a different one. Returns null
+     * for a zero-or-negative duration, so no record is written for a
+     * malformed session.
+     */
+    private fun estimatedTotalCaloriesKcal(exerciseType: Int, startTimeMs: Long, endTimeMs: Long): Double? {
+        val minutes = (endTimeMs - startTimeMs) / 60_000.0
+        if (minutes <= 0.0) return null
+
+        val met = exerciseTypeMetValue(exerciseType)
+        val referenceWeightKg = 70.0
+        return met * 3.5 * referenceWeightKg * minutes / 200.0
+    }
+
+    /** General/moderate MET value per Health Connect exercise type, from the
+     *  Compendium of Physical Activities. See [estimatedTotalCaloriesKcal]. */
+    private fun exerciseTypeMetValue(exerciseType: Int): Double = when (exerciseType) {
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> 8.0
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> 7.5
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL,
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> 6.0
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> 6.0
+        ExerciseSessionRecord.EXERCISE_TYPE_ROWING,
+        ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE -> 7.0
+        ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL -> 5.0
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> 3.5
+        ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> 2.5
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> 3.5
+        ExerciseSessionRecord.EXERCISE_TYPE_SKIING -> 7.0
+        ExerciseSessionRecord.EXERCISE_TYPE_SNOWBOARDING -> 5.3
+        ExerciseSessionRecord.EXERCISE_TYPE_SKATING -> 7.0
+        ExerciseSessionRecord.EXERCISE_TYPE_TENNIS -> 7.3
+        ExerciseSessionRecord.EXERCISE_TYPE_TABLE_TENNIS -> 4.0
+        ExerciseSessionRecord.EXERCISE_TYPE_BASKETBALL -> 6.5
+        ExerciseSessionRecord.EXERCISE_TYPE_VOLLEYBALL -> 4.0
+        ExerciseSessionRecord.EXERCISE_TYPE_BADMINTON -> 5.5
+        ExerciseSessionRecord.EXERCISE_TYPE_BASEBALL -> 5.0
+        ExerciseSessionRecord.EXERCISE_TYPE_BOXING -> 7.0
+        ExerciseSessionRecord.EXERCISE_TYPE_DANCING -> 4.5
+        ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> 8.0
+        ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> 3.0
+        ExerciseSessionRecord.EXERCISE_TYPE_GOLF -> 4.8
+        ExerciseSessionRecord.EXERCISE_TYPE_SOCCER -> 7.0
+        ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AMERICAN,
+        ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AUSTRALIAN -> 8.0
+        else -> 4.0 // EXERCISE_TYPE_OTHER_WORKOUT and anything unmapped: conservative moderate-activity default.
     }
 
     private suspend fun replaceRecords(
