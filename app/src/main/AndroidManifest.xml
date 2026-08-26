@@ -40,6 +40,20 @@
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
     <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
 
+    <!-- Sprint 2026-08-25 exception, not part of the Huawei-approved
+         activity/basic sport scope above: an estimated (not measured)
+         MET-formula total-calories figure, attached to workout sessions so
+         third-party Health Connect readers have something to import. See
+         GoogleHealthManager.estimatedTotalCaloriesKcal and
+         docs/HEALTH_DATA_PERMISSION_MATRIX.md for the full rationale and the
+         explicit exception this makes to this file's "never synthesize fake
+         health data" rule. Declaring this permission here is required before
+         Health Connect will show ANY permission dialog for it; omitting it
+         causes the whole runtime permission request to silently return an
+         empty grant set instead of prompting. -->
+    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.WRITE_TOTAL_CALORIES_BURNED" />
+
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
         <package android:name="com.huawei.hwid" />
