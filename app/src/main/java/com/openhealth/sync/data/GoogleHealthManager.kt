@@ -568,67 +568,14 @@ class GoogleHealthManager(
      * MET-formula estimate of total calories burned for a workout, used only
      * to give third-party Health Connect readers something non-zero to
      * import (see the call site in [writeActivitySessionsBatch] for why).
-     * This is NOT measured data: Huawei's real per-workout calorie figure is
-     * gated behind the same activeCalories scope that returns error 50005
-     * for this account (see [writeActiveCaloriesBatch] above, and
-     * HuaweiHealthManager's activeCalories read path), and nothing
-     * about that is expected to change. The formula itself --
-     * kcal = MET * 3.5 * weightKg * minutes / 200 -- and the MET values below
-     * are drawn from the Compendium of Physical Activities (Ainsworth et al.),
-     * the standard reference most fitness calorie calculators cite. Reference
-     * body weight is fixed at 70 kg, the conventional default used across MET
-     * calculators when no real weight is available -- BitLut has no access to
-     * the user's actual weight and adding that would be a new data category,
-     * which this sprint's fix is explicitly scoped to avoid.
-     *
-     * MET values are the "general/moderate" variant for each activity where
-     * the Compendium lists multiple intensity bands, since Huawei's activity
-     * records carry no intensity signal to pick a different one. Returns null
-     * for a zero-or-negative duration, so no record is written for a
-     * malformed session.
+     * Delegates to [com.openhealth.sync.util.WorkoutCalorieEstimator] (sprint
+     * 2026-08-26 extraction) so this exact formula and MET table also back
+     * the workout card's own calorie display -- see that object's own doc
+     * comment for the full rationale, the formula, and why it is not
+     * measured data.
      */
-    private fun estimatedTotalCaloriesKcal(exerciseType: Int, startTimeMs: Long, endTimeMs: Long): Double? {
-        val minutes = (endTimeMs - startTimeMs) / 60_000.0
-        if (minutes <= 0.0) return null
-
-        val met = exerciseTypeMetValue(exerciseType)
-        val referenceWeightKg = 70.0
-        return met * 3.5 * referenceWeightKg * minutes / 200.0
-    }
-
-    /** General/moderate MET value per Health Connect exercise type, from the
-     *  Compendium of Physical Activities. See [estimatedTotalCaloriesKcal]. */
-    private fun exerciseTypeMetValue(exerciseType: Int): Double = when (exerciseType) {
-        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> 8.0
-        ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> 7.5
-        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL,
-        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> 6.0
-        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> 6.0
-        ExerciseSessionRecord.EXERCISE_TYPE_ROWING,
-        ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE -> 7.0
-        ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL -> 5.0
-        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> 3.5
-        ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> 2.5
-        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> 3.5
-        ExerciseSessionRecord.EXERCISE_TYPE_SKIING -> 7.0
-        ExerciseSessionRecord.EXERCISE_TYPE_SNOWBOARDING -> 5.3
-        ExerciseSessionRecord.EXERCISE_TYPE_SKATING -> 7.0
-        ExerciseSessionRecord.EXERCISE_TYPE_TENNIS -> 7.3
-        ExerciseSessionRecord.EXERCISE_TYPE_TABLE_TENNIS -> 4.0
-        ExerciseSessionRecord.EXERCISE_TYPE_BASKETBALL -> 6.5
-        ExerciseSessionRecord.EXERCISE_TYPE_VOLLEYBALL -> 4.0
-        ExerciseSessionRecord.EXERCISE_TYPE_BADMINTON -> 5.5
-        ExerciseSessionRecord.EXERCISE_TYPE_BASEBALL -> 5.0
-        ExerciseSessionRecord.EXERCISE_TYPE_BOXING -> 7.0
-        ExerciseSessionRecord.EXERCISE_TYPE_DANCING -> 4.5
-        ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> 8.0
-        ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> 3.0
-        ExerciseSessionRecord.EXERCISE_TYPE_GOLF -> 4.8
-        ExerciseSessionRecord.EXERCISE_TYPE_SOCCER -> 7.0
-        ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AMERICAN,
-        ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AUSTRALIAN -> 8.0
-        else -> 4.0 // EXERCISE_TYPE_OTHER_WORKOUT and anything unmapped: conservative moderate-activity default.
-    }
+    private fun estimatedTotalCaloriesKcal(exerciseType: Int, startTimeMs: Long, endTimeMs: Long): Double? =
+        com.openhealth.sync.util.WorkoutCalorieEstimator.estimateTotalCaloriesKcal(exerciseType, startTimeMs, endTimeMs)
 
     private suspend fun replaceRecords(
         label: String,

@@ -15,7 +15,9 @@ import com.openhealth.sync.data.PersonalRecord
 import com.openhealth.sync.data.StreakState
 import com.openhealth.sync.data.WeekComparison
 import com.openhealth.sync.util.AppLogger
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -205,7 +207,10 @@ class DashboardViewModel(
         val base = readAchievementsIntoState(goalsBase)
         if (cached == null) return base
 
-        return base.withSnapshot(cached.snapshot).copy(
+        val cachedDate = Instant.ofEpochMilli(cached.savedAtMs).atZone(ZoneId.systemDefault()).toLocalDate()
+        val isStaleAcrossMidnight = cachedDate.isBefore(LocalDate.now())
+
+        val withCachedSnapshot = base.withSnapshot(cached.snapshot).copy(
             isLoading = true,
             // We have cached data, but we haven't actually confirmed permissions
             // are still granted in this process yet -- that happens in load().
@@ -217,6 +222,34 @@ class DashboardViewModel(
             permissionsChecked = false,
             isFromCache = true,
             lastUpdatedAtMs = cached.dataChangedAtMs
+        )
+
+        if (!isStaleAcrossMidnight) return withCachedSnapshot
+
+        // Sprint 2026-08-26: the cache was last written on a previous
+        // calendar day (e.g. the app was closed overnight). Showing
+        // yesterday's steps/distance/calories as if they were today's is
+        // misleading -- a new day has genuinely started with zero activity
+        // so far. recentWorkouts is left untouched: a workout from
+        // yesterday is still real, valid history and belongs in the
+        // "previous workout" card regardless of what day it is now. Only
+        // the daily-total fields reset to their zero defaults, and only
+        // until the next live sync (already scheduled via the periodic
+        // worker, or triggered by load() right after this) replaces them
+        // with real numbers for the new day.
+        AppLogger.i(
+            TAG,
+            "Cached snapshot is from $cachedDate, before today (${LocalDate.now()}) -- " +
+                "showing zeroed daily totals until the next sync completes"
+        )
+        return withCachedSnapshot.copy(
+            stepsToday = 0L,
+            distanceMeters = 0.0,
+            caloriesKcal = 0.0,
+            workoutMinutesToday = 0L,
+            activeHoursToday = 0,
+            elevationMetersToday = 0.0,
+            floorsToday = 0.0
         )
     }
 

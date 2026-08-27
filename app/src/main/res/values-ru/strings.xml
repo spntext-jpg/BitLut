@@ -40,6 +40,8 @@
     <string name="workout_pace_value">%1$s /км</string>
     <string name="workout_stat_speed_label">Ср. скорость</string>
     <string name="workout_stat_steps_label">Шаги</string>
+    <string name="workout_stat_calories_label">Калории</string>
+    <string name="workout_calories_value">%1$s ккал</string>
     <string name="workout_stat_started_label">Начало</string>
     <string name="workout_stat_ended_label">Финиш</string>
     <string name="workout_stat_swim_pace_label">Темп / 100 м</string>

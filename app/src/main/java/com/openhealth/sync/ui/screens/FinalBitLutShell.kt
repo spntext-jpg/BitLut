@@ -64,6 +64,7 @@ import com.openhealth.sync.ui.theme.AugustElevation
 import com.openhealth.sync.ui.theme.AugustMotion
 import com.openhealth.sync.ui.theme.AugustRadius
 import com.openhealth.sync.util.AppLogger
+import com.openhealth.sync.util.WorkoutCalorieEstimator
 import java.util.Locale
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.res.stringResource
@@ -866,6 +867,40 @@ private fun workoutMetricDisplays(
     exerciseType: Int?
 ): List<WorkoutMetricDisplay> {
     val noData = stringResource(R.string.no_data_short)
+    val durationDisplay = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_duration_label),
+        stringResource(R.string.workout_duration_value, durationMinutes)
+    )
+
+    // Sprint 2026-08-26: strength training has no meaningful distance, speed,
+    // or step count -- showing those fields as "--" for every strength
+    // session is confusing rather than merely empty (see this function's own
+    // doc comment above for the same "logical field but shows an em dash
+    // almost every time" problem, previously fixed the same way for biking).
+    // Duration + Calories are the two fields that are actually meaningful
+    // for this exercise type. Calories prefers Huawei's real measured
+    // activeCaloriesKcal when present, and falls back to the shared
+    // MET-formula estimate (WorkoutCalorieEstimator, sprint 2026-08-26) only
+    // when it isn't -- which is always true for this Huawei account today,
+    // since the activeCalories scope is permanently denied (error 50005).
+    if (exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING) {
+        val realOrEstimatedKcal = session.activeCaloriesKcal?.takeIf { it > 0.0 }
+            ?: WorkoutCalorieEstimator.estimateTotalCaloriesKcal(
+                exerciseType,
+                session.startTimeMs,
+                session.endTimeMs
+            )
+        return listOf(
+            durationDisplay,
+            WorkoutMetricDisplay(
+                stringResource(R.string.workout_stat_calories_label),
+                realOrEstimatedKcal?.let {
+                    stringResource(R.string.workout_calories_value, formatNumber(it.toLong()))
+                } ?: noData
+            )
+        )
+    }
+
     val distanceMeters = session.distanceMeters?.takeIf { it > 0.0 }
     val distanceKm = distanceMeters?.div(1000.0)
     val steps = session.steps?.takeIf { it > 0L }
@@ -892,10 +927,7 @@ private fun workoutMetricDisplays(
     }
 
     return listOfNotNull(
-        WorkoutMetricDisplay(
-            stringResource(R.string.workout_stat_duration_label),
-            stringResource(R.string.workout_duration_value, durationMinutes)
-        ),
+        durationDisplay,
         WorkoutMetricDisplay(
             stringResource(R.string.workout_stat_distance_label),
             distanceKm?.let {
