@@ -828,7 +828,8 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
 
 /**
  * Duration/Distance/Avg speed on every workout card, for every exercise
- * type. The 4th slot (Steps) is shown for every type EXCEPT biking.
+ * type. The 4th slot (Steps) is shown for every type EXCEPT biking and
+ * walking.
  *
  * Biking has no 4th slot at all as of this hotfix (2026-08-22, third
  * revision same day): Steps is semantically wrong for cycling (that's what
@@ -845,6 +846,14 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
  * correctly before this change (a lone last-row item gets a balancing
  * Spacer(weight(1f)), not a full-width stretch) -- see WorkoutStatsGrid's
  * own logic -- so no layout change was needed for the 3-metric case.
+ *
+ * Walking drops the same Steps slot (2026-08-27) for a product reason
+ * rather than a missing-data reason: on a walking session, Steps is
+ * redundant with Distance/Avg speed rather than adding new information, so
+ * the card was trimmed to the same three-slot layout already used for
+ * biking. This is a display-only change -- ActivitySessionData.steps is
+ * still read/synced for CSV export, daily totals, and the Steps Hero card;
+ * only this specific card's walking display narrowed.
  *
  * History, all same day (2026-08-22): six-slot -> four-slot (dropped
  * Active Calories and Elevation everywhere); biking's slot 4 became
@@ -916,8 +925,10 @@ private fun workoutMetricDisplays(
         null
     }
     val isBiking = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_BIKING
+    val isWalking = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WALKING
+    val dropsFourthSlot = isBiking || isWalking
 
-    val fourthSlot = if (isBiking) {
+    val fourthSlot = if (dropsFourthSlot) {
         null
     } else {
         WorkoutMetricDisplay(
