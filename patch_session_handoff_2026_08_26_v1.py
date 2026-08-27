@@ -1,6 +1,107 @@
-# BitLut — Session Handoff
+#!/usr/bin/env python3
+"""
+BitLut patch: update SESSION_HANDOFF.md with this session's changes,
+decisions, and established facts (2026-08-26).
 
-Current handoff date: 2026-08-26.
+This is a documentation-only change -- no Kotlin, XML, or Gradle source is
+touched. It records, for the next session:
+
+  1. The five patches shipped this session and why, in order:
+     - Health Connect recording-method fix (Metadata.autoRecorded, alpha12
+       bump) -- root cause of the corporate app not importing workouts that
+       looked fine in Google Fit.
+     - Estimated workout calories (MET-formula TotalCaloriesBurnedRecord) --
+       a bare ExerciseSessionRecord with nothing attached is a documented
+       reason third-party readers skip a workout.
+     - The manifest permission bug that blocked the resulting new Health
+       Connect permission dialog from appearing at all.
+     - The stale-daily-totals-across-midnight cold-launch bug.
+     - The strength-training workout card metric fix (Duration + Calories
+       only, shared WorkoutCalorieEstimator).
+  2. The "estimated workout calories" policy as a deliberate, scoped,
+     user-approved exception to the project's "never synthesize fake health
+     data" rule -- including exactly what is and isn't covered by it.
+  3. Two patch-script process lessons from real failures this session (a
+     fragile multi-line anchor breaking idempotency detection; an XML
+     comment containing an illegal "--").
+  4. A revised workout metric contract reflecting the strength-training
+     special case.
+  5. An updated next-session rule, including that the corporate-app fix is
+     not yet confirmed on a real device as of this handoff.
+
+The previous end-of-session baseline (2026-08-22) is condensed rather than
+deleted outright, and the now-stale, fully-superseded 2026-08-22 "Workout
+metric contract" section is removed rather than left as a duplicate that
+would contradict the revised 2026-08-26 version above it.
+
+Usage:
+    python3 patch_session_handoff_2026_08_26_v1.py
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+BACKUP_DIR = ROOT / ".bitlut_patch_backup" / "session_handoff_2026_08_26_v1"
+
+
+def die(message: str) -> None:
+    print(f"FATAL: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+_backed_up_paths: set = set()
+
+
+def backup_once(path: Path) -> None:
+    if path in _backed_up_paths:
+        return
+    relative = path.relative_to(ROOT)
+    backup_path = BACKUP_DIR / relative
+    if not backup_path.exists():
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, backup_path)
+        print(f"  backed up -> {backup_path.relative_to(ROOT)}")
+    _backed_up_paths.add(path)
+
+
+def read(path: Path) -> str:
+    if not path.exists():
+        die(f"Expected file not found: {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def write(path: Path, text: str) -> None:
+    path.write_text(text, encoding="utf-8")
+
+
+def apply_edit(path: Path, old: str, new: str, expected_count: int = 1) -> bool:
+    """Text-anchored replacement for genuine changes (old text disappears)."""
+    text = read(path)
+    count_old = text.count(old)
+    count_new = text.count(new)
+
+    if count_old == 0 and count_new >= expected_count:
+        print(f"  already applied, skipping: {path.name} ({new[:40]!r}...)")
+        return False
+
+    if count_old != expected_count:
+        die(
+            f"{path}: expected {expected_count} occurrence(s) of anchor in "
+            f"{path.name}, found {count_old}. Refusing to apply (ambiguous or stale)."
+        )
+
+    backup_once(path)
+    write(path, text.replace(old, new, expected_count))
+    print(f"  applied: {path.name}")
+    return True
+
+
+NEW_OPENING_AND_BASELINE = '''Current handoff date: 2026-08-26.
 
 Read `CLAUDE.md` and this file before changing code. Source code plus a fresh
 successful build are the final authority if an older historical note conflicts.
@@ -197,7 +298,7 @@ above):
 - Average speed is derived only when real distance exists.
 - Steps come from real Health Connect step data overlapping the workout.
 - Elevation comes only from real elevation data.
-- Missing metrics render as `—`.
+- Missing metrics render as `\u2014`.
 - Never estimate distance from steps.
 - Never estimate elevation or speed.
 - Calories: real data preferred everywhere; the MET estimate is used
@@ -215,128 +316,129 @@ The current distance boundary fallback is deliberately conservative:
 
 **Do not reopen this fallback logic.** Nothing this session touches it.
 
-## Dark theme (2026-08-22)
+## Dark theme (2026-08-22)'''
 
-System-driven, not an in-app toggle. Dark Canvas = Navy, dark Surface =
-NavyRaised, dark Soft = NavySoft (extends the existing Navy ramp rather than
-a second palette). Steps Hero card is NavyRaised in both modes, unchanged.
-Lime stays a filled surface with Ink content in both modes.
+OLD_OPENING_AND_BASELINE = '''Current handoff date: 2026-08-22.
 
-`HealthAccent` (`activity`/`mind`/`violet`) is now `@Composable`, resolving
-to Lime in dark mode (~14.5:1 contrast against NavyRaised) and the original
-InkSoft in light mode. This was the root cause of a real-device bug found
-today: these three properties were a single fixed InkSoft value that
-measured ~1.2:1 contrast against dark-mode cards -- effectively invisible.
-Affected the Last 7 Days card's numbers, Personal Records' icons, and
-workout-type icons on `WorkoutRecencyCard`, among others. If you add a new
-`HealthAccent` consumer, remember it must be called from a `@Composable`
-context -- `BitPalette.light()`/`dark()` cannot call it and instead hardcode
-their own matching fixed values directly.
+Read `CLAUDE.md` and this file before changing code. Source code plus a fresh
+successful build are the final authority if an older historical note conflicts.
 
-If something still looks gray/low-contrast in dark mode that wasn't covered
+## Product
+
+BitLut is a local-first Kotlin + Jetpack Compose Android bridge:
+
+```text
+HUAWEI Health -> BitLut -> Android Health Connect
+```
+
+Current product scope is activity-only. BitLut must never synthesize missing
+health data.
+
+## End-of-session baseline
+
+Four patches shipped and built successfully today (2026-08-22), in this order:
+
+1. Workout cards narrowed from six metrics to four, for every exercise type
+   (Duration, Distance, Avg speed, Steps).
+2. August v3 dark theme activated -- system-driven (`isSystemInDarkTheme()`),
+   not a manual in-app toggle. `BitPalette.dark()` already existed in the
+   codebase but was unreachable; this activated it.
+3. Steps Hero card given a two-value layout (Steps + Distance each as their
+   own big number), new Tangerine accent color for Settings toggles and the
+   navbar Refresh button, navbar narrowed slightly and Refresh button
+   enlarged 15%.
+4. Dark-mode follow-up fixes from real-device feedback: several icons/text
+   were still gray/invisible in dark mode (root cause: `HealthAccent` was
+   not theme-aware, now fixed -- see "Dark theme" below); navbar buttons
+   given a light spring-based bounce on press; biking's 4th workout metric
+   changed from Steps (illogical for cycling) to Elevation gain.
+
+Also still true from before today:
+
+- HUAWEI -> Health Connect synchronization working on a real device.
+- Manual and periodic WorkManager synchronization.
+- Sync lease/reuse protection against concurrent jobs.
+- Partial Huawei scope denial handled per category instead of failing the whole sync.
+- Health Connect request-storm protection and bounded dashboard reads.
+- Last-known permission state preserved across transient Health Connect provider failures.
+- Dashboard freshness timestamp tied to real data changes rather than app-open time.
+- Haze removed; no blur dependency/toolchain migration.
+- Settings daily goals reduced to the only currently used goal: steps.
+
+## Dark theme (2026-08-22)'''
+
+
+OLD_STALE_WORKOUT_CONTRACT = '''If something still looks gray/low-contrast in dark mode that wasn't covered
 by today's fix, it is very likely another hardcoded `AugustColor.*`
 reference that bypasses both `palette` and `HealthAccent` -- grep for direct
 `AugustColor.InkSoft`/`AugustColor.Muted` usage in the same style as
 `HealthAccent` had before today's fix.
 
-## Health Connect quota rules
+## Workout metric contract (revised 2026-08-22)
 
-Do not reintroduce unbounded pagination into dashboard hot paths.
+Every recent-workout card shows four slots. The first three are the same for
+every exercise type; the fourth is exercise-type-aware:
 
-Keep:
+1. Duration
+2. Distance
+3. Average speed
+4. **Steps** for most exercise types, **Elevation gain** specifically for
+   `ExerciseSessionRecord.EXERCISE_TYPE_BIKING`
 
-- bounded newest-first dashboard reads;
-- coalesced/throttled dashboard refreshes;
-- permission caching;
-- one authoritative post-sync snapshot;
-- narrow per-workout fallback only where necessary.
+Data rules (unchanged from before):
 
-CSV export or explicit diagnostic tools may use broader reads because they are
-not hot-path UI operations.
+- Duration comes from the real ExerciseSessionRecord interval.
+- Distance comes only from real imported/session/Health Connect distance data.
+- Average speed is derived only when real distance exists.
+- Steps come from real Health Connect step data overlapping the workout.
+- Elevation comes only from real elevation data.
+- Missing metrics render as `\u2014`.
+- Never estimate distance from steps.
+- Never estimate calories from duration/body assumptions.
+- Never invent elevation or speed.
 
-## August v3
+Active calories and (for non-biking types) elevation gain were deliberately
+removed from the card display entirely -- not hidden conditionally, removed
+as a display contract -- because Huawei frequently scope-denies
+`activeCalories` (50005) and elevation is rarely populated for the same
+underlying reason, so the old six-slot layout mostly showed four real values
+and two permanent dashes. `ActivitySessionData.activeCaloriesKcal` /
+`.elevationMeters` are still read/synced for CSV export and daily totals;
+only card display was narrowed.
 
-Canonical roles (light mode):
+The current distance boundary fallback is deliberately conservative:
 
-- Canvas `#F7F8FC`
-- Surface `#FFFFFF`
-- Ink / Navy `#151728`
-- Navy Raised `#1C1E33`
-- Navy Soft `#24263D`
-- Lime `#DFFF6A`
-- Lime Active `#C3E93E`
-- Purple `#6E5CF6`
-- Muted `#6F7385`
-- Tangerine `#F28500` (2026-08-22)
-- Tangerine Active `#DD7A00` (2026-08-22)
+- it runs only when exact aggregate/session distance is missing;
+- it queries a narrow window around the displayed workout;
+- it attributes only exact temporal overlap;
+- source records longer than three hours are rejected;
+- if no real overlap exists, distance remains missing.
 
-Dark mode (system-driven, 2026-08-22): dark Canvas = Navy, dark Surface =
-NavyRaised, dark Soft = NavySoft. See "Dark theme" section above for the
-full rationale and the `HealthAccent` gotcha.
+**Do not reopen this fallback logic.** This is the same standing rule as
+before today; nothing about today's four-metric-slot or biking-elevation
+change touches this fallback at all.
 
-Rules:
+## Health Connect quota rules'''
 
-- Steps card is the dark Hero, in both light and dark theme.
-- Normal cards are white Surface in light mode, NavyRaised in dark mode.
-- Lime is the primary filled action color with Ink content, both modes.
-- Tangerine is the "on/active" signal for Settings toggles and the navbar
-  Refresh button only -- not a second primary CTA.
-- Purple is for focus/selection/secondary interaction, unchanged role.
-- Inter Variable is global typography.
-- Nav bar press feedback uses a light spring bounce (explicit exception);
-  everything else stays restrained motion.
-- Do not reintroduce Haze or permanent glassmorphism.
+NEW_DARK_THEME_HEADER = '''If something still looks gray/low-contrast in dark mode that wasn't covered
+by today's fix, it is very likely another hardcoded `AugustColor.*`
+reference that bypasses both `palette` and `HealthAccent` -- grep for direct
+`AugustColor.InkSoft`/`AugustColor.Muted` usage in the same style as
+`HealthAccent` had before today's fix.
 
-## Settings goals
+## Health Connect quota rules'''
 
-Only the steps goal is currently exposed in Settings.
 
-Active-minutes and calorie goals are not product controls and should not be
-reintroduced unless those goals become real product features with downstream use.
+OLD_NEXT_SESSION_RULE = '''## Next-session rule
 
-## Build gate
+Start from the working sync baseline. Do not reopen the workout-distance
+problem by trying to force a number into a session that has no real distance
+record. Do not revert the dark-theme `HealthAccent` fix back to a plain
+non-composable object without an equally thorough audit of every call site's
+theme-awareness. Focus future work on new explicitly scoped product
+improvements.'''
 
-Use the constrained Codespaces build:
-
-```bash
-./gradlew :app:assembleDebug \
-  --no-daemon \
-  --max-workers=1 \
-  --no-watch-fs \
-  --console=plain \
-  -Dorg.gradle.jvmargs="-Xmx1024m -XX:MaxMetaspaceSize=384m -Dfile.encoding=UTF-8" \
-  -Pkotlin.compiler.execution.strategy=in-process
-```
-
-A full `assembleDebug` must pass before commit.
-
-## Working convention
-
-For all coding in this project:
-
-- reason about code in English;
-- write code, comments, identifiers, and commit messages in English;
-- prefer one standalone Python patch script;
-- embed verification in that script when practical;
-- final delivery should contain the patch and one command block only;
-- make surgical changes and preserve working behavior;
-- every new patch script filename must differ from all previous ones in the
-  project (append v2, v3, etc.) -- never reuse or overwrite a prior patch
-  script's filename, even for a fix to that same patch.
-
-## Trusted current docs
-
-- `README.md`
-- `CLAUDE.md`
-- `CONTEXT.md`
-- `SESSION_HANDOFF.md`
-- `CHANGELOG.md`
-- `docs/HEALTH_DATA_PERMISSION_MATRIX.md`
-- `docs/HUAWEI_DAILY_CHUNKING_166.md`
-- `docs/HUAWEI_PRODUCTION_REVIEW_PACKAGE.md`
-- `docs/PRIVACY_POLICY.md`
-
-## Next-session rule
+NEW_NEXT_SESSION_RULE = '''## Next-session rule
 
 Start from the working sync baseline. Do not reopen the workout-distance
 problem by trying to force a number into a session that has no real distance
@@ -360,4 +462,94 @@ record type without the same explicit user conversation this session had.
 Do not use one large multi-line block as both a patch script's edit anchor
 and its idempotency check -- see "Patch script lessons" above. Validate any
 generated `.xml` with a real parser before delivering a patch that touches
-one. Focus future work on new explicitly scoped product improvements.
+one. Focus future work on new explicitly scoped product improvements.'''
+
+
+def main() -> None:
+    handoff_path = ROOT / "SESSION_HANDOFF.md"
+    if not handoff_path.exists():
+        die(f"Required file missing: {handoff_path}")
+
+    print("== Step 1/3: replace opening + end-of-session baseline ==")
+    apply_edit(handoff_path, OLD_OPENING_AND_BASELINE, NEW_OPENING_AND_BASELINE)
+
+    print("== Step 2/3: remove stale 2026-08-22 workout metric contract (superseded above) ==")
+    apply_edit(handoff_path, OLD_STALE_WORKOUT_CONTRACT, NEW_DARK_THEME_HEADER)
+
+    print("== Step 3/3: update next-session rule ==")
+    apply_edit(handoff_path, OLD_NEXT_SESSION_RULE, NEW_NEXT_SESSION_RULE)
+
+    # ---------------------------------------------------------------
+    # Verification
+    # ---------------------------------------------------------------
+    print("\n== Verification ==")
+    text = read(handoff_path)
+    headers = [line for line in text.splitlines() if line.startswith("## ")]
+    if len(headers) != len(set(headers)):
+        seen = set()
+        dupes = []
+        for h in headers:
+            if h in seen:
+                dupes.append(h)
+            seen.add(h)
+        die(f"Duplicate section header(s) found in {handoff_path.name} after patch: {dupes}")
+    print(f"  verified: {len(headers)} section headers, all unique")
+
+    if "Current handoff date: 2026-08-26." not in text:
+        die(f"Expected updated handoff date not found in {handoff_path.name}.")
+    if "## Estimated workout calories" not in text:
+        die(f"Expected new 'Estimated workout calories' section not found in {handoff_path.name}.")
+    if "## Patch script lessons" not in text:
+        die(f"Expected new 'Patch script lessons' section not found in {handoff_path.name}.")
+    if "Workout metric contract (revised 2026-08-22)" in text:
+        die(f"Stale 2026-08-22 workout metric contract header still present in {handoff_path.name}.")
+    print("  verified: date, new sections, and stale-section removal all correct")
+
+    print("\n== Compile gate: :app:assembleDebug ==")
+    gradlew = ROOT / "gradlew"
+    if not gradlew.exists():
+        die("gradlew not found at repo root -- run this script from the BitLut repo root.")
+
+    result = subprocess.run(
+        [
+            str(gradlew),
+            ":app:assembleDebug",
+            "--no-daemon",
+            "--max-workers=1",
+            "--no-watch-fs",
+            "--console=plain",
+            "-Dorg.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=384m -Dfile.encoding=UTF-8",
+            "-Pkotlin.compiler.execution.strategy=in-process",
+        ],
+        cwd=ROOT,
+    )
+    if result.returncode != 0:
+        die("assembleDebug failed. No commit, no push. Fix the build and re-run this script.")
+
+    print("\n== assembleDebug succeeded. Committing and pushing. ==")
+    subprocess.run(["git", "add", "-A"], cwd=ROOT, check=True)
+    commit = subprocess.run(
+        [
+            "git",
+            "commit",
+            "-m",
+            "Update SESSION_HANDOFF.md with 2026-08-26 session: recording "
+            "method fix, estimated workout calories, manifest permission "
+            "bug, stale-cache-across-midnight fix, strength-training "
+            "workout metrics",
+        ],
+        cwd=ROOT,
+    )
+    if commit.returncode != 0:
+        print("Nothing to commit (already applied) -- skipping push.")
+        return
+
+    push = subprocess.run(["git", "push", "origin", "HEAD:main"], cwd=ROOT)
+    if push.returncode != 0:
+        die("git push failed. Commit succeeded locally; push manually once resolved.")
+
+    print("\nDone.")
+
+
+if __name__ == "__main__":
+    main()
