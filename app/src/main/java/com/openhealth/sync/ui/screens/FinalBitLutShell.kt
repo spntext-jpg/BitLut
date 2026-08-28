@@ -408,75 +408,6 @@ private fun OnboardingScopeRow(palette: BitPalette, icon: ImageVector, text: Str
     }
 }
 
-/**
- * Trust screen (sprint 2026-07-14): a plain-language, complete list of the
- * exact 5 Huawei Health Kit scopes BitLut requests -- not a marketing
- * summary, the actual list, matching requestedScopeNames() in
- * HuaweiHealthManager verbatim in substance (5 items, same order). Answers
- * the single most common complaint pattern seen in reviews of similar sync
- * apps: "I don't understand what's being synced where." No dismiss-and-never
- * shown-again state -- this is meant to be checked back in on, so it's
- * reachable any time from Settings rather than a one-time onboarding step.
- */
-@Composable
-private fun DataScopesScreen(palette: BitPalette, onClose: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(palette.backgroundBrush)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Icon(
-                    Icons.Rounded.Cloud,
-                    contentDescription = null,
-                    tint = HealthAccent.mind(),
-                    modifier = Modifier.size(40.dp)
-                )
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    text = stringResource(R.string.data_scopes_title),
-                    color = palette.text,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 26.sp
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = stringResource(R.string.data_scopes_body),
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 15.sp,
-                    lineHeight = 21.sp
-                )
-                Spacer(Modifier.height(24.dp))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.DirectionsRun, text = stringResource(R.string.data_scopes_step))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.TrendingUp, text = stringResource(R.string.data_scopes_distance))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.Watch, text = stringResource(R.string.data_scopes_activity))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.LocalFireDepartment, text = stringResource(R.string.data_scopes_activity_record))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.Schedule, text = stringResource(R.string.data_scopes_history_week))
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.data_scopes_destination),
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp
-                )
-            }
-
-            PrimaryButton(
-                text = stringResource(R.string.data_scopes_close),
-                onClick = onClose
-            )
-        }
-    }
-}
-
 @Composable
 private fun SummaryScreen(
     palette: BitPalette,
@@ -1546,8 +1477,6 @@ private fun SettingsScreen(
     stepsGoal: Long,
     onStepsGoalChanged: (Long) -> Unit
 ) {
-    var showDataScopes by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-
     // Settings exposes only the steps goal because it is the only daily goal
     // currently used by the product. Other health targets must not exist as
     // decorative controls without downstream behavior.
@@ -1571,18 +1500,9 @@ private fun SettingsScreen(
             fontSize = 18.sp
         )
         SoftCard(palette = palette, accent = HealthAccent.violet(), hero = false, tintWithAccent = true) {
-            Text(
-                text = stringResource(R.string.data_source_section_body),
-                color = palette.secondaryText,
-                fontWeight = FontWeight.Medium,
-                fontSize = 13.sp,
-                lineHeight = 18.sp
-            )
-            Spacer(Modifier.height(10.dp))
             DataSourceToggleRow(
                 palette = palette,
                 title = stringResource(R.string.data_source_huawei_title),
-                subtitle = stringResource(R.string.data_source_huawei_body),
                 accent = HealthAccent.activity(),
                 selected = syncState.selectedDataSource == HealthDataSource.HUAWEI_HEALTH,
                 onSelect = { onDataSourceSelected(HealthDataSource.HUAWEI_HEALTH) }
@@ -1590,7 +1510,6 @@ private fun SettingsScreen(
             DataSourceToggleRow(
                 palette = palette,
                 title = stringResource(R.string.data_source_google_fit_title),
-                subtitle = stringResource(R.string.data_source_google_fit_body),
                 accent = HealthAccent.mind(),
                 selected = syncState.selectedDataSource == HealthDataSource.GOOGLE_FIT,
                 onSelect = { onDataSourceSelected(HealthDataSource.GOOGLE_FIT) },
@@ -1598,27 +1517,72 @@ private fun SettingsScreen(
             )
         }
 
-        SettingsConnectionCard(
-            palette = palette,
-            title = stringResource(R.string.google_health_connect),
-            accent = HealthAccent.mind(),
-            icon = Icons.Rounded.Cloud,
-            primaryAction = stringResource(R.string.connect_google_button),
-            onPrimaryAction = onRequestGoogle,
-            secondaryAction = stringResource(R.string.refresh_status),
-            onSecondaryAction = onSyncNow
-        )
-
-        SettingsConnectionCard(
-            palette = palette,
-            title = stringResource(R.string.huawei_health_title),
-            accent = HealthAccent.activity(),
-            icon = Icons.Rounded.Watch,
-            primaryAction = stringResource(R.string.connect_huawei_button),
-            onPrimaryAction = onRequestHuawei,
-            secondaryAction = stringResource(R.string.refresh_status),
-            onSecondaryAction = onRefresh
-        )
+        // Sprint (2026-08-27): all three connect/refresh/sync/import actions
+        // merged into one card, buttons only -- no per-source title and no
+        // captioning text. Previously three separate SettingsConnectionCard
+        // instances (Google, Huawei, manual sync), each with its own title
+        // row; the title added no information the button text didn't already
+        // convey (e.g. "Google Health Connect" heading above a "Connect
+        // Google Health" button), so it was dropped as part of the same
+        // minimalism pass as the Data source card above.
+        SoftCard(palette = palette, accent = HealthAccent.violet(), hero = false, tintWithAccent = true) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PrimaryButton(
+                    text = stringResource(R.string.connect_google_button),
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = onRequestGoogle
+                )
+                SecondaryButton(
+                    text = stringResource(R.string.refresh_status),
+                    palette = palette,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = onSyncNow
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PrimaryButton(
+                    text = stringResource(R.string.connect_huawei_button),
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = onRequestHuawei
+                )
+                SecondaryButton(
+                    text = stringResource(R.string.refresh_status),
+                    palette = palette,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = onRefresh
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PrimaryButton(
+                    text = stringResource(R.string.sync_now),
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = onSyncNow
+                )
+                SecondaryButton(
+                    text = stringResource(R.string.import_archive_title),
+                    palette = palette,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = onImportArchive
+                )
+            }
+        }
 
         // Sprint (2026-07-14, generalized 2026-07-18): a calm, specific
         // explanation instead of a silent no-op degrade or a generic toast.
@@ -1633,17 +1597,6 @@ private fun SettingsScreen(
         if (!syncState.isHuaweiAuthorized && huaweiFailureReason != null) {
             HuaweiAuthIssueCard(palette = palette, reason = huaweiFailureReason, onRetryConnect = onRequestHuawei)
         }
-
-        SettingsConnectionCard(
-            palette = palette,
-            title = stringResource(R.string.manual_sync_title),
-            accent = HealthAccent.violet(),
-            icon = Icons.Rounded.CloudSync,
-            primaryAction = stringResource(R.string.sync_now),
-            onPrimaryAction = onSyncNow,
-            secondaryAction = stringResource(R.string.import_archive_title),
-            onSecondaryAction = onImportArchive
-        )
 
         Text(
             text = stringResource(R.string.dashboard_goals_section_title),
@@ -1685,116 +1638,6 @@ private fun SettingsScreen(
                 }
             )
         }
-        Text(
-            text = stringResource(R.string.workout_filter_section_title),
-            color = palette.text,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 18.sp
-        )
-        SoftCard(palette = palette, accent = HealthAccent.activity(), tintWithAccent = true) {
-            val context = LocalContext.current
-            val workoutFilterPrefs = remember { com.openhealth.sync.config.WorkoutFilterPrefs(context) }
-            var minDurationMinutes by remember { mutableStateOf(workoutFilterPrefs.minDurationMinutes()) }
-            var excludedTypes by remember { mutableStateOf(workoutFilterPrefs.excludedExerciseTypes()) }
-
-            Text(
-                text = stringResource(R.string.workout_filter_section_body),
-                color = palette.secondaryText,
-                fontWeight = FontWeight.Medium,
-                fontSize = 13.sp,
-                lineHeight = 18.sp
-            )
-            Spacer(Modifier.height(14.dp))
-            Text(
-                text = stringResource(R.string.workout_filter_min_duration_label),
-                color = palette.text,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                com.openhealth.sync.config.WorkoutFilterPrefs.MIN_DURATION_PRESETS_MINUTES.forEach { minutes ->
-                    val selected = minDurationMinutes == minutes
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(if (selected) HealthAccent.activity() else palette.stroke.copy(alpha = 0.3f))
-                            .clickable {
-                                minDurationMinutes = minutes
-                                workoutFilterPrefs.setMinDurationMinutes(minutes)
-                            }
-                            .padding(horizontal = 12.dp, vertical = 7.dp)
-                    ) {
-                        Text(
-                            text = if (minutes == 0) {
-                                stringResource(R.string.workout_filter_min_duration_off)
-                            } else {
-                                stringResource(R.string.workout_filter_min_duration_value, minutes)
-                            },
-                            color = if (selected) Color.White else palette.text,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            val categories = listOf(
-                stringResource(R.string.workout_filter_type_walking) to listOf(ExerciseSessionRecord.EXERCISE_TYPE_WALKING),
-                stringResource(R.string.workout_filter_type_running) to listOf(ExerciseSessionRecord.EXERCISE_TYPE_RUNNING),
-                stringResource(R.string.workout_filter_type_biking) to listOf(ExerciseSessionRecord.EXERCISE_TYPE_BIKING),
-                stringResource(R.string.workout_filter_type_swimming) to listOf(
-                    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL,
-                    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER
-                ),
-                stringResource(R.string.workout_filter_type_strength) to listOf(ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING),
-                stringResource(R.string.workout_filter_type_hiking) to listOf(ExerciseSessionRecord.EXERCISE_TYPE_HIKING)
-            )
-            categories.forEachIndexed { index, (label, exerciseTypes) ->
-                WidgetVisibilityRow(
-                    palette = palette,
-                    label = label,
-                    accent = HealthAccent.activity(),
-                    checked = exerciseTypes.none { it in excludedTypes },
-                    onCheckedChange = { checked ->
-                        val updated = if (checked) {
-                            excludedTypes - exerciseTypes.toSet()
-                        } else {
-                            excludedTypes + exerciseTypes.toSet()
-                        }
-                        excludedTypes = updated
-                        workoutFilterPrefs.setExcludedExerciseTypes(updated)
-                    },
-                    isLast = index == categories.lastIndex
-                )
-            }
-        }
-
-        Text(
-            text = stringResource(R.string.data_scopes_link),
-            color = palette.secondaryText,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 13.sp,
-            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .clickable { showDataScopes = true }
-        )
-
-        Text(
-            text = stringResource(R.string.export_csv_link),
-            color = palette.secondaryText,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 13.sp,
-            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-            modifier = Modifier
-                .padding(top = 2.dp, bottom = 8.dp)
-                .clickable { onExportCsv() }
-        )
-    }
-
-    if (showDataScopes) {
-        DataScopesScreen(palette = palette, onClose = { showDataScopes = false })
     }
     }
 }
@@ -1902,7 +1745,6 @@ private fun HuaweiAuthIssueCard(palette: BitPalette, reason: HuaweiAuthFailureRe
 private fun DataSourceToggleRow(
     palette: BitPalette,
     title: String,
-    subtitle: String,
     accent: Color,
     selected: Boolean,
     onSelect: () -> Unit,
@@ -1913,21 +1755,13 @@ private fun DataSourceToggleRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(
-                text = title,
-                color = palette.text,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
-            )
-            Text(
-                text = subtitle,
-                color = palette.secondaryText,
-                fontWeight = FontWeight.Medium,
-                fontSize = 12.sp,
-                lineHeight = 16.sp
-            )
-        }
+        Text(
+            text = title,
+            color = palette.text,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            modifier = Modifier.weight(1f).padding(end = 12.dp)
+        )
         Switch(
             checked = selected,
             onCheckedChange = { checked ->
@@ -1992,44 +1826,6 @@ private fun GoalStepperButton(accent: Color, symbol: String, onClick: () -> Unit
         contentAlignment = Alignment.Center
     ) {
         Text(symbol, color = accent, fontWeight = FontWeight.Black, fontSize = 16.sp)
-    }
-}
-
-/** Single toggle row inside the Widgets settings card: label + Switch. [isLast]
- *  suppresses the bottom spacer so the card doesn't end with extra trailing gap. */
-@Composable
-private fun WidgetVisibilityRow(
-    palette: BitPalette,
-    label: String,
-    accent: Color,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    isLast: Boolean = false
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            color = palette.text,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 14.sp
-        )
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = AugustColor.Surface,
-                checkedTrackColor = AugustColor.Tangerine,
-                uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = palette.stroke
-            )
-        )
-    }
-    if (!isLast) {
-        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -2772,67 +2568,6 @@ private fun List<Double>.safeAverage(): Double =
 
 private fun formatOneDecimal(value: Double): String =
     String.format(Locale.getDefault(), "%.1f", value)
-
-@Composable
-private fun SettingsConnectionCard(
-    palette: BitPalette,
-    title: String,
-    accent: Color,
-    icon: ImageVector,
-    primaryAction: String,
-    onPrimaryAction: () -> Unit,
-    secondaryAction: String? = null,
-    onSecondaryAction: (() -> Unit)? = null
-) {
-    // Sprint (2026-07-08): dropped the body/status text entirely (title +
-    // icon only per request) and replaced the wrapping FlowRow with a plain
-    // Row so the two actions are always on one line, each taking half the
-    // width, instead of sometimes wrapping to a second line.
-    SoftCard(palette = palette, accent = accent, hero = false, tintWithAccent = true) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(accent.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
-            }
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = title,
-                color = palette.text,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 15.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            PrimaryButton(
-                text = primaryAction,
-                compact = true,
-                modifier = Modifier.weight(1f),
-                onClick = onPrimaryAction
-            )
-            if (secondaryAction != null && onSecondaryAction != null) {
-                SecondaryButton(
-                    text = secondaryAction,
-                    palette = palette,
-                    compact = true,
-                    modifier = Modifier.weight(1f),
-                    onClick = onSecondaryAction
-                )
-            }
-        }
-    }
-}
 
 internal data class BitPalette(
     val dark: Boolean,
