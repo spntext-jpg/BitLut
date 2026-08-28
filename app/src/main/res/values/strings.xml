@@ -190,6 +190,7 @@
     <string name="huawei_reason_unknown_body">Something prevented Huawei Health Kit from authorizing this app. Check the in-app log viewer for the specific error code, or try again later.</string>
     <string name="huawei_retry_connect">Try connecting again</string>
     <string name="import_archive_title">Import archive</string>
+    <string name="health_connect_data_sources_button">Open Health Connect settings</string>
     <string name="import_archive_selected">Huawei Health archive selected</string>
     <string name="widget_toggle_calories">Active calories</string>
     <string name="widget_toggle_workout_minutes">Workout minutes</string>

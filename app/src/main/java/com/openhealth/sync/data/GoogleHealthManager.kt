@@ -246,6 +246,32 @@ class GoogleHealthManager(
         return null
     }
 
+    /**
+     * Sprint 2026-08-27: opens Health Connect's own settings screen, from
+     * which the user can reach "Manage data > Data sources and priority".
+     * This is a distinct, separate consent step from the runtime read/write
+     * permission grant BitLut already requests: Health Connect requires a
+     * writing app to be explicitly added as a contributing data source for
+     * each category (Steps, Distance, Exercise, etc.) before its records
+     * count toward totals a reader relies on, even though the records exist
+     * in the store and are visible to BitLut itself the moment the runtime
+     * permission is granted. This was a plausible, previously-unaddressed
+     * reason a third-party reader could show no BitLut-synced activity: the
+     * permission grant alone does not guarantee BitLut is listed there.
+     *
+     * `ACTION_HEALTH_CONNECT_SETTINGS` (declared as
+     * `androidx.health.ACTION_HEALTH_CONNECT_SETTINGS` in the manifest's
+     * `<queries>` block already, for this exact purpose) opens Health
+     * Connect's general settings screen; Health Connect does not currently
+     * expose a stable, documented deep link straight into the data-sources
+     * sub-screen, so this is the closest available entry point. The caller
+     * (MainActivity) is responsible for wrapping startActivity in a
+     * try/catch, matching the existing pattern for the Huawei authorization
+     * intent below.
+     */
+    fun healthConnectSettingsIntent(): android.content.Intent =
+        android.content.Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS)
+
     private suspend fun grantedPermissionsOrEmpty(): Set<String> {
         val stalePermissions = cachedPermissions.get()?.first
         cachedPermissions.get()?.let { (granted, atMs) ->
@@ -1423,13 +1449,24 @@ class GoogleHealthManager(
      * free to treat RECORDING_METHOD_UNKNOWN as untrustworthy and skip
      * importing it, which matches a real corporate-app report of BitLut's
      * synced workouts being invisible there despite being visible in Google
-     * Fit. `Device(type = Device.TYPE_UNKNOWN)` is used rather than guessing
-     * a manufacturer/model: BitLut runs on the phone relaying data that
-     * Huawei Health already attributed to whatever wearable or phone
-     * actually recorded it, so BitLut has no reliable device-type signal of
-     * its own to report.
+     * Fit.
+     *
+     * Sprint 2026-08-27: `manufacturer = "Huawei"` added (model deliberately
+     * left unset). Per Health Connect's own metadata guidance, supplying
+     * manufacturer/model -- not just `type` -- "helps with attribution in
+     * reader applications, so users can understand which device or
+     * application recorded their data," and is one of the plausible,
+     * previously-unaddressed reasons a stricter third-party reader might
+     * decline a record whose device info is empty beyond TYPE_UNKNOWN.
+     * "Huawei" is used rather than a specific model because that much is
+     * genuinely true regardless of which Huawei phone or wearable actually
+     * recorded the data -- BitLut relays whatever Huawei Health already
+     * attributed the activity to, and has no reliable per-record model
+     * signal of its own to report. Guessing a specific model would not be
+     * true in the same way, so `model` is deliberately left unset;
+     * `Device.TYPE_UNKNOWN` remains correct for the same reason.
      */
-    private val bitlutRecordingDevice = Device(type = Device.TYPE_UNKNOWN)
+    private val bitlutRecordingDevice = Device(type = Device.TYPE_UNKNOWN, manufacturer = "Huawei")
 
     private fun bitlutDailyStepMetadata(sourceId: String, version: Long): Metadata {
         val safeSourceId = sourceId

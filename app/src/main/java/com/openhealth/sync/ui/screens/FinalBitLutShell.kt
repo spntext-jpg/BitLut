@@ -126,6 +126,7 @@ fun FinalBitLutShell(
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
     onExportCsv: () -> Unit = {},
+    onOpenHealthConnectSettings: () -> Unit = {},
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit = { _, _ -> },
     onDataSourceSelected: (HealthDataSource) -> Unit = {},
     onStepsGoalChanged: (Long) -> Unit = {},
@@ -212,6 +213,7 @@ fun FinalBitLutShell(
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
                     onExportCsv = onExportCsv,
+                    onOpenHealthConnectSettings = onOpenHealthConnectSettings,
                     onWidgetVisibilityChanged = onWidgetVisibilityChanged,
                     onDataSourceSelected = onDataSourceSelected,
                     stepsGoal = dashboardState.stepsGoal,
@@ -1472,6 +1474,7 @@ private fun SettingsScreen(
     onSyncNow: () -> Unit,
     onImportArchive: () -> Unit,
     onExportCsv: () -> Unit,
+    onOpenHealthConnectSettings: () -> Unit,
     onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit,
     onDataSourceSelected: (HealthDataSource) -> Unit,
     stepsGoal: Long,
@@ -1582,6 +1585,26 @@ private fun SettingsScreen(
                     onClick = onImportArchive
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            // Sprint 2026-08-27: a corporate/third-party Health Connect
+            // reader not counting BitLut-synced workouts can be caused by
+            // BitLut never being added as a data source for a given
+            // category in Health Connect's own settings -- a separate
+            // consent step from the runtime permission grant above. See the
+            // doc comment on GoogleHealthManager.healthConnectSettingsIntent()
+            // for the full rationale. This button is diagnostic, not a fix
+            // in itself: it just gets the user to the right screen instead
+            // of leaving them with no path there at all. Placed as a fourth
+            // row in this same merged card (SettingsConnectionCard no
+            // longer exists after the 2026-08-27 minimalism pass -- see
+            // that sprint's comment above), matching the established
+            // buttons-only, no-per-row-title pattern rather than
+            // reintroducing a separate titled card.
+            PrimaryButton(
+                text = stringResource(R.string.health_connect_data_sources_button),
+                compact = true,
+                onClick = onOpenHealthConnectSettings
+            )
         }
 
         // Sprint (2026-07-14, generalized 2026-07-18): a calm, specific

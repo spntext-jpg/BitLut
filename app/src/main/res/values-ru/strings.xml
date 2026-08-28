@@ -190,6 +190,7 @@
     <string name="huawei_reason_unknown_body">Что-то помешало Huawei Health Kit авторизовать это приложение. Проверьте код ошибки в просмотрщике логов внутри приложения или попробуйте позже.</string>
     <string name="huawei_retry_connect">Попробовать снова</string>
     <string name="import_archive_title">Импорт архива</string>
+    <string name="health_connect_data_sources_button">Открыть настройки Health Connect</string>
     <string name="import_archive_selected">Архив Huawei Health выбран</string>
     <string name="widget_toggle_calories">Активные калории</string>
     <string name="widget_toggle_workout_minutes">Минуты тренировок</string>

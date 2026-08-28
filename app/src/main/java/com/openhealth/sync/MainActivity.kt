@@ -176,6 +176,7 @@ class MainActivity : ComponentActivity() {
                     onRequestHuawei = { startHuaweiAuthorization() },
                     onSyncNow = { triggerImmediateSync() },
                     onExportCsv = { exportCsv() },
+                    onOpenHealthConnectSettings = { openHealthConnectSettings() },
                     onWidgetVisibilityChanged = { widget, visible ->
                         dashboardViewModel.setWidgetVisible(widget, visible)
                     },
@@ -232,6 +233,37 @@ class MainActivity : ComponentActivity() {
             googleManager = syncViewModel.googleManager,
             launcher = googlePermissionLauncher
         )
+    }
+
+    /**
+     * Sprint 2026-08-27: opens Health Connect's own settings screen so the
+     * user can check "Manage data > Data sources and priority" -- see the
+     * doc comment on GoogleHealthManager.healthConnectSettingsIntent() for
+     * why this is a distinct step from BitLut's own runtime permission
+     * grant. syncViewModel.googleManager is declared as the
+     * HealthConnectManager interface, which does not expose this
+     * GoogleHealthManager-specific function -- same reason exportCsv()
+     * above casts to the concrete type. AppContainer always constructs a
+     * real GoogleHealthManager, so this cast is safe in practice; the
+     * null-check is defensive only. No ActivityResultLauncher/onResult
+     * handling is needed here (unlike Huawei's authorization intent):
+     * Health Connect's own settings screen returns no result BitLut acts
+     * on, so a plain startActivity is enough, wrapped in the same
+     * try/catch pattern as startHuaweiAuthorization above in case Health
+     * Connect itself is missing or the intent otherwise fails to resolve.
+     */
+    private fun openHealthConnectSettings() {
+        try {
+            val googleManager = syncViewModel.googleManager as? com.openhealth.sync.data.GoogleHealthManager
+            if (googleManager == null) {
+                Toast.makeText(this, getString(R.string.toast_hc_launch_failed), Toast.LENGTH_LONG).show()
+                return
+            }
+            startActivity(googleManager.healthConnectSettingsIntent())
+        } catch (e: Exception) {
+            AppLogger.e("MainActivity", "Opening Health Connect settings failed: ${e.message}", e)
+            Toast.makeText(this, getString(R.string.toast_hc_launch_failed), Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun startHuaweiAuthorization() {
