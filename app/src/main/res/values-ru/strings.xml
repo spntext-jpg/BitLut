@@ -227,6 +227,8 @@
     <string name="insights_new_record_badge">НОВЫЙ</string>
     <string name="insights_streak_subtitle">Дней с целью %1$s шагов</string>
     <string name="insights_streak_best">лучший</string>
+    <string name="insights_streak_days_one">%1$d день подряд</string>
+    <string name="insights_streak_days_other">%1$d дней подряд</string>
     <string name="insights_streak_days_ru_one">%1$d день подряд</string>
     <string name="insights_streak_days_ru_few">%1$d дня подряд</string>
     <string name="insights_streak_days_ru_many">%1$d дней подряд</string>

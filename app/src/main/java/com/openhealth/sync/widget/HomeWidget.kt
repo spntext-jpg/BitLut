@@ -1,6 +1,8 @@
 package com.openhealth.sync.widget
 
 import android.content.Context
+import androidx.annotation.ColorRes
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -24,6 +26,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import androidx.core.content.ContextCompat
 import com.openhealth.sync.R
 import com.openhealth.sync.data.DashboardSnapshotCache
 import com.openhealth.sync.data.worker.BackgroundSyncScheduler
@@ -49,6 +52,13 @@ import java.util.concurrent.TimeUnit
  * the numbers shown here -- this class only ever renders whatever the
  * cache says right now.
  */
+private class ResourceColorProvider(
+    @ColorRes private val colorRes: Int
+) : ColorProvider {
+    override fun getColor(context: Context): Color =
+        Color(ContextCompat.getColor(context, colorRes))
+}
+
 class HomeWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -58,9 +68,9 @@ class HomeWidget : GlanceAppWidget() {
         val syncText = syncStatusText(context, cached?.savedAtMs)
 
         provideContent {
-            val cardColor = ColorProvider(R.color.widget_card)
-            val textColor = ColorProvider(R.color.widget_text)
-            val secondaryTextColor = ColorProvider(R.color.widget_secondary_text)
+            val cardColor = ResourceColorProvider(R.color.widget_card)
+            val textColor = ResourceColorProvider(R.color.widget_text)
+            val secondaryTextColor = ResourceColorProvider(R.color.widget_secondary_text)
 
             Column(
                 modifier = GlanceModifier

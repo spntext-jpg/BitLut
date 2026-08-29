@@ -1089,6 +1089,34 @@ private const val MIN_DISTANCE_METERS_FOR_PACE = 500.0
 private const val MIN_DISTANCE_METERS_FOR_SPEED = 500.0
 private const val MIN_DISTANCE_METERS_FOR_SWIM_PACE = 100.0
 
+private fun formatWorkoutDateTime(epochMs: Long): String =
+    java.time.Instant.ofEpochMilli(epochMs)
+        .atZone(java.time.ZoneId.systemDefault())
+        .format(
+            java.time.format.DateTimeFormatter.ofPattern(
+                "d MMM · HH:mm",
+                Locale.getDefault()
+            )
+        )
+
+private val workoutCadenceLabel = Regex(
+    pattern = "(?i)(макс(?:имальный)?\\.?\\s*каденс|max(?:imum)?\\.?\\s*cadence)"
+)
+
+private fun cleanWorkoutCardTitle(raw: String): String {
+    val normalized = raw.replace('\r', '\n').trim()
+    val match = workoutCadenceLabel.find(normalized)
+    val cleaned = if (match != null) normalized.substring(0, match.range.first) else normalized
+    return cleaned
+        .trim(' ', '\n', '\t', '·', '•', '|', ';', ':', '-')
+        .ifBlank {
+            normalized.lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.isNotBlank() && !workoutCadenceLabel.containsMatchIn(it) }
+                ?: normalized
+        }
+}
+
 /**
  * All-time personal records card (v1.9.12, sprint 4). Only renders the
  * metrics that actually have a record yet (a brand-new install has neither

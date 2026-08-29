@@ -1221,7 +1221,6 @@ class GoogleHealthManager(
     }
 
     suspend fun readStepsToday(): Long {
-    suspend fun readStepsToday(): Long {
         val client = resolveClient() ?: return 0L
         return try {
             val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()

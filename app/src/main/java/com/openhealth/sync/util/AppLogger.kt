@@ -33,7 +33,6 @@ object AppLogger {
     }
 
     fun d(tag: String, msg: String) {
-    fun d(tag: String, msg: String) {
         Log.d(tag, msg)
         addLog("D", tag, msg)
     }
