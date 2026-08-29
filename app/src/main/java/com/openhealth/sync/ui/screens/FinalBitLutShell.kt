@@ -814,78 +814,132 @@ private fun workoutMetricDisplays(
         stringResource(R.string.workout_duration_value, durationMinutes)
     )
 
-    // Sprint 2026-08-26: strength training has no meaningful distance, speed,
-    // or step count -- showing those fields as "--" for every strength
-    // session is confusing rather than merely empty (see this function's own
-    // doc comment above for the same "logical field but shows an em dash
-    // almost every time" problem, previously fixed the same way for biking).
-    // Duration + Calories are the two fields that are actually meaningful
-    // for this exercise type. Calories prefers Huawei's real measured
-    // activeCaloriesKcal when present, and falls back to the shared
-    // MET-formula estimate (WorkoutCalorieEstimator, sprint 2026-08-26) only
-    // when it isn't -- which is always true for this Huawei account today,
-    // since the activeCalories scope is permanently denied (error 50005).
-    if (exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING) {
-        val realOrEstimatedKcal = session.activeCaloriesKcal?.takeIf { it > 0.0 }
-            ?: WorkoutCalorieEstimator.estimateTotalCaloriesKcal(
-                exerciseType,
-                session.startTimeMs,
-                session.endTimeMs
-            )
-        return listOf(
-            durationDisplay,
-            WorkoutMetricDisplay(
-                stringResource(R.string.workout_stat_calories_label),
-                realOrEstimatedKcal?.let {
-                    stringResource(R.string.workout_calories_value, formatNumber(it.toLong()))
-                } ?: noData
-            )
-        )
-    }
-
+    val durationMs = (session.endTimeMs - session.startTimeMs).coerceAtLeast(0L)
+    val durationMinutesExact = durationMs.toDouble() / 60_000.0
     val distanceMeters = session.distanceMeters?.takeIf { it > 0.0 }
     val distanceKm = distanceMeters?.div(1000.0)
     val steps = session.steps?.takeIf { it > 0L }
-    val durationHours =
-        (session.endTimeMs - session.startTimeMs).toDouble() / 3_600_000.0
+    val measuredCaloriesKcal = session.totalCaloriesKcal?.takeIf { it > 0.0 }
+        ?: session.activeCaloriesKcal?.takeIf { it > 0.0 }
+
+    fun distanceDisplay() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_distance_label),
+        distanceKm?.let { stringResource(R.string.distance_today_value, formatOneDecimal(it)) } ?: noData
+    )
+
+    fun caloriesDisplay(kcal: Double? = measuredCaloriesKcal) = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_calories_label),
+        kcal?.let { stringResource(R.string.workout_calories_value, formatNumber(it.toLong())) } ?: noData
+    )
+
+    fun stepsDisplay() = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_steps_label),
+        steps?.let(::formatNumber) ?: noData
+    )
+
+    val paceMinutesPerKm = if (
+        distanceKm != null &&
+        distanceMeters >= MIN_DISTANCE_METERS_FOR_PACE &&
+        durationMinutesExact > 0.0
+    ) {
+        durationMinutesExact / distanceKm
+    } else {
+        null
+    }
+    val paceDisplay = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_pace_label),
+        paceMinutesPerKm?.let {
+            stringResource(R.string.workout_pace_value, formatPace(it))
+        } ?: noData
+    )
+
+    val durationHours = durationMs.toDouble() / 3_600_000.0
     val averageSpeedKmh = if (
         distanceKm != null &&
-        durationHours > 0.0 &&
-        distanceMeters >= MIN_DISTANCE_METERS_FOR_SPEED
+        distanceMeters >= MIN_DISTANCE_METERS_FOR_SPEED &&
+        durationHours > 0.0
     ) {
         distanceKm / durationHours
     } else {
         null
     }
-    val isBiking = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_BIKING
-    val isWalking = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WALKING
-    val dropsFourthSlot = isBiking || isWalking
+    val speedDisplay = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_speed_label),
+        averageSpeedKmh?.let {
+            stringResource(R.string.workout_speed_value, formatOneDecimal(it))
+        } ?: noData
+    )
 
-    val fourthSlot = if (dropsFourthSlot) {
-        null
+    val swimPaceMinutesPer100m = if (
+        distanceMeters != null &&
+        distanceMeters >= MIN_DISTANCE_METERS_FOR_SWIM_PACE &&
+        durationMinutesExact > 0.0
+    ) {
+        durationMinutesExact / (distanceMeters / 100.0)
     } else {
-        WorkoutMetricDisplay(
-            stringResource(R.string.workout_stat_steps_label),
-            steps?.let(::formatNumber) ?: noData
-        )
+        null
+    }
+    val swimPaceDisplay = WorkoutMetricDisplay(
+        stringResource(R.string.workout_stat_swim_pace_label),
+        swimPaceMinutesPer100m?.let {
+            stringResource(R.string.workout_swim_pace_value, formatPace(it))
+        } ?: noData
+    )
+
+    val isFootDistance = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WALKING ||
+        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_RUNNING ||
+        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_HIKING
+    if (isFootDistance) {
+        // Google-style foot activity summary: time, distance, pace and steps.
+        return listOf(durationDisplay, distanceDisplay(), paceDisplay, stepsDisplay())
     }
 
-    return listOfNotNull(
-        durationDisplay,
-        WorkoutMetricDisplay(
-            stringResource(R.string.workout_stat_distance_label),
-            distanceKm?.let {
-                stringResource(R.string.distance_today_value, formatOneDecimal(it))
-            } ?: noData
-        ),
-        WorkoutMetricDisplay(
-            stringResource(R.string.workout_stat_speed_label),
-            averageSpeedKmh?.let {
-                stringResource(R.string.workout_speed_value, formatOneDecimal(it))
-            } ?: noData
-        ),
-        fourthSlot
-    )
+    if (exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_BIKING) {
+        // Cycling convention: pace is not useful; average speed is.
+        return listOf(durationDisplay, distanceDisplay(), speedDisplay, caloriesDisplay())
+    }
+
+    val isSwimming = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER ||
+        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL
+    if (isSwimming) {
+        return listOf(durationDisplay, distanceDisplay(), swimPaceDisplay, caloriesDisplay())
+    }
+
+    val isStrengthLike = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING ||
+        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING ||
+        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING
+    if (isStrengthLike) {
+        // Only strength keeps the previously-approved MET fallback. Huawei
+        // summary calories win whenever they are present.
+        val kcal = measuredCaloriesKcal ?: if (
+            exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING ||
+            exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING
+        ) {
+            WorkoutCalorieEstimator.estimateTotalCaloriesKcal(
+                exerciseType,
+                session.startTimeMs,
+                session.endTimeMs
+            )
+        } else {
+            null
+        }
+        return listOf(durationDisplay, caloriesDisplay(kcal))
+    }
+
+    if (exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_YOGA ||
+        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_PILATES
+    ) {
+        return listOf(durationDisplay, caloriesDisplay())
+    }
+
+    // Generic sports never invent speed or steps. Surface only real metrics
+    // that are meaningful enough to exist for this session.
+    return buildList {
+        add(durationDisplay)
+        if (measuredCaloriesKcal != null) add(caloriesDisplay())
+        if (distanceMeters != null) add(distanceDisplay())
+        if (steps != null) add(stepsDisplay())
+    }.take(4)
 }
 
 @Composable

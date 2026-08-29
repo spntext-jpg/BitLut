@@ -80,6 +80,7 @@ data class ActivitySessionData(
     val exerciseType: Int = ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT,
     val distanceMeters: Double? = null,
     val activeCaloriesKcal: Double? = null,
+    val totalCaloriesKcal: Double? = null,
     val elevationMeters: Double? = null,
     val steps: Long? = null
 )
@@ -130,9 +131,24 @@ class GoogleHealthManager(
 
     private val zoneRules by lazy { ZoneId.systemDefault().rules }
 
+    // BITLUT_WORKOUT_INTEROP_V1
+    // ExerciseSessionRecord intentionally does not carry distance/calorie/step
+    // summary fields. Keep Huawei's authoritative ActivityRecord summary as a
+    // small local sidecar keyed by the session interval so BitLut's dashboard
+    // does not lose exact workout totals after reading the session back from
+    // Health Connect. This cache is used only when Huawei/BitLut is the selected
+    // source; Google Fit sessions continue to resolve from Health Connect.
+    private val workoutSummaryPrefs = context.getSharedPreferences(
+        "bitlut_workout_summary_v1",
+        Context.MODE_PRIVATE
+    )
+
     private fun selectedDataOrigins(): Set<DataOrigin> = setOf(
         DataOrigin(dataSourcePrefs.selectedOriginPackage(context.packageName))
     )
+
+    private fun isHuaweiBridgeSourceSelected(): Boolean =
+        dataSourcePrefs.selectedOriginPackage(context.packageName) == context.packageName
 
     /**
      * Self-healing replacement for the previous `by lazy { ... }` client cache.
@@ -522,62 +538,101 @@ class GoogleHealthManager(
         return replaceRecords("activeCalories", valid, ActiveCaloriesBurnedRecord::class)
     }
 
+    private data class StoredWorkoutSummary(
+        val distanceMeters: Double?,
+        val totalCaloriesKcal: Double?,
+        val elevationMeters: Double?,
+        val steps: Long?
+    )
+
+    private fun workoutSummaryKey(startTimeMs: Long, endTimeMs: Long): String =
+        "$startTimeMs:$endTimeMs"
+
+    private fun persistWorkoutSummary(session: ActivitySessionData) {
+        if (session.distanceMeters == null &&
+            session.totalCaloriesKcal == null &&
+            session.elevationMeters == null &&
+            session.steps == null
+        ) return
+
+        val encoded = listOf(
+            session.distanceMeters?.toString() ?: "x",
+            session.totalCaloriesKcal?.toString() ?: "x",
+            session.elevationMeters?.toString() ?: "x",
+            session.steps?.toString() ?: "x"
+        ).joinToString("|")
+
+        workoutSummaryPrefs.edit()
+            .putString(workoutSummaryKey(session.startTimeMs, session.endTimeMs), encoded)
+            .apply()
+    }
+
+    private fun storedWorkoutSummary(startTimeMs: Long, endTimeMs: Long): StoredWorkoutSummary? {
+        val raw = workoutSummaryPrefs.getString(workoutSummaryKey(startTimeMs, endTimeMs), null)
+            ?: return null
+        val parts = raw.split('|')
+        if (parts.size != 4) return null
+        return StoredWorkoutSummary(
+            distanceMeters = parts[0].takeUnless { it == "x" }?.toDoubleOrNull(),
+            totalCaloriesKcal = parts[1].takeUnless { it == "x" }?.toDoubleOrNull(),
+            elevationMeters = parts[2].takeUnless { it == "x" }?.toDoubleOrNull(),
+            steps = parts[3].takeUnless { it == "x" }?.toLongOrNull()
+        )
+    }
+
     private suspend fun writeActivitySessionsBatch(records: List<ActivitySessionData>): Boolean {
         // Huawei may revise workout metadata after the initial sync. A
         // timestamp version ensures the same stable clientRecordId upserts the
-        // real type/title over records written by older BitLut builds.
+        // real type/title/recording method over records written by older builds.
         val version = System.currentTimeMillis()
         val validSessions = records.filter { it.startTimeMs < it.endTimeMs }
-        val valid = validSessions
-            .map {
-                val start = Instant.ofEpochMilli(it.startTimeMs)
-                val end = Instant.ofEpochMilli(it.endTimeMs)
-                ExerciseSessionRecord(
-                    startTime = start,
-                    endTime = end,
-                    startZoneOffset = offset(start),
-                    endZoneOffset = offset(end),
-                    exerciseType = it.exerciseType,
-                    title = it.title,
-                    metadata = bitlutMetadata(
-                        "exercise",
-                        start.toEpochMilli(),
-                        end.toEpochMilli(),
-                        version = version
-                    )
+        validSessions.forEach(::persistWorkoutSummary)
+
+        val valid = validSessions.map { session ->
+            val start = Instant.ofEpochMilli(session.startTimeMs)
+            val end = Instant.ofEpochMilli(session.endTimeMs)
+            ExerciseSessionRecord(
+                startTime = start,
+                endTime = end,
+                startZoneOffset = offset(start),
+                endZoneOffset = offset(end),
+                exerciseType = session.exerciseType,
+                title = session.title,
+                // Huawei ActivityRecord represents a workout the user started
+                // on Huawei Health/a wearable. Health Connect's attribution
+                // guidance therefore calls this ACTIVELY_RECORDED even though
+                // BitLut is the relay rather than the live sensor app.
+                metadata = bitlutWorkoutMetadata(
+                    "exercise",
+                    start.toEpochMilli(),
+                    end.toEpochMilli(),
+                    version = version
                 )
-            }
+            )
+        }
 
         val sessionsWritten = replaceRecords("activitySessions", valid, ExerciseSessionRecord::class)
 
-        // Sprint 2026-08-25: attach an estimated TotalCaloriesBurnedRecord to
-        // every session. Huawei's real activeCalories category is
-        // permanently denied for this individual-developer account (error
-        // 50005 -- see writeActiveCaloriesBatch), so before this, every
-        // ExerciseSessionRecord BitLut wrote carried no calorie data
-        // whatsoever. A bare session with nothing attached to it is a
-        // documented reason real third-party Health Connect readers silently
-        // decline to import a workout (e.g. MyFitnessPal requires calories
-        // before importing cardio sessions synced through Health Connect).
-        // estimatedTotalCaloriesKcal() is a MET-formula estimate, not
-        // measured data -- see its own doc comment for the caveats and why
-        // TotalCaloriesBurnedRecord (not the still-unavailable
-        // ActiveCaloriesBurnedRecord) is used. This does not touch
-        // ActivitySessionData.activeCaloriesKcal or BitLut's own dashboard,
-        // which continue to show "--" for calories exactly as before, since
-        // BitLut still has no real measured figure for its own display.
-        val caloriesValid = validSessions.mapNotNull {
-            val kcal = estimatedTotalCaloriesKcal(it.exerciseType, it.startTimeMs, it.endTimeMs)
+        // Health Connect models workout metrics as records in the same time
+        // interval, not fields on ExerciseSessionRecord. Prefer Huawei's real
+        // ActivityRecord summary calorie value. Keep the old stable
+        // "exercise_calories_estimate" client ID so an existing estimated
+        // record is upgraded in-place instead of creating a duplicate. When
+        // Huawei does not expose a summary calorie, retain the existing MET
+        // fallback solely for downstream workout interoperability.
+        val caloriesValid = validSessions.mapNotNull { session ->
+            val kcal = session.totalCaloriesKcal?.takeIf { it > 0.0 }
+                ?: estimatedTotalCaloriesKcal(session.exerciseType, session.startTimeMs, session.endTimeMs)
                 ?: return@mapNotNull null
-            val start = Instant.ofEpochMilli(it.startTimeMs)
-            val end = Instant.ofEpochMilli(it.endTimeMs)
+            val start = Instant.ofEpochMilli(session.startTimeMs)
+            val end = Instant.ofEpochMilli(session.endTimeMs)
             TotalCaloriesBurnedRecord(
                 startTime = start,
                 endTime = end,
                 startZoneOffset = offset(start),
                 endZoneOffset = offset(end),
                 energy = Energy.kilocalories(kcal),
-                metadata = bitlutMetadata(
+                metadata = bitlutWorkoutMetadata(
                     "exercise_calories_estimate",
                     start.toEpochMilli(),
                     end.toEpochMilli(),
@@ -585,7 +640,7 @@ class GoogleHealthManager(
                 )
             )
         }
-        replaceRecords("activitySessionEstimatedCalories", caloriesValid, TotalCaloriesBurnedRecord::class)
+        replaceRecords("activitySessionCalories", caloriesValid, TotalCaloriesBurnedRecord::class)
 
         return sessionsWritten
     }
@@ -716,6 +771,7 @@ class GoogleHealthManager(
                         StepsRecord.COUNT_TOTAL,
                         DistanceRecord.DISTANCE_TOTAL,
                         ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL,
+                        TotalCaloriesBurnedRecord.ENERGY_TOTAL,
                         ElevationGainedRecord.ELEVATION_GAINED_TOTAL
                     ),
                     timeRangeFilter = TimeRangeFilter.between(start, end),
@@ -729,6 +785,14 @@ class GoogleHealthManager(
             val activeCaloriesKcal = aggregate[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]
                 ?.inKilocalories
                 ?.takeIf { it > 0.0 }
+            val aggregateTotalCaloriesKcal = aggregate[TotalCaloriesBurnedRecord.ENERGY_TOTAL]
+                ?.inKilocalories
+                ?.takeIf { it > 0.0 }
+            // For Huawei/BitLut, only the local ActivityRecord summary is
+            // treated as real dashboard calorie data. The Health Connect
+            // TotalCalories record may be the MET interoperability fallback.
+            val totalCaloriesKcal = workout.totalCaloriesKcal
+                ?: aggregateTotalCaloriesKcal.takeUnless { isHuaweiBridgeSourceSelected() }
             val elevationMeters = aggregate[ElevationGainedRecord.ELEVATION_GAINED_TOTAL]
                 ?.inMeters
                 ?.takeIf { it > 0.0 }
@@ -771,12 +835,14 @@ class GoogleHealthManager(
                         else -> "missing"
                     }} " +
                     "activeCaloriesKcal=${activeCaloriesKcal ?: 0.0} " +
+                    "totalCaloriesKcal=${totalCaloriesKcal ?: 0.0} " +
                     "elevationMeters=${elevationMeters ?: 0.0} steps=${steps ?: 0L}"
             )
 
             workout.copy(
                 distanceMeters = distanceMeters,
                 activeCaloriesKcal = activeCaloriesKcal ?: workout.activeCaloriesKcal,
+                totalCaloriesKcal = totalCaloriesKcal,
                 elevationMeters = elevationMeters ?: workout.elevationMeters,
                 steps = steps ?: workout.steps
             )
@@ -1216,12 +1282,23 @@ class GoogleHealthManager(
                 pageSize = limit.coerceIn(1, 100)
             )
                 .take(limit)
-                .map {
+                .map { record ->
+                    val startTimeMs = record.startTime.toEpochMilli()
+                    val endTimeMs = record.endTime.toEpochMilli()
+                    val stored = if (isHuaweiBridgeSourceSelected()) {
+                        storedWorkoutSummary(startTimeMs, endTimeMs)
+                    } else {
+                        null
+                    }
                     ActivitySessionData(
-                        startTimeMs = it.startTime.toEpochMilli(),
-                        endTimeMs = it.endTime.toEpochMilli(),
-                        title = workoutDisplayName(it.title, it.exerciseType),
-                        exerciseType = it.exerciseType
+                        startTimeMs = startTimeMs,
+                        endTimeMs = endTimeMs,
+                        title = workoutDisplayName(record.title, record.exerciseType),
+                        exerciseType = record.exerciseType,
+                        distanceMeters = stored?.distanceMeters,
+                        totalCaloriesKcal = stored?.totalCaloriesKcal,
+                        elevationMeters = stored?.elevationMeters,
+                        steps = stored?.steps
                     )
                 }
         } catch (e: CancellationException) {
@@ -1451,20 +1528,13 @@ class GoogleHealthManager(
     }
 
     /**
-     * Sprint 2026-08-25: every BitLut-written record is device-sourced Huawei
-     * activity data relayed automatically -- never typed in by the user, and
-     * never actively recorded by BitLut itself as a live sensor. Health
-     * Connect's own `Metadata(...)` constructor defaults `recordingMethod` to
-     * `RECORDING_METHOD_UNKNOWN` unless a factory method says otherwise, and
-     * that was the value every BitLut record carried before this fix (see
-     * [bitlutDailyStepMetadata] and [bitlutMetadata] below, which previously
-     * called the raw constructor). Health Connect's own UI and Google Fit
-     * display RECORDING_METHOD_UNKNOWN records without filtering, which is
-     * why they showed up correctly there -- but a third-party reader app is
-     * free to treat RECORDING_METHOD_UNKNOWN as untrustworthy and skip
-     * importing it, which matches a real corporate-app report of BitLut's
-     * synced workouts being invisible there despite being visible in Google
-     * Fit.
+     * Passive Huawei streams (daily steps, distance, floors, elevation, etc.)
+     * are relayed as automatically recorded. Exercise ActivityRecords are a
+     * separate case: Huawei documents them as data produced after the user
+     * starts a workout, so session records and their associated workout
+     * calories use [bitlutWorkoutMetadata] / ACTIVELY_RECORDED below. This
+     * preserves the source recording semantics required by Health Connect
+     * instead of describing how BitLut itself happened to relay the record.
      *
      * Sprint 2026-08-27: `manufacturer = "Huawei"` added (model deliberately
      * left unset). Per Health Connect's own metadata guidance, supplying
@@ -1501,6 +1571,18 @@ class GoogleHealthManager(
         discriminator: String = "",
         version: Long = 1L
     ): Metadata = Metadata.autoRecorded(
+        clientRecordId = generateRecordId(type, startTimeMs, endTimeMs, discriminator),
+        clientRecordVersion = version,
+        device = bitlutRecordingDevice
+    )
+
+    private fun bitlutWorkoutMetadata(
+        type: String,
+        startTimeMs: Long,
+        endTimeMs: Long,
+        discriminator: String = "",
+        version: Long = 1L
+    ): Metadata = Metadata.activelyRecorded(
         clientRecordId = generateRecordId(type, startTimeMs, endTimeMs, discriminator),
         clientRecordVersion = version,
         device = bitlutRecordingDevice

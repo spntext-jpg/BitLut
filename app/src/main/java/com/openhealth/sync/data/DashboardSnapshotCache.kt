@@ -170,6 +170,7 @@ class DashboardSnapshotCache(
                 put("exerciseType", w.exerciseType)
                 w.distanceMeters?.let { put("distanceMeters", it) }
                 w.activeCaloriesKcal?.let { put("activeCaloriesKcal", it) }
+                w.totalCaloriesKcal?.let { put("totalCaloriesKcal", it) }
                 w.elevationMeters?.let { put("elevationMeters", it) }
                 w.steps?.let { put("steps", it) }
             })
@@ -193,6 +194,7 @@ class DashboardSnapshotCache(
                     ),
                     distanceMeters = if (item.has("distanceMeters")) item.optDouble("distanceMeters") else null,
                     activeCaloriesKcal = if (item.has("activeCaloriesKcal")) item.optDouble("activeCaloriesKcal") else null,
+                    totalCaloriesKcal = if (item.has("totalCaloriesKcal")) item.optDouble("totalCaloriesKcal") else null,
                     elevationMeters = if (item.has("elevationMeters")) item.optDouble("elevationMeters") else null,
                     steps = if (item.has("steps")) item.optLong("steps") else null
                 )
