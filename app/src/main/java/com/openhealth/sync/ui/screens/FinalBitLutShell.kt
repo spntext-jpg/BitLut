@@ -808,9 +808,21 @@ private fun workoutMetricDisplays(
     durationMinutes: Long,
     exerciseType: Int?
 ): List<WorkoutMetricDisplay> {
+    // BITLUT_WORKOUT_INTEROP_V2_COMPOSE_FIX
+    // Keep all stringResource() calls in this @Composable scope. V1 moved
+    // them into ordinary local helper functions, which Compose correctly
+    // rejects as non-composable invocation contexts.
     val noData = stringResource(R.string.no_data_short)
+    val durationLabel = stringResource(R.string.workout_stat_duration_label)
+    val distanceLabel = stringResource(R.string.workout_stat_distance_label)
+    val paceLabel = stringResource(R.string.workout_stat_pace_label)
+    val speedLabel = stringResource(R.string.workout_stat_speed_label)
+    val stepsLabel = stringResource(R.string.workout_stat_steps_label)
+    val caloriesLabel = stringResource(R.string.workout_stat_calories_label)
+    val swimPaceLabel = stringResource(R.string.workout_stat_swim_pace_label)
+
     val durationDisplay = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_duration_label),
+        durationLabel,
         stringResource(R.string.workout_duration_value, durationMinutes)
     )
 
@@ -822,18 +834,22 @@ private fun workoutMetricDisplays(
     val measuredCaloriesKcal = session.totalCaloriesKcal?.takeIf { it > 0.0 }
         ?: session.activeCaloriesKcal?.takeIf { it > 0.0 }
 
-    fun distanceDisplay() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_distance_label),
-        distanceKm?.let { stringResource(R.string.distance_today_value, formatOneDecimal(it)) } ?: noData
+    val distanceDisplay = WorkoutMetricDisplay(
+        distanceLabel,
+        distanceKm?.let {
+            stringResource(R.string.distance_today_value, formatOneDecimal(it))
+        } ?: noData
     )
 
-    fun caloriesDisplay(kcal: Double? = measuredCaloriesKcal) = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_calories_label),
-        kcal?.let { stringResource(R.string.workout_calories_value, formatNumber(it.toLong())) } ?: noData
+    val measuredCaloriesDisplay = WorkoutMetricDisplay(
+        caloriesLabel,
+        measuredCaloriesKcal?.let {
+            stringResource(R.string.workout_calories_value, formatNumber(it.toLong()))
+        } ?: noData
     )
 
-    fun stepsDisplay() = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_steps_label),
+    val stepsDisplay = WorkoutMetricDisplay(
+        stepsLabel,
         steps?.let(::formatNumber) ?: noData
     )
 
@@ -847,7 +863,7 @@ private fun workoutMetricDisplays(
         null
     }
     val paceDisplay = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_pace_label),
+        paceLabel,
         paceMinutesPerKm?.let {
             stringResource(R.string.workout_pace_value, formatPace(it))
         } ?: noData
@@ -864,7 +880,7 @@ private fun workoutMetricDisplays(
         null
     }
     val speedDisplay = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_speed_label),
+        speedLabel,
         averageSpeedKmh?.let {
             stringResource(R.string.workout_speed_value, formatOneDecimal(it))
         } ?: noData
@@ -880,7 +896,7 @@ private fun workoutMetricDisplays(
         null
     }
     val swimPaceDisplay = WorkoutMetricDisplay(
-        stringResource(R.string.workout_stat_swim_pace_label),
+        swimPaceLabel,
         swimPaceMinutesPer100m?.let {
             stringResource(R.string.workout_swim_pace_value, formatPace(it))
         } ?: noData
@@ -890,27 +906,25 @@ private fun workoutMetricDisplays(
         exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_RUNNING ||
         exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_HIKING
     if (isFootDistance) {
-        // Google-style foot activity summary: time, distance, pace and steps.
-        return listOf(durationDisplay, distanceDisplay(), paceDisplay, stepsDisplay())
+        return listOf(durationDisplay, distanceDisplay, paceDisplay, stepsDisplay)
     }
 
     if (exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_BIKING) {
-        // Cycling convention: pace is not useful; average speed is.
-        return listOf(durationDisplay, distanceDisplay(), speedDisplay, caloriesDisplay())
+        return listOf(durationDisplay, distanceDisplay, speedDisplay, measuredCaloriesDisplay)
     }
 
     val isSwimming = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER ||
         exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL
     if (isSwimming) {
-        return listOf(durationDisplay, distanceDisplay(), swimPaceDisplay, caloriesDisplay())
+        return listOf(durationDisplay, distanceDisplay, swimPaceDisplay, measuredCaloriesDisplay)
     }
 
     val isStrengthLike = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING ||
         exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING ||
         exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING
     if (isStrengthLike) {
-        // Only strength keeps the previously-approved MET fallback. Huawei
-        // summary calories win whenever they are present.
+        // Only strength/weightlifting retain the previously-approved MET
+        // fallback. Huawei summary calories win whenever they are present.
         val kcal = measuredCaloriesKcal ?: if (
             exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING ||
             exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING
@@ -923,25 +937,30 @@ private fun workoutMetricDisplays(
         } else {
             null
         }
-        return listOf(durationDisplay, caloriesDisplay(kcal))
+        val caloriesValue = kcal?.let {
+            stringResource(R.string.workout_calories_value, formatNumber(it.toLong()))
+        } ?: noData
+        return listOf(
+            durationDisplay,
+            WorkoutMetricDisplay(caloriesLabel, caloriesValue)
+        )
     }
 
     if (exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_YOGA ||
         exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_PILATES
     ) {
-        return listOf(durationDisplay, caloriesDisplay())
+        return listOf(durationDisplay, measuredCaloriesDisplay)
     }
 
-    // Generic sports never invent speed or steps. Surface only real metrics
-    // that are meaningful enough to exist for this session.
+    // Generic sports never invent speed. Surface only real metrics that are
+    // meaningful enough to exist for this session.
     return buildList {
         add(durationDisplay)
-        if (measuredCaloriesKcal != null) add(caloriesDisplay())
-        if (distanceMeters != null) add(distanceDisplay())
-        if (steps != null) add(stepsDisplay())
+        if (measuredCaloriesKcal != null) add(measuredCaloriesDisplay)
+        if (distanceMeters != null) add(distanceDisplay)
+        if (steps != null) add(stepsDisplay)
     }.take(4)
 }
-
 @Composable
 private fun WorkoutRecencyCard(
     palette: BitPalette,
