@@ -742,7 +742,22 @@ class GoogleHealthManager(
             } else {
                 null
             }
-            val distanceMeters = aggregateDistanceMeters ?: recoveredDistanceMeters ?: workout.distanceMeters
+            // Sprint 2026-08-28: workout.distanceMeters (now populated by
+            // HuaweiHealthManager directly from Huawei's own per-activity
+            // sample data, scoped exactly to this session -- see the doc
+            // comment on readActivitySessions there) is trusted FIRST, ahead
+            // of the Health Connect aggregate. Previously the aggregate won
+            // whenever it returned any non-null value, even a wrong one: a
+            // real 28 km bike ride showed as 0.7 km on the dashboard because
+            // a coarse, wide-window DistanceRecord partially overlapped the
+            // session and the aggregate briefly returned a small non-null
+            // total for that narrow overlap, before session-level data was
+            // ever provided as a competing, more trustworthy source. The
+            // aggregate and raw-overlap paths remain as fallbacks for
+            // sessions Huawei didn't report per-activity distance for (e.g.
+            // recorded by a different app, or an older/incomplete Huawei
+            // record), where they're still better than nothing.
+            val distanceMeters = workout.distanceMeters ?: aggregateDistanceMeters ?: recoveredDistanceMeters
 
             AppLogger.i(
                 TAG,
@@ -750,9 +765,9 @@ class GoogleHealthManager(
                     "start=${workout.startTimeMs} end=${workout.endTimeMs} " +
                     "distanceMeters=${distanceMeters ?: 0.0} " +
                     "distanceSource=${when {
+                        workout.distanceMeters != null -> "session"
                         aggregateDistanceMeters != null -> "aggregate"
                         recoveredDistanceMeters != null -> "raw_overlap"
-                        workout.distanceMeters != null -> "session"
                         else -> "missing"
                     }} " +
                     "activeCaloriesKcal=${activeCaloriesKcal ?: 0.0} " +

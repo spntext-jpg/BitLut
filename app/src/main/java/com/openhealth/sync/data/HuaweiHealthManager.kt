@@ -16,6 +16,7 @@ import com.huawei.hms.hihealth.SettingController
 import com.huawei.hms.hihealth.data.DataType
 import com.huawei.hms.hihealth.data.Field
 import com.huawei.hms.hihealth.data.SamplePoint
+import com.huawei.hms.hihealth.data.SampleSet
 import com.huawei.hms.hihealth.data.Scopes
 import com.huawei.hms.hihealth.options.ActivityRecordReadOptions
 import com.huawei.hms.hihealth.options.ReadOptions
@@ -569,17 +570,85 @@ class HuaweiHealthManager(
             }
     }
 
+    /**
+     * Sprint 2026-08-28: previously, ActivitySessionData.distanceMeters was
+     * never set here at all -- every workout card's distance came entirely
+     * from GoogleHealthManager's post-hoc Health Connect matching (a strict
+     * aggregate() over the exact session window, falling back to a
+     * time-overlap-fraction split of nearby DistanceRecords). Both of those
+     * approaches implicitly assume Huawei's own DT_CONTINUOUS_DISTANCE_DELTA
+     * stream reports distance in samples whose own time window lines up with
+     * the actual movement, which is false for Huawei's coarse background
+     * delta samples: a real 28 km, ~2 hour bike ride was measured by a user
+     * report showing the dashboard displaying only 0.7 km for that same
+     * ride, a ~40x undercount consistent with a wide background sample
+     * (its own reported window several times longer than the actual ride)
+     * being credited only for the sliver of its window that happened to
+     * geometrically overlap the session's exact start/end -- an artifact of
+     * the overlap-fraction math, not of the underlying distance value itself
+     * (which was correct in total, just attributed to the wrong time span).
+     *
+     * Huawei's own ActivityRecordsController API supports exactly the right
+     * fix for this: `ActivityRecordReadOptions.Builder.read(DataType)` can
+     * request additional detail data types to be returned scoped to each
+     * individual ActivityRecord (this file already does this for
+     * DT_CONTINUOUS_STEPS_DELTA below, per the pre-existing comment on why a
+     * detail type is required for the record list to be returned at all),
+     * and `ActivityRecordReply.getSampleSet(record)` returns exactly the
+     * detail samples belonging to that one record -- not a separate
+     * generic query needing manual time-window reconciliation. Real,
+     * independently-confirmed Huawei sample code
+     * (HealthKitActivityRecordControllerActivity.java, part of Huawei's own
+     * hms-health-demo-java repository) shows this exact
+     * getSampleSet(activityRecord) -> sampleSet.getSamplePoints() pattern
+     * for reading per-record detail data.
+     *
+     * One piece of this is inferred rather than directly confirmed from a
+     * Huawei-specific multi-type example: whether calling `.read(DataType)`
+     * a second time (for distance, alongside the existing steps-delta call)
+     * accumulates both requested types rather than replacing the first.
+     * Google Fit's near-identical SessionReadRequest.Builder.read(DataType)
+     * is documented as callable multiple times to accumulate types, and
+     * this file's own existing comment already treats Huawei's `.read(...)`
+     * as an additive detail-type request, so the pattern is used here on
+     * that basis -- but this is exactly the kind of real Kotlin/HMS-SDK API
+     * behavior the project's own rules say a sandbox cannot verify.
+     * Paulo's real `assembleDebug` is the actual compile gate for this.
+     *
+     * Distance is summed per-record from real Huawei sample data scoped to
+     * that exact activity, not prorated or estimated. A record with no
+     * matching distance samples correctly yields null (displayed as "-"),
+     * per the locked six-slot contract's "real data only" rule.
+     */
     private suspend fun readActivitySessions(startTimeMs: Long, endTimeMs: Long): List<ActivitySessionData> {
         // Exercise records are not continuous intensity samples. Huawei's
         // supported API for workouts is ActivityRecordsController, covered by
         // the already-requested HEALTHKIT_ACTIVITY_RECORD_READ scope.
-        val options = ActivityRecordReadOptions.Builder()
+        val distanceDetailType = firstDataType(
+            "DT_CONTINUOUS_DISTANCE_DELTA",
+            "DT_CONTINUOUS_DISTANCE_TOTAL",
+            "DT_INSTANTANEOUS_DISTANCE"
+        )
+        val distanceDetailFields = fields(
+            "FIELD_DISTANCE",
+            "FIELD_DISTANCE_DELTA",
+            "FIELD_DISTANCE_TOTAL"
+        )
+
+        val optionsBuilder = ActivityRecordReadOptions.Builder()
             .setTimeInterval(startTimeMs, endTimeMs, TimeUnit.MILLISECONDS)
             .readActivityRecordsFromAllApps()
             // Carrying an approved detail type is required on some Huawei
             // Health builds for the record list to be returned at all.
             .read(DataType.DT_CONTINUOUS_STEPS_DELTA)
-            .build()
+
+        if (distanceDetailType != null) {
+            optionsBuilder.read(distanceDetailType)
+        } else {
+            AppLogger.w(TAG, "Skipping per-activity distance detail: Huawei SDK does not expose a supported distance DataType")
+        }
+
+        val options = optionsBuilder.build()
 
         AppLogger.i(
             TAG,
@@ -610,18 +679,72 @@ class HuaweiHealthManager(
                 ?: canonicalType
 
             val exerciseType = mapHuaweiExerciseType(canonicalType)
+            val recordDistanceMeters = readActivityRecordDistance(reply, record, distanceDetailFields)
             AppLogger.i(
                 TAG,
-                "Huawei activity mapped: type=${rawType ?: "unknown"} name=${rawName ?: "-"} canonical=$canonicalType start=$start end=$end"
+                "Huawei activity mapped: type=${rawType ?: "unknown"} name=${rawName ?: "-"} canonical=$canonicalType " +
+                    "start=$start end=$end distanceMeters=${recordDistanceMeters ?: "missing"}"
             )
 
             ActivitySessionData(
                 startTimeMs = start,
                 endTimeMs = end,
                 title = title,
-                exerciseType = exerciseType
+                exerciseType = exerciseType,
+                distanceMeters = recordDistanceMeters
             )
         }.distinctBy { Pair(it.startTimeMs, it.endTimeMs) }
+    }
+
+    /**
+     * Sums real Huawei sample-point distance values scoped specifically to
+     * [record], via ActivityRecordReply.getSampleSet(record) ->
+     * SampleSet.samplePoints. Reuses the existing, already-working
+     * SamplePoint.firstNumericValue(fields) extension (defined below,
+     * proven in readMetric's own generic-stream distance reading) rather
+     * than inventing new reflection for value extraction.
+     *
+     * getSampleSet itself is called via reflection rather than a typed
+     * call: this file already imports SamplePoint, SampleSet, DataType,
+     * and Field directly from com.huawei.hms.hihealth.data (confirmed
+     * real, stable import paths, used elsewhere in this file), but
+     * ActivityRecordReply's own import path was not independently
+     * confirmed with the same certainty during this fix, so [reply] stays
+     * untyped (Any) here rather than risk a wrong import breaking the
+     * whole file. This mirrors activityRecordTime/activityRecordString's
+     * existing reflection style for the same class of uncertainty.
+     */
+    private fun readActivityRecordDistance(
+        reply: Any,
+        record: Any,
+        distanceFields: List<Field>
+    ): Double? {
+        if (distanceFields.isEmpty()) return null
+
+        val sampleSets = try {
+            @Suppress("UNCHECKED_CAST")
+            reply.javaClass.methods
+                .firstOrNull { it.name == "getSampleSet" && it.parameterCount == 1 }
+                ?.invoke(reply, record) as? List<SampleSet>
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "getSampleSet failed for activity record: ${e.message}")
+            null
+        } ?: return null
+
+        var totalMeters = 0.0
+        var matchedAny = false
+
+        sampleSets.forEach { sampleSet ->
+            sampleSet.samplePoints.forEach { point ->
+                val value = point.firstNumericValue(distanceFields)
+                if (value != null && value > 0.0) {
+                    totalMeters += value
+                    matchedAny = true
+                }
+            }
+        }
+
+        return totalMeters.takeIf { matchedAny && it > 0.0 }
     }
 
     private fun activityRecordTime(record: Any, methodName: String): Long? =
