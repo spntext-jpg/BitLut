@@ -12,9 +12,9 @@ Requested Huawei Health Kit permissions:
 
 The app reads only real user data from Huawei Health Kit and writes available records to Android Health Connect.
 
-No fake health data is generated.
-No mock data is written.
-No placeholder records are written.
+BitLut does not fabricate steps, distance, elevation, workout type, or placeholder sessions.
+When Huawei omits calories for a real workout, BitLut may attach the documented MET-based `TotalCaloriesBurnedRecord` estimate as a bounded fallback; measured Huawei workout calories always take priority.
+No mock/demo records are written.
 
 Reviewer flow:
 

@@ -41,9 +41,8 @@ enum class DashboardCardType(val key: String) {
 
 /**
  * Persists the person's chosen order and visibility for the reorderable
- * Today-screen cards, edited from the pencil icon on the Today screen
- * itself (not Settings -- this is a different surface from
- * WidgetVisibilityPrefs, which controls the home-screen Glance widget).
+ * Today-screen cards, edited from the pencil icon on the Today screen.
+ * This is the only dashboard-card visibility preference layer.
  *
  * Unknown keys from a saved order (e.g. a card type removed in a future
  * release) are silently dropped. A brand-new card type introduced in a

@@ -120,21 +120,6 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- Sprint (2026-07-14): backs the CSV export feature. Lets BitLut
-             hand a cache-dir CSV file to the share sheet without exposing a
-             raw file:// path (blocked by FileProvider/StrictMode on modern
-             Android). No new dependency: FileProvider ships in androidx.core,
-             already a transitive dependency via androidx.core:core-ktx. -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
         <!-- Sprint (2026-07-14): the home screen widget (widget/HomeWidget.kt).
              exported="true" is required for widget receivers: the platform's
              AppWidgetHost, not another app, is what binds to it (Health

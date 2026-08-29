@@ -43,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -54,12 +53,10 @@ import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.HuaweiAuthFailureReason
 import com.openhealth.sync.data.PersonalRecord
 import com.openhealth.sync.data.StreakState
-import com.openhealth.sync.config.DashboardWidget
 import com.openhealth.sync.config.HealthDataSource
 import com.openhealth.sync.ui.DashboardUiState
 import com.openhealth.sync.ui.SyncUiState
 import com.openhealth.sync.ui.theme.AugustColor
-import com.openhealth.sync.ui.theme.AugustElevation
 import com.openhealth.sync.ui.theme.AugustMotion
 import com.openhealth.sync.ui.theme.AugustRadius
 import com.openhealth.sync.util.AppLogger
@@ -67,6 +64,8 @@ import com.openhealth.sync.util.WorkoutCalorieEstimator
 import java.util.Locale
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
@@ -120,13 +119,9 @@ fun FinalBitLutShell(
     onRequestGoogle: () -> Unit,
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
-    onExportCsv: () -> Unit = {},
     onOpenHealthConnectSettings: () -> Unit = {},
-    onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit = { _, _ -> },
     onDataSourceSelected: (HealthDataSource) -> Unit = {},
     onStepsGoalChanged: (Long) -> Unit = {},
-    onActiveMinutesGoalChanged: (Int) -> Unit = {},
-    onCaloriesGoalChanged: (Double) -> Unit = {},
     hasSeenPermissionsOnboarding: Boolean = true,
     onPermissionsOnboardingSeen: () -> Unit = {},
     importViewModel: ImportViewModel) {
@@ -207,9 +202,7 @@ fun FinalBitLutShell(
                 )
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
-                    onExportCsv = onExportCsv,
                     onOpenHealthConnectSettings = onOpenHealthConnectSettings,
-                    onWidgetVisibilityChanged = onWidgetVisibilityChanged,
                     onDataSourceSelected = onDataSourceSelected,
                     stepsGoal = dashboardState.stepsGoal,
                     onStepsGoalChanged = onStepsGoalChanged)
@@ -464,8 +457,7 @@ private fun SummaryScreen(
                         distanceValue = formatOneDecimal(state.distanceMeters / 1000.0),
                         distanceUnit = stringResource(R.string.distance_unit_km),
                         progress = state.stepsProgress,
-                        progressText = stepsGoalProgressText(state.stepsToday, state.stepsGoal),
-                        pressLift = true
+                        progressText = stepsGoalProgressText(state.stepsToday, state.stepsGoal)
                     )
                 }
 
@@ -547,12 +539,13 @@ private fun CardLayoutEditorScreen(palette: BitPalette, onBack: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(AugustRadius.Compact))
+                    .background(if (palette.dark) AugustColor.NavySoft else AugustColor.Soft)
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null, tint = palette.text)
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.dashboard_back), tint = palette.text)
             }
             Spacer(Modifier.width(10.dp))
             Text(
@@ -611,7 +604,7 @@ private fun CardLayoutRow(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit
 ) {
-    SoftCard(palette = palette, accent = HealthAccent.activity()) {
+    SoftCard(palette = palette) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = label,
@@ -624,24 +617,36 @@ private fun CardLayoutRow(
             )
             Box(
                 modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(AugustRadius.Compact))
+                    .background(if (palette.dark) AugustColor.NavySoft else AugustColor.Soft)
                     .then(if (canMoveUp) Modifier.clickable(onClick = onMoveUp) else Modifier)
-                    .alpha(if (canMoveUp) 1f else 0.3f),
+                    .alpha(if (canMoveUp) 1f else 0.35f),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = null, tint = palette.secondaryText, modifier = Modifier.size(18.dp))
+                Icon(
+                    Icons.Rounded.KeyboardArrowUp,
+                    contentDescription = stringResource(R.string.dashboard_move_up),
+                    tint = palette.secondaryText,
+                    modifier = Modifier.size(20.dp)
+                )
             }
             Spacer(Modifier.width(4.dp))
             Box(
                 modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(AugustRadius.Compact))
+                    .background(if (palette.dark) AugustColor.NavySoft else AugustColor.Soft)
                     .then(if (canMoveDown) Modifier.clickable(onClick = onMoveDown) else Modifier)
-                    .alpha(if (canMoveDown) 1f else 0.3f),
+                    .alpha(if (canMoveDown) 1f else 0.35f),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = palette.secondaryText, modifier = Modifier.size(18.dp))
+                Icon(
+                    Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = stringResource(R.string.dashboard_move_down),
+                    tint = palette.secondaryText,
+                    modifier = Modifier.size(20.dp)
+                )
             }
             Spacer(Modifier.width(10.dp))
             Switch(
@@ -669,7 +674,7 @@ private fun dashboardCardLabel(type: com.openhealth.sync.config.DashboardCardTyp
 
 @Composable
 private fun LastSevenDaysCard(palette: BitPalette, state: DashboardUiState) {
-    SoftCard(palette = palette, accent = HealthAccent.mind(), tintWithAccent = true, pressLift = true) {
+    SoftCard(palette = palette) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.Schedule, contentDescription = null, tint = HealthAccent.mind(), modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
@@ -931,13 +936,7 @@ private fun WorkoutRecencyCard(
         ((it.endTimeMs - it.startTimeMs) / 60_000L).coerceAtLeast(0L)
     }
 
-    SoftCard(
-        palette = palette,
-        accent = accent,
-        hero = false,
-        tintWithAccent = true,
-        pressLift = true
-    ) {
+    SoftCard(palette = palette) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top
@@ -1179,12 +1178,7 @@ private fun PersonalRecordsCard(
         }
     )
 
-    SoftCard(
-        palette = palette,
-        accent = HealthAccent.activity(),
-        tintWithAccent = true,
-        pressLift = true
-    ) {
+    SoftCard(palette = palette) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
@@ -1255,7 +1249,7 @@ private fun PersonalRecordRow(palette: BitPalette, item: PersonalRecordDisplay) 
  */
 @Composable
 private fun StreakCard(palette: BitPalette, streak: StreakState, stepsGoal: Long) {
-    SoftCard(palette = palette, accent = HealthAccent.activity(), hero = false, tintWithAccent = true) {
+    SoftCard(palette = palette) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.LocalFireDepartment, contentDescription = null, tint = HealthAccent.activity(), modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))
@@ -1331,9 +1325,7 @@ private fun SettingsScreen(
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
     onImportArchive: () -> Unit,
-    onExportCsv: () -> Unit,
     onOpenHealthConnectSettings: () -> Unit,
-    onWidgetVisibilityChanged: (DashboardWidget, Boolean) -> Unit,
     onDataSourceSelected: (HealthDataSource) -> Unit,
     stepsGoal: Long,
     onStepsGoalChanged: (Long) -> Unit
@@ -1360,7 +1352,7 @@ private fun SettingsScreen(
             fontWeight = FontWeight.ExtraBold,
             fontSize = 18.sp
         )
-        SoftCard(palette = palette, accent = HealthAccent.violet(), hero = false, tintWithAccent = true) {
+        SoftCard(palette = palette) {
             DataSourceToggleRow(
                 palette = palette,
                 title = stringResource(R.string.data_source_huawei_title),
@@ -1378,31 +1370,33 @@ private fun SettingsScreen(
             )
         }
 
-        // Sprint (2026-08-27): all three connect/refresh/sync/import actions
-        // merged into one card, buttons only -- no per-source title and no
-        // captioning text. Previously three separate SettingsConnectionCard
-        // instances (Google, Huawei, manual sync), each with its own title
-        // row; the title added no information the button text didn't already
-        // convey (e.g. "Google Health Connect" heading above a "Connect
-        // Google Health" button), so it was dropped as part of the same
-        // minimalism pass as the Data source card above.
-        SoftCard(palette = palette, accent = HealthAccent.violet(), hero = false, tintWithAccent = true) {
+        // One clear primary action, then quiet secondary actions. This keeps
+        // the merged buttons-only Settings card but removes the previous
+        // competing hierarchy of four Lime buttons and two duplicate
+        // "Refresh status" buttons.
+        SoftCard(palette = palette) {
+            PrimaryButton(
+                text = stringResource(R.string.sync_now),
+                onClick = onSyncNow
+            )
+            Spacer(Modifier.height(10.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                PrimaryButton(
+                SecondaryButton(
                     text = stringResource(R.string.connect_google_button),
+                    palette = palette,
                     compact = true,
                     modifier = Modifier.weight(1f),
                     onClick = onRequestGoogle
                 )
                 SecondaryButton(
-                    text = stringResource(R.string.refresh_status),
+                    text = stringResource(R.string.connect_huawei_button),
                     palette = palette,
                     compact = true,
                     modifier = Modifier.weight(1f),
-                    onClick = onSyncNow
+                    onClick = onRequestHuawei
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -1410,30 +1404,12 @@ private fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                PrimaryButton(
-                    text = stringResource(R.string.connect_huawei_button),
-                    compact = true,
-                    modifier = Modifier.weight(1f),
-                    onClick = onRequestHuawei
-                )
                 SecondaryButton(
                     text = stringResource(R.string.refresh_status),
                     palette = palette,
                     compact = true,
                     modifier = Modifier.weight(1f),
                     onClick = onRefresh
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                PrimaryButton(
-                    text = stringResource(R.string.sync_now),
-                    compact = true,
-                    modifier = Modifier.weight(1f),
-                    onClick = onSyncNow
                 )
                 SecondaryButton(
                     text = stringResource(R.string.import_archive_title),
@@ -1444,22 +1420,9 @@ private fun SettingsScreen(
                 )
             }
             Spacer(Modifier.height(8.dp))
-            // Sprint 2026-08-27: a corporate/third-party Health Connect
-            // reader not counting BitLut-synced workouts can be caused by
-            // BitLut never being added as a data source for a given
-            // category in Health Connect's own settings -- a separate
-            // consent step from the runtime permission grant above. See the
-            // doc comment on GoogleHealthManager.healthConnectSettingsIntent()
-            // for the full rationale. This button is diagnostic, not a fix
-            // in itself: it just gets the user to the right screen instead
-            // of leaving them with no path there at all. Placed as a fourth
-            // row in this same merged card (SettingsConnectionCard no
-            // longer exists after the 2026-08-27 minimalism pass -- see
-            // that sprint's comment above), matching the established
-            // buttons-only, no-per-row-title pattern rather than
-            // reintroducing a separate titled card.
-            PrimaryButton(
+            SecondaryButton(
                 text = stringResource(R.string.health_connect_data_sources_button),
+                palette = palette,
                 compact = true,
                 onClick = onOpenHealthConnectSettings
             )
@@ -1485,11 +1448,7 @@ private fun SettingsScreen(
             fontWeight = FontWeight.ExtraBold,
             fontSize = 18.sp
         )
-        SoftCard(
-            palette = palette,
-            accent = HealthAccent.activity(),
-            tintWithAccent = true
-        ) {
+        SoftCard(palette = palette) {
             Text(
                 text = stringResource(R.string.goals_section_body),
                 color = palette.secondaryText,
@@ -1571,7 +1530,7 @@ private fun HuaweiAuthIssueCard(palette: BitPalette, reason: HuaweiAuthFailureRe
         }
     }
 
-    SoftCard(palette = palette, accent = HealthAccent.activity(), hero = false, tintWithAccent = true) {
+    SoftCard(palette = palette) {
         Row(verticalAlignment = Alignment.Top) {
             Icon(
                 Icons.Rounded.Schedule,
@@ -1680,7 +1639,7 @@ private fun GoalStepperRow(
     ) {
         Text(label, color = palette.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            GoalStepperButton(accent = accent, symbol = "–", onClick = onDecrease)
+            GoalStepperButton(accent = accent, symbol = "–", contentDescription = stringResource(R.string.goal_decrease), onClick = onDecrease)
             Text(
                 text = valueText,
                 color = palette.text,
@@ -1691,22 +1650,33 @@ private fun GoalStepperRow(
                     .padding(horizontal = 10.dp)
                     .widthIn(min = 64.dp)
             )
-            GoalStepperButton(accent = accent, symbol = "+", onClick = onIncrease)
+            GoalStepperButton(accent = accent, symbol = "+", contentDescription = stringResource(R.string.goal_increase), onClick = onIncrease)
         }
     }
 }
 
 @Composable
-private fun GoalStepperButton(accent: Color, symbol: String, onClick: () -> Unit) {
+private fun GoalStepperButton(
+    accent: Color,
+    symbol: String,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
     Box(
         modifier = Modifier
-            .size(30.dp)
-            .clip(RoundedCornerShape(AugustRadius.Compact))
-            .background(accent.copy(alpha = 0.16f))
+            .size(48.dp)
+            .clip(RoundedCornerShape(AugustRadius.Pill))
+            .background(accent.copy(alpha = 0.14f))
+            .semantics { this.contentDescription = contentDescription }
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(symbol, color = accent, fontWeight = FontWeight.Black, fontSize = 16.sp)
+        Text(
+            text = symbol,
+            color = accent,
+            fontWeight = FontWeight.Black,
+            fontSize = 18.sp
+        )
     }
 }
 
@@ -1789,39 +1759,22 @@ private fun PrimaryButton(
     val pressed by interactionSource.collectIsPressedAsState()
     val focused by interactionSource.collectIsFocusedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.98f else 1f,
+        targetValue = if (pressed) 0.985f else 1f,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "primaryButtonScale"
     )
-    val minHeight = if (compact) 44.dp else 48.dp
-    val shape = RoundedCornerShape(AugustRadius.Button)
+    val shape = RoundedCornerShape(AugustRadius.Pill)
 
     Button(
         onClick = onClick,
         enabled = enabled,
         interactionSource = interactionSource,
         modifier = modifier
-            .heightIn(min = minHeight)
+            .heightIn(min = 48.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            }
-            .then(
-                if (enabled) {
-                    Modifier.shadow(
-                        elevation = AugustElevation.ButtonShadowElevation,
-                        shape = shape,
-                        ambientColor = AugustElevation.ButtonShadowColor.copy(
-                            alpha = AugustElevation.ButtonShadowAlpha
-                        ),
-                        spotColor = AugustElevation.ButtonShadowColor.copy(
-                            alpha = AugustElevation.ButtonShadowAlpha
-                        )
-                    )
-                } else {
-                    Modifier
-                }
-            ),
+            },
         shape = shape,
         colors = ButtonDefaults.buttonColors(
             containerColor = AugustColor.Lime,
@@ -1836,14 +1789,14 @@ private fun PrimaryButton(
             disabledElevation = 0.dp
         ),
         contentPadding = if (compact) {
-            PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            PaddingValues(horizontal = 14.dp, vertical = 10.dp)
         } else {
-            ButtonDefaults.ContentPadding
+            PaddingValues(horizontal = 20.dp, vertical = 12.dp)
         }
     ) {
         Text(
             text = text,
-            fontWeight = FontWeight.ExtraBold,
+            fontWeight = FontWeight.Bold,
             fontSize = if (compact) 12.sp else 14.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -1851,7 +1804,7 @@ private fun PrimaryButton(
     }
 }
 
-/** August v3 neutral secondary action with Purple focus. */
+/** Quiet secondary action: flat neutral fill, pill shape, Purple focus. */
 @Composable
 private fun SecondaryButton(
     text: String,
@@ -1865,19 +1818,18 @@ private fun SecondaryButton(
     val pressed by interactionSource.collectIsPressedAsState()
     val focused by interactionSource.collectIsFocusedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.98f else 1f,
+        targetValue = if (pressed) 0.985f else 1f,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "secondaryButtonScale"
     )
-    val minHeight = 44.dp
-    val shape = RoundedCornerShape(AugustRadius.Button)
+    val shape = RoundedCornerShape(AugustRadius.Pill)
 
     Button(
         onClick = onClick,
         enabled = enabled,
         interactionSource = interactionSource,
         modifier = modifier
-            .heightIn(min = minHeight)
+            .heightIn(min = 48.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -1886,16 +1838,8 @@ private fun SecondaryButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = if (palette.dark) AugustColor.NavySoft else AugustColor.Soft,
             contentColor = if (palette.dark) AugustColor.Surface else AugustColor.Ink,
-            disabledContainerColor = if (palette.dark) {
-                AugustColor.NavySoft.copy(alpha = 0.55f)
-            } else {
-                AugustColor.Soft.copy(alpha = 0.65f)
-            },
-            disabledContentColor = if (palette.dark) {
-                AugustColor.DarkSecondaryText.copy(alpha = 0.70f)
-            } else {
-                AugustColor.Muted.copy(alpha = 0.75f)
-            }
+            disabledContainerColor = if (palette.dark) AugustColor.NavySoft.copy(alpha = 0.55f) else AugustColor.Soft.copy(alpha = 0.65f),
+            disabledContentColor = if (palette.dark) AugustColor.DarkSecondaryText.copy(alpha = 0.70f) else AugustColor.Muted.copy(alpha = 0.75f)
         ),
         border = BorderStroke(
             width = if (focused) 2.dp else 1.dp,
@@ -1907,14 +1851,14 @@ private fun SecondaryButton(
             disabledElevation = 0.dp
         ),
         contentPadding = if (compact) {
-            PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            PaddingValues(horizontal = 14.dp, vertical = 10.dp)
         } else {
-            ButtonDefaults.ContentPadding
+            PaddingValues(horizontal = 20.dp, vertical = 12.dp)
         }
     ) {
         Text(
             text = text,
-            fontWeight = FontWeight.ExtraBold,
+            fontWeight = FontWeight.Bold,
             fontSize = if (compact) 12.sp else 14.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -1954,8 +1898,9 @@ private fun MinimalHeader(
                 Spacer(Modifier.width(10.dp))
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(AugustRadius.Compact))
+                        .background(if (palette.dark) AugustColor.NavySoft else AugustColor.Soft)
                         .clickable(onClick = onEditClick),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1963,7 +1908,7 @@ private fun MinimalHeader(
                         Icons.Rounded.Edit,
                         contentDescription = stringResource(R.string.dashboard_edit_layout),
                         tint = palette.secondaryText,
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
@@ -2019,7 +1964,6 @@ private fun MinimalMetricCard(
     progressText: String? = null,
     icon: ImageVector? = null,
     hero: Boolean = false,
-    pressLift: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -2038,10 +1982,7 @@ private fun MinimalMetricCard(
     SoftCard(
         palette = palette,
         modifier = cardModifier,
-        accent = resolvedAccent,
-        hero = hero,
-        tintWithAccent = true,
-        pressLift = pressLift
+        hero = hero
     ) {
         Row(
             modifier = Modifier
@@ -2149,19 +2090,12 @@ private fun StepsHeroCard(
     distanceValue: String,
     distanceUnit: String,
     progress: Float?,
-    progressText: String?,
-    pressLift: Boolean = false
+    progressText: String?
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
     SoftCard(
         palette = palette,
-        modifier = Modifier
-            .fillMaxWidth()
-            .pressScale(interactionSource),
-        accent = AugustColor.Lime,
-        hero = true,
-        tintWithAccent = true,
-        pressLift = pressLift
+        modifier = Modifier.fillMaxWidth(),
+        hero = true
     ) {
         Text(
             text = title.uppercase(Locale.getDefault()),
@@ -2260,7 +2194,7 @@ private fun HeroMetricBlock(
  */
 @Composable
 private fun DashboardLoadingCard(palette: BitPalette) {
-    SoftCard(palette = palette, accent = HealthAccent.mind(), hero = false, tintWithAccent = true) {
+    SoftCard(palette = palette) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

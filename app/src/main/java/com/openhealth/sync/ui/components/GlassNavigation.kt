@@ -1,10 +1,8 @@
 package com.openhealth.sync
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
@@ -45,31 +42,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openhealth.sync.ui.theme.AugustColor
-import com.openhealth.sync.ui.theme.AugustElevation
 import com.openhealth.sync.ui.theme.AugustMotion
 
 private const val SECRET_TAP_COUNT = 5
 private const val SECRET_TAP_WINDOW_MS = 2000L
-
-// Nav bar outer margin (2026-08-22): was a flat 16.dp on both axes. Bumped
-// horizontally only, to 24.dp, so the two side destination buttons (each
-// weight(1f) inside the Row) shrink and the whole pill reads narrower --
-// a deliberately conservative first pass rather than the ~44.dp a literal
-// "20% narrower" derivation would produce on a typical ~400.dp-wide screen,
-// since that number can't be visually verified in this environment. Tune
-// this single constant after checking on-device; nothing else needs to
-// change to adjust the width further in either direction.
 private val NAV_BAR_OUTER_HORIZONTAL_MARGIN = 24.dp
 private val NAV_BAR_OUTER_VERTICAL_MARGIN = 8.dp
 
-/**
- * Compact August v3 navigation dock inspired by the 2026 Material 3 Expressive
- * short-navigation pattern: persistent destination labels, strong selected
- * state, generous targets, and motion driven by direct interaction state.
- *
- * Sync remains an action rather than pretending to be a navigation destination.
- * No blur dependency is required.
- */
+/** Compact two-destination dock with one explicit sync action. */
 @Composable
 internal fun AugustBottomNav(
     selected: MainTab,
@@ -79,7 +59,7 @@ internal fun AugustBottomNav(
 ) {
     var secretTapCount by remember { mutableIntStateOf(0) }
     var lastSecretTapAtMs by remember { mutableLongStateOf(0L) }
-    val shellShape = remember { RoundedCornerShape(28.dp) }
+    val shellShape = remember { RoundedCornerShape(30.dp) }
 
     fun onSettingsTabTapped() {
         val now = System.currentTimeMillis()
@@ -101,18 +81,12 @@ internal fun AugustBottomNav(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .shadow(
-                    elevation = AugustElevation.HeroShadowElevation,
-                    shape = shellShape,
-                    ambientColor = AugustElevation.HeroShadowColor.copy(alpha = AugustElevation.HeroShadowAlpha),
-                    spotColor = AugustElevation.HeroShadowColor.copy(alpha = AugustElevation.HeroShadowAlpha)
-                )
                 .clip(shellShape)
                 .background(AugustColor.Navy)
                 .border(1.dp, AugustColor.BorderDark, shellShape)
                 .padding(horizontal = 8.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             AugustDestination(
                 modifier = Modifier.weight(1f),
@@ -144,8 +118,8 @@ private fun AugustDestination(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val focused by interactionSource.collectIsFocusedAsState()
-    val shape = remember { RoundedCornerShape(20.dp) }
-    val iconShape = remember { RoundedCornerShape(11.dp) }
+    val shape = remember { RoundedCornerShape(22.dp) }
+    val iconShape = remember { RoundedCornerShape(12.dp) }
     val label = when (tab) {
         MainTab.Today -> stringResource(R.string.tab_today)
         MainTab.Settings -> stringResource(R.string.tab_settings)
@@ -167,31 +141,9 @@ private fun AugustDestination(
         label = "destinationIconTile"
     )
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.96f else 1f,
-        // Light bounce (2026-08-22): spring instead of a flat tween, so
-        // releasing the press overshoots slightly past 1f before settling --
-        // a "light bounce effect" on every nav bar button, matching the
-        // Refresh button's own long-standing press flourish (rotation +
-        // fill change) in spirit without literally copying rotation onto
-        // Today/Settings, which would look identical to Refresh and less
-        // distinct as three separate actions. dampingRatio is deliberately
-        // MediumBouncy, not HighBouncy -- "light", per the request, not a
-        // showy wobble -- and this intentionally departs from the source
-        // design doc's general "no gratuitous bouncing" guidance (section
-        // 12) for this one specific, explicitly requested interaction.
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        targetValue = if (pressed) 0.98f else 1f,
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "destinationPressScale"
-    )
-    val iconTilt by animateFloatAsState(
-        targetValue = if (pressed) -8f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "destinationIconTilt"
     )
     val iconSize by animateDpAsState(
         targetValue = if (selected) 21.dp else 20.dp,
@@ -234,9 +186,7 @@ private fun AugustDestination(
                 imageVector = tab.icon,
                 contentDescription = label,
                 tint = if (selected) AugustColor.LimeInk else contentColor,
-                modifier = Modifier
-                    .size(iconSize)
-                    .graphicsLayer { rotationZ = iconTilt }
+                modifier = Modifier.size(iconSize)
             )
         }
         Spacer(Modifier.height(3.dp))
@@ -255,33 +205,18 @@ private fun AugustSyncAction(onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val focused by interactionSource.collectIsFocusedAsState()
-    val shape = remember { RoundedCornerShape(20.dp) }
+    val shape = remember { RoundedCornerShape(22.dp) }
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.94f else 1f,
-        // Light bounce (2026-08-22): spring, matching the same treatment
-        // applied to AugustDestination's press scale, so all three nav bar
-        // buttons share one consistent "release overshoots slightly" feel
-        // rather than Refresh alone staying a flat tween while the side
-        // tabs bounce.
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "syncPressScale"
     )
     val rotation by animateFloatAsState(
-        targetValue = if (pressed) -24f else 0f,
+        targetValue = if (pressed) -12f else 0f,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "syncPressRotation"
     )
     val fill by animateColorAsState(
-        // Tangerine (2026-08-22), was Lime/LimeActive. Size bumped 15%
-        // (58.dp -> 67.dp, icon 27.dp -> 31.dp: 58*1.15=66.7 rounded to
-        // 67.dp) to read as the visually dominant middle action against the
-        // now-narrower side destination buttons. Rotation and fill
-        // darkening on press are unchanged from before this session; the
-        // scale animation above was upgraded to a spring (bounce) in this
-        // same pass.
         targetValue = if (pressed) AugustColor.TangerineActive else AugustColor.Tangerine,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "syncFill"
@@ -289,18 +224,11 @@ private fun AugustSyncAction(onClick: () -> Unit) {
 
     Box(
         modifier = Modifier
-            .size(67.dp)
+            .size(60.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-                translationY = -2.dp.toPx()
             }
-            .shadow(
-                elevation = AugustElevation.ButtonShadowElevation,
-                shape = shape,
-                ambientColor = AugustColor.Tangerine.copy(alpha = 0.18f),
-                spotColor = AugustColor.Tangerine.copy(alpha = 0.18f)
-            )
             .clip(shape)
             .background(fill)
             .border(
@@ -321,7 +249,7 @@ private fun AugustSyncAction(onClick: () -> Unit) {
             contentDescription = stringResource(R.string.sync_now),
             tint = AugustColor.Ink,
             modifier = Modifier
-                .size(31.dp)
+                .size(28.dp)
                 .graphicsLayer { rotationZ = rotation }
         )
     }

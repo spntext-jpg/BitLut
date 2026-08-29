@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-08-29 -- workout interoperability hardening, build/lint recovery, UI cleanup
+
+- Corrected Huawei workout IDs and centralized mapping in `HuaweiWorkoutTypeMapper`; non-workout states are filtered.
+- Preserved workout type and available metrics in Huawei archive imports.
+- Fixed workout distance source: per-session Huawei activity samples win over coarse Health Connect overlap aggregates.
+- Health Connect workouts are written as `ACTIVELY_RECORDED`, use Huawei device metadata, deterministic client IDs/versions, and bundle the exercise session with related total calories.
+- Dashboard workout metrics are exercise-type aware: pace for walk/run, speed for cycling, pace/100 m for swimming, elevation for hiking, and duration/calories-focused strength cards.
+- Repaired the post-hardening Kotlin regressions, restored two live dashboard helpers, fixed Glance `RestrictedApi` usage, and restored EN/RU resource parity. Final verification is `assembleDebug + lintDebug`; lint is not suppressed or baselined.
+- Settings remains intentionally minimal: one data-source selector, one grouped action surface, Health Connect settings deep link, and steps goal only.
+- UI refinement keeps the August palette but moves to a quieter 2026 content-first surface model: flat outlined cards, restrained hero depth, pill controls, one primary Settings action, larger icon controls and restrained navigation motion.
+- Removed dead CSV-export plumbing, legacy `WidgetVisibilityPrefs` dashboard visibility layer, unused non-step goals, and orphan achievement-summary state.
+- Removed one-off patch/hotfix/verify delivery scripts after verification.
+- Corporate wellness import remains unresolved. Leading evidence points to reader-side Health Connect source-origin allowlisting; BitLut cannot spoof `Metadata.dataOrigin`.
+
 ## 2026-08-22 (d) -- dark-mode invisible icons/text, navbar bounce on every button, biking's 4th metric fixed
 
 Fourth patch of the day, on real-device feedback after the dark theme and

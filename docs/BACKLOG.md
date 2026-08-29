@@ -1,92 +1,25 @@
 # BitLut Backlog
 
-## Done in current sprint
+Updated: 2026-08-29
 
-- Hardened Health Connect permission coverage.
-- Added verification script for health permission coverage.
-- Preserved Huawei Health -> Android Health Connect sync pipeline.
-- Added UI/localization sprint documentation.
-- Updated README into premium marketing-style project material.
-- Added clean English and Russian resource strings for the next localization migration.
+## Highest priority
 
-## Current product structure
+- Confirm with the corporate wellness app/vendor whether third-party Health Connect `DataOrigin` packages are accepted or allowlisted. Do not keep mutating BitLut workout metadata without evidence.
+- Add focused unit tests for `HuaweiWorkoutTypeMapper` and workout metric selection.
+- Add screenshot/UI tests for Summary, Settings, dashboard editor, light mode and dark mode.
 
-- Summary / Сводка
-- History / История
-- Settings / Настройки
+## Nice to have
 
-Settings owns all connection and sync actions:
+- Split `FinalBitLutShell.kt` into screen files only when there is a concrete maintenance benefit; do not refactor just for file size.
+- Revisit adaptive/large-screen layout after phone UI is stable.
 
-- Google Health Connect permissions
-- Huawei Health authorization
-- Manual sync
-- Last sync / sync status
+## Completed
 
-## Next sprint: localization cleanup
-
-- Replace remaining `BText` adapter in `MainActivity.kt` with `stringResource(...)`.
-- Keep `values-ru` and `values` as the only source of user-visible copy.
-- Add a CI/local script check for hardcoded English/Russian UI strings in Kotlin files.
-
-## Next sprint: UI polish
-
-- Improve Summary hero card hierarchy.
-- Improve History charts and seven-day metric cards.
-- Improve Settings connection cards and state descriptions.
-- Keep the sync pipeline unchanged while polishing UI.
-
-## Huawei Health Kit validation
-
-After Health Kit approval:
-
-1. Use release SHA-256 build.
-2. Log in with reviewer/test Huawei account.
-3. Authorize Huawei Health Kit.
-4. Run manual sync.
-5. Verify Health Connect records for steps, distance, floors, elevation, active calories and exercise sessions.
-6. Capture logs for empty data, 50005, missing Huawei Health and HMS Core failures.
-
-## Guardrails
-
-- Do not commit `.bak` files.
-- Do not commit temporary patch scripts.
-- Do not commit `.kotlin/errors` logs.
-- Do not change `HuaweiHealthManager`, `SyncWorker` or `GoogleHealthManager` during pure UI sprints.
-- Do not fake unsupported Health Connect records.
-
-## UI Expressive Final Sprint
-
-- [x] Move product navigation to Summary / History / Settings.
-- [x] Add hero KPI and activity rings to Summary.
-- [x] Add 7-day trend cards to History.
-- [x] Add Google/Huawei/manual sync cockpit to Settings.
-- [ ] Replace remaining runtime text helpers with canonical Android string resources in a later low-risk localization refactor.
-- [ ] Add screenshot tests after Health Kit approval is complete.
-
-- [x] Sprint: expand Health Connect permissions, localize workout names, and simplify Summary hierarchy.
-
-
-## UI Architecture Cleanup
-
-- [x] Remove generated patch artifacts and backup files.
-- [x] Remove duplicate imports from `MainActivity.kt`.
-- [x] Extract final UI shell from `MainActivity.kt` when safe.
-- [x] Remove unreferenced zombie `DashboardScreen.kt` when safe.
-- [ ] Move `FinalUiText` to `strings.xml` / `values-ru/strings.xml`.
-- [ ] Split `FinalBitLutShell.kt` into `SummaryScreen.kt`, `HistoryScreen.kt`, `SettingsScreen.kt` after the shell extraction is stable.
-- [ ] Add JVM tests for workout title localization and Huawei export parser samples.
-
-## UI Localization Architecture Cleanup
-
-Status: completed in current cleanup sprint.
-
-- Removed hardcoded UI localization maps from Kotlin.
-- Standard Android string resources are the single source of truth for UI text.
-- Kept domain localization utilities only for non-UI logic such as workout/date formatting.
-- Added `scripts/verify_ui_localization_architecture.py` guardrail.
-- Removed zombie dashboard UI when no longer referenced.
-
-Next:
-
-- Split Summary, History and Settings into dedicated screen files.
-- Add unit tests for workout localization and Huawei export parser.
+- Correct Huawei workout ID mapping and non-workout filtering.
+- Per-session Huawei workout distance.
+- Type-aware dashboard metrics.
+- Health Connect actively-recorded workout metadata, Huawei device manufacturer, stable record version and bundled session/calorie writes.
+- Minimal Settings and Health Connect settings deep link.
+- Removed dead CSV, widget-visibility, unused goal and achievement-summary layers.
+- Modernized cards/buttons/navigation while preserving the August palette.
+- Removed one-off delivery patch scripts from the repository.

@@ -1,4 +1,3 @@
-
 package com.openhealth.sync.ui.theme
 
 import androidx.compose.material3.Typography
@@ -111,13 +110,13 @@ internal object AugustColor {
 
 /** August v3 radius scale: controls 10-14, cards 14-18, work surfaces 20-24. */
 internal object AugustRadius {
-    val Compact = 12.dp
-    val Control = 14.dp
-    val Button = 14.dp
-    val Card = 18.dp
-    val WorkSurface = 22.dp
-    val Hero = 28.dp
+    val Compact = 14.dp
+    val Control = 16.dp
     val Pill = 999.dp
+    val Button = Pill
+    val Card = 22.dp
+    val WorkSurface = 26.dp
+    val Hero = 30.dp
 }
 
 /** Section 5 spacing scale, verbatim: 0,2,4,6,8,10,12,14,16,18,20,22,24,28,
@@ -158,17 +157,17 @@ internal object AugustMotion {
 /** August v3 restrained neutral depth + weak Lime primary-action glow. */
 internal object AugustElevation {
     val CardShadowColor = Color(0xFF151728)
-    const val CardShadowAlpha = 0.08f
-    val CardShadowElevation = 10.dp
+    const val CardShadowAlpha = 0.0f
+    val CardShadowElevation = 0.dp
 
     val HeroShadowColor = Color(0xFF151728)
-    const val HeroShadowAlpha = 0.14f
-    val HeroShadowElevation = 16.dp
+    const val HeroShadowAlpha = 0.10f
+    val HeroShadowElevation = 8.dp
 
-    // August v3 allows a weak Lime glow only for primary action surfaces.
+    // Buttons stay flat; hierarchy comes from fill, shape and typography.
     val ButtonShadowColor = AugustColor.Lime
-    const val ButtonShadowAlpha = 0.16f
-    val ButtonShadowElevation = 8.dp
+    const val ButtonShadowAlpha = 0.0f
+    val ButtonShadowElevation = 0.dp
 }
 
 

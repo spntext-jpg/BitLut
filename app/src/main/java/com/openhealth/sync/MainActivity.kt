@@ -12,7 +12,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.openhealth.sync.config.HealthDataSource
-import com.openhealth.sync.config.WidgetVisibilityPrefs
 import com.openhealth.sync.domain.SyncOrchestrator
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardViewModel
@@ -42,7 +41,6 @@ class MainActivity : ComponentActivity() {
         val app = application as SyncApplication
         DashboardViewModel.provideFactory(
             app.container.googleHealthManager,
-            WidgetVisibilityPrefs(applicationContext),
             app.container.dashboardSnapshotCache,
             app.container.goalPrefs,
             app.container.achievementsStore
@@ -175,15 +173,9 @@ class MainActivity : ComponentActivity() {
                     onRequestGoogle = { requestGoogleHealthPermissions() },
                     onRequestHuawei = { startHuaweiAuthorization() },
                     onSyncNow = { triggerImmediateSync() },
-                    onExportCsv = { exportCsv() },
                     onOpenHealthConnectSettings = { openHealthConnectSettings() },
-                    onWidgetVisibilityChanged = { widget, visible ->
-                        dashboardViewModel.setWidgetVisible(widget, visible)
-                    },
                     onDataSourceSelected = { source -> selectDataSource(source) },
                     onStepsGoalChanged = { value -> dashboardViewModel.setStepsGoal(value) },
-                    onActiveMinutesGoalChanged = { value -> dashboardViewModel.setActiveMinutesGoal(value) },
-                    onCaloriesGoalChanged = { value -> dashboardViewModel.setCaloriesGoalKcal(value) },
                     hasSeenPermissionsOnboarding = hasSeenOnboarding,
                     onPermissionsOnboardingSeen = {
                         onboardingPrefs.markPermissionsRationaleSeen()
@@ -242,8 +234,7 @@ class MainActivity : ComponentActivity() {
      * why this is a distinct step from BitLut's own runtime permission
      * grant. syncViewModel.googleManager is declared as the
      * HealthConnectManager interface, which does not expose this
-     * GoogleHealthManager-specific function -- same reason exportCsv()
-     * above casts to the concrete type. AppContainer always constructs a
+     * GoogleHealthManager-specific function. AppContainer always constructs a
      * real GoogleHealthManager, so this cast is safe in practice; the
      * null-check is defensive only. No ActivityResultLauncher/onResult
      * handling is needed here (unlike Huawei's authorization intent):
@@ -284,34 +275,6 @@ class MainActivity : ComponentActivity() {
             awaitingSystemResult = false
             AppLogger.e("MainActivity", "Huawei authorization start failed: ${e.message}", e)
             Toast.makeText(this, getString(R.string.toast_huawei_start_failed), Toast.LENGTH_LONG).show()
-        }
-    }
-
-    /**
-     * Sprint (2026-07-14): exports exactly what BitLut already reads for its
-     * own dashboard (daily steps/distance/calories + recent workouts) as a
-     * CSV via the system share sheet. Read work happens off the main thread
-     * in lifecycleScope, same as every other Health Connect read in this
-     * class; CsvExporter.writeAndShare does its own file I/O synchronously
-     * but is only ever called here, already off the main thread.
-     */
-    private fun exportCsv() {
-        lifecycleScope.launch {
-            val app = application as SyncApplication
-            // readDailyTotals()/readRecentWorkouts() are plain GoogleHealthManager
-            // functions, not part of the HealthConnectManager interface that
-            // AppContainer.googleHealthManager is declared as (same reason
-            // SyncWorker only ever calls the interface's readDashboardSnapshot()).
-            // AppContainer always constructs a real GoogleHealthManager, so this
-            // cast is safe in practice; the null-check is defensive only.
-            val googleManager = app.container.googleHealthManager as? com.openhealth.sync.data.GoogleHealthManager
-            if (googleManager == null) {
-                Toast.makeText(this@MainActivity, getString(R.string.status_error), Toast.LENGTH_LONG).show()
-                return@launch
-            }
-            val dailyTotals = googleManager.readDailyTotals(30)
-            val workouts = googleManager.readRecentWorkouts(100)
-            com.openhealth.sync.util.CsvExporter.writeAndShare(this@MainActivity, dailyTotals, workouts)
         }
     }
 

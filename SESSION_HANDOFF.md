@@ -1,363 +1,108 @@
 # BitLut — Session Handoff
 
-Current handoff date: 2026-08-26.
+Current handoff date: 2026-08-29.
 
-Read `CLAUDE.md` and this file before changing code. Source code plus a fresh
-successful build are the final authority if an older historical note conflicts.
+Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus a successful `assembleDebug` + `lintDebug` is authoritative if historical notes conflict.
 
 ## Product
 
-BitLut is a local-first Kotlin + Jetpack Compose Android bridge:
+BitLut is a local-first Android bridge:
 
 ```text
-HUAWEI Health -> BitLut -> Android Health Connect
+HUAWEI Health -> BitLut -> Android Health Connect -> compatible readers
 ```
 
-Current product scope is activity-only. BitLut must never synthesize missing
-health data, **except** the one explicit, user-approved exception recorded
-in "Estimated workout calories" below.
+Scope is activity/workout data only. No account/backend. Do not fabricate missing metrics. The only documented exception is the existing workout total-calorie estimate used when Huawei provides no workout calories; do not extend that exception to distance, steps, elevation, heart data, sleep, etc.
 
-## End-of-session baseline (2026-08-26)
+## 2026-08-29 baseline
 
-Root problem this session: workouts synced correctly through the whole
-Huawei -> BitLut -> Health Connect -> Google Fit chain (confirmed on a real
-cycling workout), but a separate corporate fitness app reading the same
-Health Connect data was not importing them. Five patches shipped this
-session, in this order, each gated on a real `assembleDebug`:
+The app builds successfully after the workout interoperability hardening and follow-up build/lint repairs.
 
-1. **Recording method fix.** Every record BitLut wrote used the raw
-   `Metadata(...)` constructor, leaving `recordingMethod` at
-   `RECORDING_METHOD_UNKNOWN`. Health Connect's own UI and Google Fit
-   display `RECORDING_METHOD_UNKNOWN` records without filtering; a
-   third-party reader is free to distrust/skip them -- this is why the
-   corporate app couldn't see workouts that looked fine in Google Fit.
-   Fixed by switching to `Metadata.autoRecorded(...)` with
-   `Device(type = Device.TYPE_UNKNOWN)`. This required bumping
-   `connect-client` from `1.1.0-alpha11` to `1.1.0-alpha12` -- that factory
-   method does not exist on alpha11. (Two failed attempts before this
-   landed: v9 used `autoRecorded` before confirming it needed alpha12; v10's
-   fix was correct but its own idempotency check used one large fragile
-   multi-line anchor that silently broke on a partially-applied prior
-   state -- see "Patch script lessons" below.)
+### Workout import and Health Connect
 
-2. **Estimated workout calories.** Even with the recording-method fix, a
-   bare `ExerciseSessionRecord` with no attached calorie or distance data is
-   a documented reason real third-party Health Connect readers (MyFitnessPal
-   requires calories; other apps require distance) decline to import a
-   workout. Huawei's real `activeCalories` is permanently denied (error
-   50005) for this individual-developer account, so BitLut had never had a
-   real number to attach. Fixed by writing a MET-formula calorie *estimate*
-   (Compendium of Physical Activities, 70 kg reference weight) as a
-   `TotalCaloriesBurnedRecord` -- deliberately not `ActiveCaloriesBurnedRecord`,
-   to avoid conflating an estimate with "measured by a real sensor." See
-   "Estimated workout calories" section below for the full policy.
+- Huawei activity IDs use `HuaweiWorkoutTypeMapper` as the single mapping source. Current Huawei IDs such as cycling `13`, strength training `79`, walking `90`, indoor cycling, treadmill, swimming, martial arts, rowing and other supported activities are normalized centrally.
+- Non-workout Huawei states such as elevator, escalator, in-vehicle, sleep, still and tilting are filtered instead of becoming fake workouts.
+- Live Huawei reads and Huawei archive import use the same mapper.
+- Archive workouts preserve exercise type plus available distance, calories, steps and elevation.
+- Workout distance comes from Huawei's per-activity `ActivityRecordReply.getSampleSet(record)` when available. Do not reconstruct session distance from coarse Health Connect daily/overlap aggregates.
+- BitLut writes workout sessions as `ACTIVELY_RECORDED`, because the original workout was actively started on the watch/phone even though BitLut relays it later.
+- `bitlutRecordingDevice` uses manufacturer `Huawei`.
+- Exercise session + related total-calorie record are inserted as one workout bundle.
+- `clientRecordId` remains deterministic and `clientRecordVersion` is stable for unchanged workouts; do not bump versions on every sync.
+- Health Connect `DataOrigin` remains `com.openhealth.sync`. Do not attempt to spoof Huawei/Google source identity; Health Connect owns writer attribution.
 
-3. **Manifest permission bug.** Step 2 required a new Health Connect
-   permission (`TotalCaloriesBurnedRecord` read+write) that was added to
-   `HealthPermissionPolicy.kt`'s runtime request set but never declared in
-   `AndroidManifest.xml`. Health Connect requires permissions to be declared
-   in the manifest before it will show any request dialog for them --
-   omitting it made the whole batched permission request silently return an
-   empty grant set instead of prompting, even for previously-working
-   permissions. Fixed by adding the missing `<uses-permission>` entries.
-   (One failed attempt first: the fix's own new XML comment used a literal
-   `--`, which is illegal inside an XML comment body per the XML spec --
-   caught by `processDebugMainManifest`'s `SAXParseException`, not by this
-   project's own sandbox tooling. See "Patch script lessons" below.)
+### Dashboard workout metrics
 
-4. **Stale daily totals across midnight.** Unrelated UX bug found during
-   this session: `DashboardViewModel.buildInitialState()` applied whatever
-   was in `DashboardSnapshotCache` unconditionally on cold launch, with no
-   check for whether the cache was written on a previous calendar day.
-   Opening the app the next morning showed yesterday's steps/distance/
-   calories until the next sync completed. Fixed by comparing the cache's
-   saved timestamp's local calendar date against today's; if the cache
-   predates today, daily-total fields (steps, distance, calories, workout
-   minutes, active hours, elevation, floors) reset to zero until the
-   already-existing auto-sync-on-launch (`MainActivity.onResume()` ->
-   `triggerAutomaticSyncOnLaunch()`) replaces them. `recentWorkouts` is
-   deliberately left untouched -- a workout from yesterday is still valid
-   history for the "previous workout" card regardless of what day it is now.
+Display is exercise-type aware and only shows meaningful available values:
 
-5. **Strength-training workout metrics.** The four-metric-slot contract
-   (Duration, Distance, Avg speed, Steps/Elevation) doesn't make sense for
-   strength training -- distance, speed, and steps are not meaningful for
-   that exercise type. Fixed by special-casing
-   `EXERCISE_TYPE_STRENGTH_TRAINING` in `workoutMetricDisplays()` to show
-   only Duration + Calories, with calories preferring real
-   `activeCaloriesKcal` and falling back to the same MET estimate from
-   patch 2. The MET table/formula was extracted out of `GoogleHealthManager`
-   into a new shared `com.openhealth.sync.util.WorkoutCalorieEstimator`
-   object so the Health Connect write path and this display can never
-   silently drift onto two different formulas.
+- walking/running/treadmill: Duration, Distance, Pace, Steps; measured Calories may fill an available fourth slot when another metric is absent.
+- hiking: Duration, Distance, Elevation, measured Calories/Steps as available.
+- outdoor cycling: Duration, Distance, Avg speed, measured Calories/Elevation as available.
+- stationary cycling: Duration, measured Calories, then real distance/speed only if present.
+- swimming: Duration, Distance, Pace / 100 m, measured Calories.
+- strength/weightlifting: Duration + Calories; measured first, documented estimator only as fallback.
+- HIIT/yoga/pilates: Duration + measured Calories.
+- other types: Duration plus only real available Calories/Distance/Elevation/Steps.
 
-Also still true from before this session (2026-08-22 baseline, condensed):
+Never show `0` as a substitute for a missing workout metric; omit the slot or show the established no-data UI where applicable.
 
-- HUAWEI -> Health Connect synchronization working on a real device.
-- August v3 dark theme, system-driven; `HealthAccent` is `@Composable`.
-- Manual and periodic WorkManager synchronization; sync lease/reuse
-  protection; partial Huawei scope denial handled per category.
-- Health Connect request-storm protection and bounded dashboard reads.
-- Haze removed; no blur dependency/toolchain migration.
-- Settings daily goals reduced to steps only.
-- See the "Dark theme," "August v3," and "Health Connect quota rules"
-  sections below -- unchanged this session.
+### Corporate wellness app investigation
 
-## Estimated workout calories (new, 2026-08-25/26)
+Still unresolved and likely external. Real-device evidence shows BitLut workouts arrive correctly in Health Connect but the corporate app does not count them, while Huawei -> Apple Health workouts are accepted.
 
-**This is a deliberate, explicit, user-approved exception** to this
-project's "never synthesize fake health data" rule -- raised directly with
-the user mid-session before implementation, not assumed. Scope, exactly as
-agreed:
+Leading explanation: the corporate reader uses source-origin allowlisting/trust. Apple Health receives records from Huawei's first-party iOS app (`HKSource`), while Android Health Connect records written by BitLut necessarily have `Metadata.dataOrigin.packageName = com.openhealth.sync`. BitLut cannot legally/technically impersonate another package's `DataOrigin`.
 
-- Only `TotalCaloriesBurnedRecord` is estimated. No other record type
-  should be synthesized under this exception.
-- The formula: `kcal = MET * 3.5 * 70kg * minutes / 200`, MET values from
-  the Compendium of Physical Activities, "general/moderate" variant per
-  exercise type (see `WorkoutCalorieEstimator.kt`'s own doc comment for the
-  full table). 70 kg is a fixed reference weight -- BitLut has no access to
-  real user weight, and adding that would itself be a new data category,
-  out of scope for this fix.
-- `ActivitySessionData.activeCaloriesKcal`, which powers BitLut's own
-  dashboard, is **never** written to by the estimate. It stays real-or-null.
-  BitLut's own UI continues to honestly show no calorie figure when Huawei
-  hasn't provided one. The estimate exists only for (a) the
-  `TotalCaloriesBurnedRecord` written to Health Connect for third-party
-  readers, and (b) the strength-training workout card's calorie display,
-  as an explicit fallback when real data is absent.
-- Full rationale recorded in `docs/HEALTH_DATA_PERMISSION_MATRIX.md`'s
-  "Documented exception: estimated workout calories" section -- read that
-  before touching this again.
-- Required a new Health Connect permission
-  (`READ_TOTAL_CALORIES_BURNED`/`WRITE_TOTAL_CALORIES_BURNED`), itself an
-  explicit, user-approved exception to "no new Health Connect/Huawei
-  permissions." Declared in `AndroidManifest.xml` and requested via
-  `HealthPermissionPolicy.kt`.
+Already tried and insufficient on their own: recording method, calorie attachment, device manufacturer, Health Connect data-source settings deep link, accurate session distance, corrected exercise types, stable record version and bundled workout writes.
 
-**Do not extend this exception to any other record type** (e.g. distance,
-elevation, steps) without the same explicit conversation and the same kind
-of documented, scoped write-up.
+Next useful test is on the corporate app side: confirm whether it accepts third-party Health Connect writer origins. Do not keep changing BitLut metadata blindly without new evidence.
 
-## Patch script lessons (new this session)
+## UI decisions
 
-Two real failures this session, both worth remembering:
+- Palette remains August v3: Navy, Lime, Tangerine, Purple, Inter Variable, system light/dark theme.
+- Product reference is now a quieter 2026 content-first UI similar in spirit to ChatGPT: flatter surfaces, stronger spacing/hierarchy, rounded grouped controls, one obvious primary action, restrained motion.
+- Non-clickable cards must not animate like buttons.
+- Normal cards are flat with a subtle outline; hero can retain restrained depth.
+- Buttons are pill-shaped with minimum 48 dp height; Lime is reserved for the primary action.
+- Settings keeps the minimal data-source card and one merged action card. `Sync now` is the primary action; connect/import/refresh/Health Connect settings are secondary.
+- Dashboard-card visibility/order is handled only by `DashboardCardLayoutPrefs` from the pencil editor.
+- Settings exposes only the steps goal.
 
-- **Don't use one large multi-line block as both the edit anchor and the
-  idempotency check.** v10's Step 3 tried to match/replace a ~20-line
-  function body in one anchor; on the user's real file (after a prior
-  partial run left subtly different bytes) the match came back empty on
-  both old and new text, and the script died rather than recognizing
-  "already applied." Fixed in v11 by checking several small, independent,
-  symptom-based facts (does this import exist, does this constant exist,
-  does this specific line match a pattern) instead of one large anchor.
-- **XML comments cannot contain a literal `--` anywhere in the body.** This
-  is a hard XML well-formedness rule with no exception, unrelated to
-  Android/Health Connect specifically. A patch script's own text-based
-  idempotency testing (byte-diffing, running twice) cannot catch this --
-  only real XML parsing (or the real Gradle manifest merger) can. Validate
-  generated XML with a real parser (e.g. Python's
-  `xml.etree.ElementTree.parse`) before delivering any patch that touches
-  an `.xml` file, the same way Kotlin changes get a brace/paren balance
-  check.
-- Both failures were caught by the user's real `assembleDebug`/manifest
-  merger, not by anything in the sandbox -- consistent with this project's
-  standing rule that the sandbox cannot verify real compilation.
+## Removed dead layers
 
-## Workout metric contract (revised 2026-08-26)
+- CSV export UI had already been removed; the now-unreachable callback chain, `CsvExporter`, manifest `FileProvider`, and `file_paths.xml` are removed too.
+- `WidgetVisibilityPrefs` / `DashboardWidget` legacy visibility layer is removed; it had no remaining dashboard consumer.
+- Distance, active-minutes and calories goal preference/state setters are removed; only steps goal remains.
+- Dead `AchievementSummary` state/calculation is removed.
+- `SoftCard` no longer carries unused `accent`, `tintWithAccent`, or `pressLift` compatibility parameters.
+- One-off patch/hotfix/verify scripts are delivery artifacts and should not remain in the repository after a successful patch run.
 
-Every recent-workout card shows either three or four slots, or two slots
-for strength training specifically:
+## Settings changes already made before this session
 
-- **Strength training** (`EXERCISE_TYPE_STRENGTH_TRAINING`): **Duration,
-  Calories only** (2026-08-26 change -- see "Strength-training workout
-  metrics" above). Calories prefers real `activeCaloriesKcal`, falls back
-  to `WorkoutCalorieEstimator` when absent.
-- **Biking** (`EXERCISE_TYPE_BIKING`): Duration, Distance, Avg speed (3
-  slots -- the 4th slot/Elevation gain was removed for biking before this
-  session; do not re-add a 4th slot for biking without discussion).
-- **Every other exercise type**: Duration, Distance, Avg speed, Steps (4
-  slots, unchanged from 2026-08-22).
+1. `patch_walking_three_slots_v1.py`: walking card had been trimmed to three slots at that point. This was later superseded by the current exercise-type-aware metric contract above.
+2. `patch_settings_minimalism_v1.py`: simplified Settings; removed workout-filter UI only. `WorkoutFilterPrefs` remains active in sync-time filtering.
+3. `patch_hc_datasources_and_device_manufacturer_v2.py`: added Health Connect settings deep link and Huawei manufacturer metadata. v1 partially failed and is historical only.
+4. `patch_workout_distance_source_fix_v1.py`: fixed the real ~40x workout-distance error by reading Huawei per-session samples and giving them priority over aggregate reconstruction.
 
-Active calories and (for non-biking types) elevation gain were removed from
-the general card display back on 2026-08-22 -- not hidden conditionally,
-removed as a display contract -- because Huawei frequently scope-denies
-`activeCalories` (50005) and elevation is rarely populated for the same
-underlying reason. `ActivitySessionData.activeCaloriesKcal` /
-`.elevationMeters` are still read/synced for CSV export and daily totals;
-only general card display was narrowed. The strength-training card's new
-Calories slot (2026-08-26) is a deliberate, narrow reintroduction of
-calories to one specific card, not a reversal of that 2026-08-22 decision --
-see "Estimated workout calories" above.
+## What failed during the 2026-08-29 hardening and how to avoid it
 
-Data rules (unchanged from before, **except** the new calorie exception
-above):
+- `v1`: UI helpers called `stringResource()` from non-`@Composable` local functions. Rule: Compose resource APIs stay in composable scope; pure formatting helpers receive already-resolved strings or remain pure Kotlin.
+- `v3`: cleanup/generator edits left duplicate opening declarations in `AppLogger.d()` and `GoogleHealthManager.readStepsToday()`. Kotlin then parsed following members inside the wrong function and produced dozens of misleading unresolved references. Rule: run structural checks and inspect the first compiler errors before treating cascades as independent bugs.
+- The same cleanup removed `cleanWorkoutCardTitle()` and `formatWorkoutDateTime()` even though live UI call sites remained. Rule: never call code dead from a private-name/lexical scan alone; search all call sites before deletion.
+- After compile was repaired, lint still found Glance `RestrictedApi` usage plus two missing Russian strings. Rule: compile success is not sprint success; `lintDebug` is mandatory, restricted APIs must be replaced rather than suppressed, and EN/RU resource parity is checked before Gradle.
 
-- Duration comes from the real ExerciseSessionRecord interval.
-- Distance comes only from real imported/session/Health Connect distance data.
-- Average speed is derived only when real distance exists.
-- Steps come from real Health Connect step data overlapping the workout.
-- Elevation comes only from real elevation data.
-- Missing metrics render as `—`.
-- Never estimate distance from steps.
-- Never estimate elevation or speed.
-- Calories: real data preferred everywhere; the MET estimate is used
-  **only** for (a) the Health Connect `TotalCaloriesBurnedRecord` write and
-  (b) the strength-training card's calorie slot specifically -- see
-  "Estimated workout calories" above for the full, deliberately narrow scope.
+## Mandatory engineering guardrails
 
-The current distance boundary fallback is deliberately conservative:
+- Never infer dead code from a lexical scan alone. Before deletion, search all call sites/contracts/resources and then compile.
+- Do not delete a helper because it looks unused in one file; `v3` caused cascading build errors by removing still-live declarations.
+- When touching `values/strings.xml`, keep `values-ru/strings.xml` key parity in the same patch. Run XML parsing plus locale-key parity checks before Gradle.
+- XML comments must never contain literal `--`.
+- Patch scripts must be idempotent/fail-closed and use small symptom-based anchors, not one huge fragile multiline anchor.
+- Verification gate: `:app:assembleDebug` AND `:app:lintDebug`. A compile-only pass is not enough.
+- Do not suppress lint, create a lint baseline, or weaken checks merely to get green output.
+- If verification fails, do not commit/push. Show only compact compiler/lint errors, not full Gradle stack traces.
+- Do not include `git diff -- ...` in delivery commands. It creates console noise and is explicitly unwanted.
+- Preserve working sync/data behavior during UI work; UI refactors must not touch workout serialization unless required by evidence.
 
-- it runs only when exact aggregate/session distance is missing;
-- it queries a narrow window around the displayed workout;
-- it attributes only exact temporal overlap;
-- source records longer than three hours are rejected;
-- if no real overlap exists, distance remains missing.
+## Final verification command used by delivery scripts
 
-**Do not reopen this fallback logic.** Nothing this session touches it.
-
-## Dark theme (2026-08-22)
-
-System-driven, not an in-app toggle. Dark Canvas = Navy, dark Surface =
-NavyRaised, dark Soft = NavySoft (extends the existing Navy ramp rather than
-a second palette). Steps Hero card is NavyRaised in both modes, unchanged.
-Lime stays a filled surface with Ink content in both modes.
-
-`HealthAccent` (`activity`/`mind`/`violet`) is now `@Composable`, resolving
-to Lime in dark mode (~14.5:1 contrast against NavyRaised) and the original
-InkSoft in light mode. This was the root cause of a real-device bug found
-today: these three properties were a single fixed InkSoft value that
-measured ~1.2:1 contrast against dark-mode cards -- effectively invisible.
-Affected the Last 7 Days card's numbers, Personal Records' icons, and
-workout-type icons on `WorkoutRecencyCard`, among others. If you add a new
-`HealthAccent` consumer, remember it must be called from a `@Composable`
-context -- `BitPalette.light()`/`dark()` cannot call it and instead hardcode
-their own matching fixed values directly.
-
-If something still looks gray/low-contrast in dark mode that wasn't covered
-by today's fix, it is very likely another hardcoded `AugustColor.*`
-reference that bypasses both `palette` and `HealthAccent` -- grep for direct
-`AugustColor.InkSoft`/`AugustColor.Muted` usage in the same style as
-`HealthAccent` had before today's fix.
-
-## Health Connect quota rules
-
-Do not reintroduce unbounded pagination into dashboard hot paths.
-
-Keep:
-
-- bounded newest-first dashboard reads;
-- coalesced/throttled dashboard refreshes;
-- permission caching;
-- one authoritative post-sync snapshot;
-- narrow per-workout fallback only where necessary.
-
-CSV export or explicit diagnostic tools may use broader reads because they are
-not hot-path UI operations.
-
-## August v3
-
-Canonical roles (light mode):
-
-- Canvas `#F7F8FC`
-- Surface `#FFFFFF`
-- Ink / Navy `#151728`
-- Navy Raised `#1C1E33`
-- Navy Soft `#24263D`
-- Lime `#DFFF6A`
-- Lime Active `#C3E93E`
-- Purple `#6E5CF6`
-- Muted `#6F7385`
-- Tangerine `#F28500` (2026-08-22)
-- Tangerine Active `#DD7A00` (2026-08-22)
-
-Dark mode (system-driven, 2026-08-22): dark Canvas = Navy, dark Surface =
-NavyRaised, dark Soft = NavySoft. See "Dark theme" section above for the
-full rationale and the `HealthAccent` gotcha.
-
-Rules:
-
-- Steps card is the dark Hero, in both light and dark theme.
-- Normal cards are white Surface in light mode, NavyRaised in dark mode.
-- Lime is the primary filled action color with Ink content, both modes.
-- Tangerine is the "on/active" signal for Settings toggles and the navbar
-  Refresh button only -- not a second primary CTA.
-- Purple is for focus/selection/secondary interaction, unchanged role.
-- Inter Variable is global typography.
-- Nav bar press feedback uses a light spring bounce (explicit exception);
-  everything else stays restrained motion.
-- Do not reintroduce Haze or permanent glassmorphism.
-
-## Settings goals
-
-Only the steps goal is currently exposed in Settings.
-
-Active-minutes and calorie goals are not product controls and should not be
-reintroduced unless those goals become real product features with downstream use.
-
-## Build gate
-
-Use the constrained Codespaces build:
-
-```bash
-./gradlew :app:assembleDebug \
-  --no-daemon \
-  --max-workers=1 \
-  --no-watch-fs \
-  --console=plain \
-  -Dorg.gradle.jvmargs="-Xmx1024m -XX:MaxMetaspaceSize=384m -Dfile.encoding=UTF-8" \
-  -Pkotlin.compiler.execution.strategy=in-process
-```
-
-A full `assembleDebug` must pass before commit.
-
-## Working convention
-
-For all coding in this project:
-
-- reason about code in English;
-- write code, comments, identifiers, and commit messages in English;
-- prefer one standalone Python patch script;
-- embed verification in that script when practical;
-- final delivery should contain the patch and one command block only;
-- make surgical changes and preserve working behavior;
-- every new patch script filename must differ from all previous ones in the
-  project (append v2, v3, etc.) -- never reuse or overwrite a prior patch
-  script's filename, even for a fix to that same patch.
-
-## Trusted current docs
-
-- `README.md`
-- `CLAUDE.md`
-- `CONTEXT.md`
-- `SESSION_HANDOFF.md`
-- `CHANGELOG.md`
-- `docs/HEALTH_DATA_PERMISSION_MATRIX.md`
-- `docs/HUAWEI_DAILY_CHUNKING_166.md`
-- `docs/HUAWEI_PRODUCTION_REVIEW_PACKAGE.md`
-- `docs/PRIVACY_POLICY.md`
-
-## Next-session rule
-
-Start from the working sync baseline. Do not reopen the workout-distance
-problem by trying to force a number into a session that has no real distance
-record. Do not revert the dark-theme `HealthAccent` fix back to a plain
-non-composable object without an equally thorough audit of every call site's
-theme-awareness.
-
-**Awaiting real-device confirmation:** the user was waiting on a fresh
-strength-training workout to confirm the full recording-method +
-estimated-calories fix actually makes the corporate app import it -- this
-was not yet confirmed as of this handoff. If it's still not importing on
-the next session, check the corporate app's own logs/support docs before
-assuming another BitLut-side gap; the two most likely remaining culprits it
-does NOT yet address are (a) whether that app also requires
-`ExerciseSegment` data on the session, and (b) whether it requires
-`DistanceRecord` specifically rather than any calorie record, which would
-not apply to strength training at all.
-
-Do not extend the "estimated workout calories" exception to any other
-record type without the same explicit user conversation this session had.
-Do not use one large multi-line block as both a patch script's edit anchor
-and its idempotency check -- see "Patch script lessons" above. Validate any
-generated `.xml` with a real parser before delivering a patch that touches
-one. Focus future work on new explicitly scoped product improvements.
+Resource-constrained Codespaces settings remain intentional: one Gradle worker, no daemon, no file watcher, 1 GB heap, Kotlin compiler in-process.

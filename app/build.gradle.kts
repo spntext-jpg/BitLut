@@ -129,11 +129,10 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
 
-    // Sprint (2026-07-14): home screen widget (see widget/HomeWidget.kt).
-    // glance-appwidget alone (no glance-material3) is enough -- the widget
-    // uses plain ColorProvider(day=.., night=..) values matching
-    // HealthAccent/BitPalette's own hex constants rather than pulling in
-    // Material3-for-Glance theming for one small tile.
+    // Home screen widget (see widget/HomeWidget.kt). glance-appwidget alone
+    // is sufficient. Light/dark colors stay in qualified Android resources;
+    // HomeWidget resolves them through a small public ColorProvider adapter
+    // because Glance 1.1.1 restricts the resource-id ColorProvider factory.
     implementation("androidx.glance:glance-appwidget:1.1.1")
 
     implementation("androidx.core:core-ktx:1.15.0")

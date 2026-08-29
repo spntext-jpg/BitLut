@@ -1,143 +1,45 @@
-<p align="center">
-  <img src="docs/bitlut-mascot.png" width="140" alt="BitLut" />
-</p>
+# BitLut
 
-<h1 align="center">BitLut</h1>
-
-<p align="center">
-  <strong>Открытый Android-мост между HUAWEI Health и Android Health Connect</strong>
-</p>
-
-<p align="center">
-  Локально на устройстве · Без аккаунта · Без рекламы · Без выдуманных данных
-</p>
-
----
-
-## Что такое BitLut
-
-BitLut переносит поддерживаемые данные активности из **HUAWEI Health** в
-**Android Health Connect**, чтобы ими могли пользоваться другие совместимые
-приложения.
+Открытый локальный Android-мост между **HUAWEI Health** и **Android Health Connect**.
 
 ```text
-HUAWEI Health
-      ↓
-   BitLut
-      ↓
-Health Connect
-      ↓
-Совместимые приложения
+HUAWEI Health -> BitLut -> Health Connect -> совместимые приложения
 ```
 
-BitLut не создаёт собственный профиль пользователя, не отправляет данные на
-сервер BitLut и не подменяет отсутствующие показатели тестовыми значениями.
+Без аккаунта BitLut, backend, рекламы и серверного хранения health data.
 
 ## Что синхронизируется
 
-| Категория | Статус |
-| --- | --- |
-| Шаги | Поддерживается |
-| Дистанция | Поддерживается, если HUAWEI Health отдаёт реальные записи |
-| Набор высоты | Поддерживается при наличии данных |
-| Активные калории | Поддерживается при доступном Huawei scope |
-| Тренировки / активности | Поддерживается при доступном Huawei scope |
-| Этажи | Huawei SDK не предоставляет подходящий DataType в текущей интеграции |
+Текущий scope — только активность и тренировки: шаги, дистанция, этажи/набор высоты, калории при наличии данных и workout sessions. Типы тренировок HUAWEI нормализуются через единый `HuaweiWorkoutTypeMapper`; состояния, которые не являются тренировками, фильтруются.
 
-Сон, пульс, SpO2, HRV, стресс и другие биометрические категории не входят в
-текущий продуктовый scope.
+Дистанция тренировки берётся из activity-scoped данных HUAWEI, когда они доступны. BitLut не восстанавливает workout distance из грубых дневных Health Connect aggregates.
 
-## Карточки тренировок
+## Workout records
 
-Каждая карточка тренировки показывает четыре показателя. Первые три —
-одинаковые для любого типа тренировки, четвёртый зависит от типа:
+Exercise sessions записываются в Health Connect как `ACTIVELY_RECORDED` с Huawei device metadata, детерминированным `clientRecordId` и стабильным `clientRecordVersion` для неизменённой тренировки. Session и связанные total calories записываются одним bundle.
 
-1. **Длительность**
-2. **Дистанция**
-3. **Средняя скорость**
-4. **Шаги** — для большинства типов тренировок; **Набор высоты** — для
-   велотренировок (для велосипеда шаги нерелевантны)
+Единственное одобренное производное значение — документированный fallback для total workout calories, когда HUAWEI не отдаёт калории конкретной реальной тренировки. Этот exception нельзя расширять на дистанцию, шаги, высоту или другие метрики.
 
-Значения берутся из реальных данных Health Connect, уже импортированных BitLut.
-Средняя скорость рассчитывается только из реальной дистанции и длительности.
+## Dashboard
 
-Если источник не содержит конкретный показатель, BitLut показывает `—`.
-Приложение не восстанавливает отсутствующую дистанцию по шагам, не оценивает
-калории формулами и не создаёт mock-данные.
+Workout cards зависят от типа тренировки: walking/running используют pace, cycling — average speed, hiking — elevation, swimming — pace/100 m, strength — duration/calories. Отсутствующие метрики не заменяются выдуманными нулями.
 
-## Синхронизация
+## Corporate wellness compatibility
 
-BitLut поддерживает:
-
-- ручную синхронизацию;
-- фоновую синхронизацию через WorkManager;
-- защиту от параллельных sync jobs;
-- устойчивый sync cursor;
-- частичный успех, когда отдельный Huawei scope временно недоступен;
-- локальный snapshot dashboard для быстрого и устойчивого открытия приложения.
-
-Dashboard использует ограниченные Health Connect reads, чтобы не создавать
-request storm и не исчерпывать quota провайдера.
+Корпоративное приложение пока игнорирует BitLut-origin workouts, хотя записи корректно присутствуют в Health Connect. Ведущая гипотеза — allowlist/trust policy источников на стороне reader app: Health Connect правильно указывает writer package `com.openhealth.sync`, а BitLut не может подменить `DataOrigin` Huawei.
 
 ## Интерфейс
 
-Интерфейс использует дизайн-систему **August v3** со светлой и тёмной темой
-(тёмная тема следует системной настройке устройства):
+Сохраняется August palette: Navy, Lime, Tangerine, Purple, Inter Variable и системные light/dark themes. Текущая UI-направленность — спокойная и content-first: плоские outlined cards, restrained hero depth, pill controls, удобные touch targets и минимальная анимация.
 
-- светлый Canvas `#F7F8FC` / тёмный Canvas — Navy `#151728`;
-- белые Surface-карточки / тёмные Surface-карточки — Navy Raised `#1C1E33`;
-- Navy `#151728` как тёмный архитектурный цвет в обеих темах;
-- Lime `#DFFF6A` для primary actions в обеих темах;
-- Tangerine `#F28500` для активных переключателей в настройках и кнопки
-  обновления в нижней навигации;
-- Purple `#6E5CF6` для focus и secondary interaction;
-- Inter Variable;
-- верхняя карточка Steps — тёмный Hero в обеих темах, показывает шаги и
-  дистанцию как два равнозначных крупных числа;
-- компактная нижняя навигация на native Compose без Haze, с лёгкой
-  пружинной анимацией при нажатии на каждую кнопку.
+Settings намеренно минимален: data source, единая группа connection/sync actions, Health Connect settings deep link и steps goal. Workout-filter UI удалён, но `WorkoutFilterPrefs` по-прежнему применяется в sync path.
 
-## Настройки
+## Проверка перед commit
 
-В разделе дневных целей остаётся только **цель по шагам** — единственная цель,
-которая сейчас реально используется продуктом.
-
-Настройки также включают:
-
-- выбор источника данных;
-- подключение Health Connect / HUAWEI Health;
-- ручную синхронизацию;
-- импорт архива HUAWEI;
-- CSV export;
-- фильтр тренировок;
-- управление виджетами;
-- диагностические и privacy-разделы.
-
-## Принципы данных
-
-> **Real data only.**
-
-BitLut записывает и показывает только данные, полученные от реального источника
-или корректно вычисленные из реальных исходных значений.
-
-Отсутствующее значение означает `—`, а не приблизительную цифру.
-
-## Технологии
-
-- Kotlin
-- Jetpack Compose
-- Android Health Connect
-- HUAWEI Health Kit
-- WorkManager
-- Gradle 8.9
-- Android Gradle Plugin 8.7.3
-- Kotlin 2.0.21
-- Java 17
-
-## Сборка в GitHub Codespaces
+Обязательны обе проверки:
 
 ```bash
-./gradlew :app:assembleDebug \
+./gradlew :app:assembleDebug :app:lintDebug \
   --no-daemon \
   --max-workers=1 \
   --no-watch-fs \
@@ -146,22 +48,4 @@ BitLut записывает и показывает только данные, �
   -Pkotlin.compiler.execution.strategy=in-process
 ```
 
-Перед commit сборка должна завершаться `BUILD SUCCESSFUL`.
-
-## Privacy
-
-BitLut работает локально и не имеет собственного backend для хранения health
-data. Актуальная политика находится в
-[`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md).
-
-## Для разработки
-
-Основные документы:
-
-- [`CLAUDE.md`](CLAUDE.md) — инженерные правила и invariants;
-- [`CONTEXT.md`](CONTEXT.md) — компактный текущий контекст;
-- [`SESSION_HANDOFF.md`](SESSION_HANDOFF.md) — состояние проекта для следующей сессии;
-- [`CHANGELOG.md`](CHANGELOG.md) — история изменений.
-
-Главный принцип разработки: **не ломать работающую синхронизацию ради UI и не
-выдумывать данные ради заполнения интерфейса**.
+Перед изменениями прочитайте `CLAUDE.md`, `CONTEXT.md`, `SESSION_HANDOFF.md` и `design.md`.

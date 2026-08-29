@@ -28,19 +28,12 @@ data class StreakState(
     val lastCountedDate: LocalDate?
 )
 
-data class AchievementSummary(
-    val totalSteps: Long = 0L,
-    val totalDistanceMeters: Double = 0.0,
-    val totalWorkouts: Int = 0,
-    val longestActiveStreakDays: Int = 0
-)
-
 /**
  * Activity-only achievements: personal records and goal streaks (v1.9.12,
  * sprint 4). Deliberately does not track anything outside the already
  * approved Huawei scope (steps, distance, calories, workout minutes) --
  * no sleep/heart-rate/stress records, matching the same activity-only
- * boundary enforced by DashboardWidget.
+ * product boundary.
  *
  * Health Connect's own aggregate queries only cover the range you ask for;
  * there is no "give me my best
@@ -156,34 +149,6 @@ class AchievementsStore(
             )
         )
     )
-
-    fun achievementSummary(): AchievementSummary {
-        val days = readHistory().values.sortedBy { it.date }
-        var currentActiveStreak = 0
-        var longestActiveStreak = 0
-        var previousActiveDate: LocalDate? = null
-
-        days.filter { it.isActiveDay() }.forEach { day ->
-            currentActiveStreak = if (previousActiveDate != null && day.date == previousActiveDate!!.plusDays(1)) {
-                currentActiveStreak + 1
-            } else {
-                1
-            }
-            longestActiveStreak = maxOf(longestActiveStreak, currentActiveStreak)
-            previousActiveDate = day.date
-        }
-
-        return AchievementSummary(
-            totalSteps = days.sumOf { it.steps },
-            totalDistanceMeters = days.sumOf { it.distanceMeters },
-            totalWorkouts = days.sumOf { it.workoutCount },
-            longestActiveStreakDays = longestActiveStreak
-        )
-    }
-
-    private fun DailyActivitySummary.isActiveDay(): Boolean =
-        steps > 0L || distanceMeters > 0.0 || caloriesKcal > 0.0 ||
-            elevationMeters > 0.0 || floors > 0.0 || workoutCount > 0
 
     private fun mergeDay(existing: DailyActivitySummary?, incoming: DailyActivitySummary): DailyActivitySummary {
         if (existing == null) return incoming

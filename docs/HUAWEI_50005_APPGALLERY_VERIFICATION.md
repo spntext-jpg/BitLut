@@ -1,5 +1,7 @@
 # Huawei Health Kit 50005 diagnosis
 
+> Historical diagnostic note. The application-level Huawei Health Kit scope was approved before the 2026-08-29 sprint. Keep this file for troubleshooting future 50005 regressions; it is not the current project blocker.
+
 ## Confirmed app behavior
 
 - Huawei authorization screen opens.

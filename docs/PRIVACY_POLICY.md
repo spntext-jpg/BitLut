@@ -20,10 +20,9 @@ BitLut does not upload health data to BitLut servers.
 BitLut does not operate a backend server.
 BitLut does not sell user data.
 
-## No fake data
+## Derived workout calorie estimate
 
-BitLut does not generate fake health records.
-BitLut does not create mock steps, mock workouts, mock calories, or placeholder health data.
+BitLut does not create mock steps, distance, workout sessions, elevation, or placeholder health records. If Huawei Health does not provide calories for a real workout, BitLut may calculate an estimated total calorie value from the real workout type/duration and local profile inputs and write it to Health Connect as `TotalCaloriesBurnedRecord`. This estimate is local, bounded to the real workout, and is never used to invent another health metric.
 
 ## Local processing
 

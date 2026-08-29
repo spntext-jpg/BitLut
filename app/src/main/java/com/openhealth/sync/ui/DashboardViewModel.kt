@@ -4,9 +4,7 @@ import com.openhealth.sync.data.HealthConnectManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.openhealth.sync.config.DashboardWidget
 import com.openhealth.sync.config.GoalPrefs
-import com.openhealth.sync.config.WidgetVisibilityPrefs
 import com.openhealth.sync.data.AchievementsStore
 import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.DashboardSnapshotCache
@@ -24,7 +22,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import com.openhealth.sync.data.AchievementSummary
 
 private const val TAG = "DashboardViewModel"
 
@@ -48,22 +45,17 @@ data class DashboardUiState(
      *  hardcoded to before goals became configurable, so existing installs
      *  see no change until they explicitly set a custom goal. */
     val stepsGoal: Long = GoalPrefs.DEFAULT_STEPS_GOAL,
-    val distanceGoalMeters: Double = GoalPrefs.DEFAULT_DISTANCE_GOAL_METERS,
-    val activeMinutesGoal: Int = GoalPrefs.DEFAULT_ACTIVE_MINUTES_GOAL,
-    val caloriesGoalKcal: Double = GoalPrefs.DEFAULT_CALORIES_GOAL,
     val distanceMeters: Double = 0.0,
     val caloriesKcal: Double = 0.0,
     val workoutMinutesToday: Long = 0L,
     val activeHoursToday: Int = 0,
     val recentWorkouts: List<ActivitySessionData> = emptyList(),
-    val visibleWidgets: Map<DashboardWidget, Boolean> = DashboardWidget.entries.associateWith { true },
     // ── Sprint 4: insights & trends (activity-only) ──────────────────────
     val bestStepsDay: PersonalRecord? = null,
     val bestDistanceDay: PersonalRecord? = null,
     val bestCaloriesDay: PersonalRecord? = null,
     val bestElevationDay: PersonalRecord? = null,
     val bestWorkoutDuration: PersonalRecord? = null,
-    val achievementSummary: AchievementSummary = AchievementSummary(),
     val elevationMetersToday: Double = 0.0,
     val floorsToday: Double = 0.0,
     val elevationMeters7d: Double = 0.0,
@@ -74,20 +66,11 @@ data class DashboardUiState(
     val streak: StreakState = StreakState(currentStreakDays = 0, longestStreakDays = 0, lastCountedDate = null)
 ) {
     val stepsProgress: Float get() = (stepsToday.toFloat() / stepsGoal.toFloat()).coerceIn(0f, 1f)
-    val distanceProgress: Float get() = (distanceMeters / distanceGoalMeters).toFloat().coerceIn(0f, 1f)
-    // activeMinutesProgress/caloriesProgress removed (2026-08): their only
-    // consumer was the removed activity-rings card (see DashboardCardType's
-    // doc comment in DashboardCardLayoutPrefs.kt for why). workoutMinutesToday
-    // and caloriesKcal themselves are untouched -- still real, synced data,
-    // just no longer paired with a goal-progress fraction nothing reads.
-
     /** True only when we've actually checked permissions and confirmed they're
      *  missing -- never true purely because we're still loading. The UI should
      *  use this (not the raw absence of data) to decide whether to show the
      *  "Connect Google Health" lock screen. */
     val showConnectLockScreen: Boolean get() = permissionsChecked && !hasPermissions
-
-    fun isWidgetVisible(widget: DashboardWidget): Boolean = visibleWidgets[widget] ?: true
 
     /** True if today's steps total is itself an all-time record in the making
      *  (i.e. already at or beyond the previously stored best). Used to show a
@@ -98,7 +81,6 @@ data class DashboardUiState(
 
 class DashboardViewModel(
     private val googleManager: HealthConnectManager,
-    private val widgetVisibilityPrefs: WidgetVisibilityPrefs,
     private val snapshotCache: DashboardSnapshotCache,
     private val goalPrefs: GoalPrefs,
     private val achievementsStore: AchievementsStore
@@ -157,36 +139,12 @@ class DashboardViewModel(
         load(force = true)
     }
 
-    /** Called from the Settings widget-visibility toggles. Persists immediately and
-     *  updates the in-memory state so Summary reflects the change without a
-     *  full reload (no Health Connect calls needed — this is purely a display
-     *  preference, not new data). */
-    fun setWidgetVisible(widget: DashboardWidget, visible: Boolean) {
-        widgetVisibilityPrefs.setVisible(widget, visible)
-        _state.update { it.copy(visibleWidgets = it.visibleWidgets + (widget to visible)) }
-    }
-
     /** Called from the Settings goals editor (v1.9.12, sprint 7). Persists
      *  immediately and updates in-memory state so progress rings/percentages
      *  reflect the new goal right away, without a Health Connect round-trip. */
     fun setStepsGoal(value: Long) {
         goalPrefs.setStepsGoal(value)
         _state.update { it.copy(stepsGoal = value) }
-    }
-
-    fun setDistanceGoalMeters(value: Double) {
-        goalPrefs.setDistanceGoalMeters(value)
-        _state.update { it.copy(distanceGoalMeters = value) }
-    }
-
-    fun setActiveMinutesGoal(value: Int) {
-        goalPrefs.setActiveMinutesGoal(value)
-        _state.update { it.copy(activeMinutesGoal = value) }
-    }
-
-    fun setCaloriesGoalKcal(value: Double) {
-        goalPrefs.setCaloriesGoalKcal(value)
-        _state.update { it.copy(caloriesGoalKcal = value) }
     }
 
     /** Builds the very first state synchronously from whatever is on disk, so the
@@ -201,7 +159,7 @@ class DashboardViewModel(
             null
         }
 
-        val goalsBase = readGoalsIntoState(DashboardUiState(visibleWidgets = widgetVisibilityPrefs.snapshot()))
+        val goalsBase = readGoalsIntoState(DashboardUiState())
         val base = readAchievementsIntoState(goalsBase)
         if (cached == null) return base
 
@@ -252,10 +210,7 @@ class DashboardViewModel(
     }
 
     private fun readGoalsIntoState(state: DashboardUiState): DashboardUiState = state.copy(
-        stepsGoal = goalPrefs.stepsGoal(),
-        distanceGoalMeters = goalPrefs.distanceGoalMeters(),
-        activeMinutesGoal = goalPrefs.activeMinutesGoal(),
-        caloriesGoalKcal = goalPrefs.caloriesGoalKcal()
+        stepsGoal = goalPrefs.stepsGoal()
     )
 
     private fun readAchievementsIntoState(state: DashboardUiState): DashboardUiState = try {
@@ -265,7 +220,6 @@ class DashboardViewModel(
             bestCaloriesDay = achievementsStore.bestCaloriesDay(),
             bestElevationDay = achievementsStore.bestElevationMetersDay(),
             bestWorkoutDuration = achievementsStore.bestWorkoutDurationMinutes(),
-            achievementSummary = achievementsStore.achievementSummary(),
             streak = achievementsStore.readStreak()
         )
     } catch (e: Exception) {
@@ -424,7 +378,6 @@ class DashboardViewModel(
 
         fun provideFactory(
             googleManager: HealthConnectManager,
-            widgetVisibilityPrefs: WidgetVisibilityPrefs,
             snapshotCache: DashboardSnapshotCache,
             goalPrefs: GoalPrefs,
             achievementsStore: AchievementsStore
@@ -432,7 +385,7 @@ class DashboardViewModel(
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    DashboardViewModel(googleManager, widgetVisibilityPrefs, snapshotCache, goalPrefs, achievementsStore) as T
+                    DashboardViewModel(googleManager, snapshotCache, goalPrefs, achievementsStore) as T
             }
     }
 }
