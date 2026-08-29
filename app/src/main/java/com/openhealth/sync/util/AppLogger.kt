@@ -10,7 +10,6 @@ import java.util.Locale
 
 object AppLogger {
     private const val MAX_LOG_ENTRIES = 120
-    private const val MAX_LOG_MESSAGE_LENGTH = 700
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs = _logs.asStateFlow()
 
@@ -33,13 +32,7 @@ object AppLogger {
         _logs.value = (listOf("[$time] $level/$tag: $message") + _logs.value).take(MAX_LOG_ENTRIES)
     }
 
-    private fun sanitizeLogMessage(message: String): String =
-        if (message.length <= MAX_LOG_MESSAGE_LENGTH) {
-            message
-        } else {
-            message.take(MAX_LOG_MESSAGE_LENGTH) + "…"
-        }
-
+    fun d(tag: String, msg: String) {
     fun d(tag: String, msg: String) {
         Log.d(tag, msg)
         addLog("D", tag, msg)

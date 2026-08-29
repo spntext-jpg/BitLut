@@ -54,7 +54,6 @@ import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.HuaweiAuthFailureReason
 import com.openhealth.sync.data.PersonalRecord
 import com.openhealth.sync.data.StreakState
-import com.openhealth.sync.data.WeekComparison
 import com.openhealth.sync.config.DashboardWidget
 import com.openhealth.sync.config.HealthDataSource
 import com.openhealth.sync.ui.DashboardUiState
@@ -70,15 +69,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.Watch
-import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.DirectionsWalk
 import androidx.compose.material.icons.rounded.DirectionsBike
@@ -748,57 +743,27 @@ private fun SevenDayStat(
  */
 private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
     ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> Icons.Rounded.DirectionsWalk
-    ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> Icons.Rounded.DirectionsBike
+    ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
+    ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> Icons.Rounded.DirectionsBike
     ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
     ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> Icons.Rounded.Pool
     ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
-    ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> Icons.Rounded.FitnessCenter
+    ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING,
+    ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> Icons.Rounded.FitnessCenter
     ExerciseSessionRecord.EXERCISE_TYPE_YOGA,
     ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> Icons.Rounded.SelfImprovement
     ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> Icons.Rounded.Hiking
+    ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
+    ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> Icons.Rounded.DirectionsRun
     else -> Icons.Rounded.DirectionsRun
 }
 
 /**
- * Duration/Distance/Avg speed on every workout card, for every exercise
- * type. The 4th slot (Steps) is shown for every type EXCEPT biking and
- * walking.
- *
- * Biking has no 4th slot at all as of this hotfix (2026-08-22, third
- * revision same day): Steps is semantically wrong for cycling (that's what
- * started this whole chain of fixes), but neither of the two logical
- * alternatives -- Elevation gain, then Active Calories -- actually renders
- * in practice on real devices. ActivitySessionData only carries four data
- * fields total (distanceMeters, activeCaloriesKcal, elevationMeters,
- * steps); Distance is already slot 2, so Elevation and Active Calories
- * were the only two candidates left for a biking-specific 4th slot, and
- * both came back empty on confirmed real bike-ride data. Rather than pick
- * a metric that's "logical" but shows an em dash almost every time, biking
- * cards now show three real metrics instead of four possibly-empty ones.
- * WorkoutStatsGrid's chunked(2) layout already handled odd-length lists
- * correctly before this change (a lone last-row item gets a balancing
- * Spacer(weight(1f)), not a full-width stretch) -- see WorkoutStatsGrid's
- * own logic -- so no layout change was needed for the 3-metric case.
- *
- * Walking drops the same Steps slot (2026-08-27) for a product reason
- * rather than a missing-data reason: on a walking session, Steps is
- * redundant with Distance/Avg speed rather than adding new information, so
- * the card was trimmed to the same three-slot layout already used for
- * biking. This is a display-only change -- ActivitySessionData.steps is
- * still read/synced for CSV export, daily totals, and the Steps Hero card;
- * only this specific card's walking display narrowed.
- *
- * History, all same day (2026-08-22): six-slot -> four-slot (dropped
- * Active Calories and Elevation everywhere); biking's slot 4 became
- * Elevation gain; hotfixed to Active Calories after Elevation didn't
- * render; hotfixed again to no 4th slot at all after Active Calories
- * didn't render either. Both fields are untouched in ActivitySessionData
- * itself -- still read/synced for CSV export and daily totals; only this
- * card's biking-specific display narrowed further.
- *
- * Values come from real imported Health Connect data; average speed is
- * derived only from real distance and duration. Missing source values
- * remain an em dash.
+ * Exercise-aware workout summary. Duration is always shown. Additional
+ * metrics appear only when the source supplied a meaningful value for that
+ * exercise family; the dashboard does not invent speed, distance, steps, or
+ * elevation. The only estimate retained is the previously-approved calorie
+ * fallback for strength/weightlifting.
  */
 private data class WorkoutMetricDisplay(val label: String, val value: String)
 
@@ -808,17 +773,14 @@ private fun workoutMetricDisplays(
     durationMinutes: Long,
     exerciseType: Int?
 ): List<WorkoutMetricDisplay> {
-    // BITLUT_WORKOUT_INTEROP_V2_COMPOSE_FIX
-    // Keep all stringResource() calls in this @Composable scope. V1 moved
-    // them into ordinary local helper functions, which Compose correctly
-    // rejects as non-composable invocation contexts.
-    val noData = stringResource(R.string.no_data_short)
+    // BITLUT_WORKOUT_HARDENING_V3
     val durationLabel = stringResource(R.string.workout_stat_duration_label)
     val distanceLabel = stringResource(R.string.workout_stat_distance_label)
     val paceLabel = stringResource(R.string.workout_stat_pace_label)
     val speedLabel = stringResource(R.string.workout_stat_speed_label)
     val stepsLabel = stringResource(R.string.workout_stat_steps_label)
     val caloriesLabel = stringResource(R.string.workout_stat_calories_label)
+    val elevationLabel = stringResource(R.string.workout_stat_elevation_label)
     val swimPaceLabel = stringResource(R.string.workout_stat_swim_pace_label)
 
     val durationDisplay = WorkoutMetricDisplay(
@@ -828,139 +790,134 @@ private fun workoutMetricDisplays(
 
     val durationMs = (session.endTimeMs - session.startTimeMs).coerceAtLeast(0L)
     val durationMinutesExact = durationMs.toDouble() / 60_000.0
+    val durationHours = durationMs.toDouble() / 3_600_000.0
     val distanceMeters = session.distanceMeters?.takeIf { it > 0.0 }
     val distanceKm = distanceMeters?.div(1000.0)
     val steps = session.steps?.takeIf { it > 0L }
+    val elevationMeters = session.elevationMeters?.takeIf { it > 0.0 }
     val measuredCaloriesKcal = session.totalCaloriesKcal?.takeIf { it > 0.0 }
         ?: session.activeCaloriesKcal?.takeIf { it > 0.0 }
 
-    val distanceDisplay = WorkoutMetricDisplay(
-        distanceLabel,
-        distanceKm?.let {
+    val distanceDisplay = distanceKm?.let {
+        WorkoutMetricDisplay(
+            distanceLabel,
             stringResource(R.string.distance_today_value, formatOneDecimal(it))
-        } ?: noData
-    )
-
-    val measuredCaloriesDisplay = WorkoutMetricDisplay(
-        caloriesLabel,
-        measuredCaloriesKcal?.let {
+        )
+    }
+    val stepsDisplay = steps?.let {
+        WorkoutMetricDisplay(stepsLabel, formatNumber(it))
+    }
+    val elevationDisplay = elevationMeters?.let {
+        WorkoutMetricDisplay(
+            elevationLabel,
+            stringResource(R.string.dashboard_elevation_value, formatNumber(it.toLong()))
+        )
+    }
+    val measuredCaloriesDisplay = measuredCaloriesKcal?.let {
+        WorkoutMetricDisplay(
+            caloriesLabel,
             stringResource(R.string.workout_calories_value, formatNumber(it.toLong()))
-        } ?: noData
-    )
+        )
+    }
 
-    val stepsDisplay = WorkoutMetricDisplay(
-        stepsLabel,
-        steps?.let(::formatNumber) ?: noData
-    )
-
-    val paceMinutesPerKm = if (
+    val paceDisplay = if (
         distanceKm != null &&
         distanceMeters >= MIN_DISTANCE_METERS_FOR_PACE &&
         durationMinutesExact > 0.0
     ) {
-        durationMinutesExact / distanceKm
+        WorkoutMetricDisplay(
+            paceLabel,
+            stringResource(R.string.workout_pace_value, formatPace(durationMinutesExact / distanceKm))
+        )
     } else {
         null
     }
-    val paceDisplay = WorkoutMetricDisplay(
-        paceLabel,
-        paceMinutesPerKm?.let {
-            stringResource(R.string.workout_pace_value, formatPace(it))
-        } ?: noData
-    )
 
-    val durationHours = durationMs.toDouble() / 3_600_000.0
-    val averageSpeedKmh = if (
+    val speedDisplay = if (
         distanceKm != null &&
         distanceMeters >= MIN_DISTANCE_METERS_FOR_SPEED &&
         durationHours > 0.0
     ) {
-        distanceKm / durationHours
+        WorkoutMetricDisplay(
+            speedLabel,
+            stringResource(R.string.workout_speed_value, formatOneDecimal(distanceKm / durationHours))
+        )
     } else {
         null
     }
-    val speedDisplay = WorkoutMetricDisplay(
-        speedLabel,
-        averageSpeedKmh?.let {
-            stringResource(R.string.workout_speed_value, formatOneDecimal(it))
-        } ?: noData
-    )
 
-    val swimPaceMinutesPer100m = if (
+    val swimPaceDisplay = if (
         distanceMeters != null &&
         distanceMeters >= MIN_DISTANCE_METERS_FOR_SWIM_PACE &&
         durationMinutesExact > 0.0
     ) {
-        durationMinutesExact / (distanceMeters / 100.0)
+        WorkoutMetricDisplay(
+            swimPaceLabel,
+            stringResource(
+                R.string.workout_swim_pace_value,
+                formatPace(durationMinutesExact / (distanceMeters / 100.0))
+            )
+        )
     } else {
         null
     }
-    val swimPaceDisplay = WorkoutMetricDisplay(
-        swimPaceLabel,
-        swimPaceMinutesPer100m?.let {
-            stringResource(R.string.workout_swim_pace_value, formatPace(it))
-        } ?: noData
-    )
 
-    val isFootDistance = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WALKING ||
-        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_RUNNING ||
-        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_HIKING
-    if (isFootDistance) {
-        return listOf(durationDisplay, distanceDisplay, paceDisplay, stepsDisplay)
-    }
+    fun metrics(vararg values: WorkoutMetricDisplay?): List<WorkoutMetricDisplay> =
+        buildList {
+            add(durationDisplay)
+            values.forEach { value -> if (value != null) add(value) }
+        }.take(4)
 
-    if (exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_BIKING) {
-        return listOf(durationDisplay, distanceDisplay, speedDisplay, measuredCaloriesDisplay)
-    }
+    return when (exerciseType) {
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL ->
+            metrics(distanceDisplay, paceDisplay, stepsDisplay, measuredCaloriesDisplay)
 
-    val isSwimming = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER ||
-        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL
-    if (isSwimming) {
-        return listOf(durationDisplay, distanceDisplay, swimPaceDisplay, measuredCaloriesDisplay)
-    }
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING ->
+            metrics(distanceDisplay, elevationDisplay, measuredCaloriesDisplay, stepsDisplay)
 
-    val isStrengthLike = exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING ||
-        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING ||
-        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING
-    if (isStrengthLike) {
-        // Only strength/weightlifting retain the previously-approved MET
-        // fallback. Huawei summary calories win whenever they are present.
-        val kcal = measuredCaloriesKcal ?: if (
-            exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING ||
-            exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING
-        ) {
-            WorkoutCalorieEstimator.estimateTotalCaloriesKcal(
-                exerciseType,
-                session.startTimeMs,
-                session.endTimeMs
-            )
-        } else {
-            null
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING ->
+            metrics(distanceDisplay, speedDisplay, measuredCaloriesDisplay, elevationDisplay)
+
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY ->
+            metrics(measuredCaloriesDisplay, distanceDisplay, speedDisplay)
+
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL ->
+            metrics(distanceDisplay, swimPaceDisplay, measuredCaloriesDisplay)
+
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
+        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> {
+            val kcal = measuredCaloriesKcal
+                ?: WorkoutCalorieEstimator.estimateTotalCaloriesKcal(
+                    exerciseType,
+                    session.startTimeMs,
+                    session.endTimeMs
+                )
+            val caloriesDisplay = kcal?.let {
+                WorkoutMetricDisplay(
+                    caloriesLabel,
+                    stringResource(R.string.workout_calories_value, formatNumber(it.toLong()))
+                )
+            }
+            metrics(caloriesDisplay)
         }
-        val caloriesValue = kcal?.let {
-            stringResource(R.string.workout_calories_value, formatNumber(it.toLong()))
-        } ?: noData
-        return listOf(
-            durationDisplay,
-            WorkoutMetricDisplay(caloriesLabel, caloriesValue)
+
+        ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING,
+        ExerciseSessionRecord.EXERCISE_TYPE_YOGA,
+        ExerciseSessionRecord.EXERCISE_TYPE_PILATES ->
+            metrics(measuredCaloriesDisplay)
+
+        else -> metrics(
+            measuredCaloriesDisplay,
+            distanceDisplay,
+            elevationDisplay,
+            stepsDisplay
         )
     }
-
-    if (exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_YOGA ||
-        exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_PILATES
-    ) {
-        return listOf(durationDisplay, measuredCaloriesDisplay)
-    }
-
-    // Generic sports never invent speed. Surface only real metrics that are
-    // meaningful enough to exist for this session.
-    return buildList {
-        add(durationDisplay)
-        if (measuredCaloriesKcal != null) add(measuredCaloriesDisplay)
-        if (distanceMeters != null) add(distanceDisplay)
-        if (steps != null) add(stepsDisplay)
-    }.take(4)
 }
+
 @Composable
 private fun WorkoutRecencyCard(
     palette: BitPalette,
@@ -1131,206 +1088,6 @@ private fun formatPace(minutesPerUnit: Double): String {
 private const val MIN_DISTANCE_METERS_FOR_PACE = 500.0
 private const val MIN_DISTANCE_METERS_FOR_SPEED = 500.0
 private const val MIN_DISTANCE_METERS_FOR_SWIM_PACE = 100.0
-
-private fun formatWorkoutClockTime(epochMs: Long): String =
-    java.time.Instant.ofEpochMilli(epochMs)
-        .atZone(java.time.ZoneId.systemDefault())
-        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault()))
-
-private fun formatWorkoutDateTime(epochMs: Long): String =
-    java.time.Instant.ofEpochMilli(epochMs)
-        .atZone(java.time.ZoneId.systemDefault())
-        .format(
-            java.time.format.DateTimeFormatter.ofPattern(
-                "d MMM · HH:mm",
-                Locale.getDefault()
-            )
-        )
-
-private val workoutCadenceLabel = Regex(
-    pattern = "(?i)(макс(?:имальный)?\\.?\\s*каденс|max(?:imum)?\\.?\\s*cadence)"
-)
-
-private fun cleanWorkoutCardTitle(raw: String): String {
-    val normalized = raw.replace('\r', '\n').trim()
-    val match = workoutCadenceLabel.find(normalized)
-    val cleaned = if (match != null) normalized.substring(0, match.range.first) else normalized
-    return cleaned
-        .trim(' ', '\n', '\t', '·', '•', '|', ';', ':', '-')
-        .ifBlank {
-            normalized.lineSequence()
-                .map { it.trim() }
-                .firstOrNull { it.isNotBlank() && !workoutCadenceLabel.containsMatchIn(it) }
-                ?: normalized
-        }
-}
-
-@Composable
-private fun DashboardWidgetGrid(
-    palette: BitPalette,
-    state: DashboardUiState
-) {
-    val tiles = listOfNotNull(
-        if (state.isWidgetVisible(DashboardWidget.CALORIES))
-            Triple(stringResource(R.string.calories_active_title), "${state.caloriesKcal.toLong()}", stringResource(R.string.kcal_unit)) to HealthAccent.activity() else null,
-        if (state.isWidgetVisible(DashboardWidget.WORKOUT_MINUTES))
-            Triple(stringResource(R.string.workout_minutes_title), "${state.workoutMinutesToday}", stringResource(R.string.minutes_short)) to HealthAccent.activity() else null,
-        if (state.isWidgetVisible(DashboardWidget.ACTIVE_HOURS))
-            Triple(stringResource(R.string.active_hours_title), "${state.activeHoursToday}", stringResource(R.string.hours_short)) to HealthAccent.mind() else null
-    )
-
-    if (tiles.isEmpty()) return
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        tiles.chunked(2).forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                row.forEach { item ->
-                    val data = item.first
-                    MiniMetricWidget(
-                        palette = palette,
-                        title = data.first,
-                        value = data.second,
-                        unit = data.third,
-                        accent = item.second,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun MiniMetricWidget(
-    palette: BitPalette,
-    title: String,
-    value: String,
-    unit: String,
-    accent: Color,
-    modifier: Modifier = Modifier
-) {
-    SoftCard(palette = palette, modifier = modifier, accent = accent, hero = false, tintWithAccent = true) {
-        Text(title, color = palette.secondaryText, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(6.dp))
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, color = palette.text, fontWeight = FontWeight.Black, fontSize = 24.sp, maxLines = 1)
-            Spacer(Modifier.width(4.dp))
-            Text(unit, color = accent, fontWeight = FontWeight.Black, fontSize = 12.sp, modifier = Modifier.padding(bottom = 3.dp))
-        }
-    }
-}
-
-/**
- * Week-over-week comparison card (v1.9.12, sprint 4). Shows steps/distance/
- * calories change vs the previous 7 days as a signed percentage, or "first
- * tracked week" copy when there's no previous-week baseline to compare
- * against (WeekComparison.*PercentChange() returns null in that case).
- */
-@Composable
-private fun WeeklyComparisonCard(palette: BitPalette, comparison: WeekComparison) {
-    SoftCard(palette = palette, accent = HealthAccent.mind(), tintWithAccent = true) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.TrendingUp, contentDescription = null, tint = HealthAccent.mind(), modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = stringResource(R.string.insights_week_comparison_title),
-                color = palette.text,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            WeekChangeStat(
-                modifier = Modifier.weight(1f),
-                palette = palette,
-                label = stringResource(R.string.steps_today),
-                percentChange = comparison.stepsPercentChange()
-            )
-            WeekChangeStat(
-                modifier = Modifier.weight(1f),
-                palette = palette,
-                label = stringResource(R.string.distance_short_title),
-                percentChange = comparison.distancePercentChange()
-            )
-            WeekChangeStat(
-                modifier = Modifier.weight(1f),
-                palette = palette,
-                label = stringResource(R.string.calories_active_title),
-                percentChange = comparison.caloriesPercentChange()
-            )
-        }
-    }
-}
-
-@Composable
-private fun WeekChangeStat(
-    palette: BitPalette,
-    label: String,
-    percentChange: Int?,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(4.dp))
-        if (percentChange == null) {
-            Text(
-                stringResource(R.string.insights_first_week),
-                color = palette.secondaryText,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp
-            )
-        } else {
-            val positive = percentChange >= 0
-            if (positive) {
-                // August design system integration, phase 2 (see
-                // AugustTokens.kt): this is the app's first real "growth"
-                // moment -- a week-over-week improvement -- and the doc's
-                // own named pattern for exactly this ("Growth: Lime with
-                // Navy text. Never use Lime text on white", section 3.1) is
-                // a small dark-backed badge, not bare colored text on the
-                // ambient card. A bare Lime number on this app's white/light
-                // cards measures at 1.14:1 contrast (computed) -- unreadable
-                // -- which is why this badge uses its own fixed Navy backing
-                // rather than relying on HealthAccent.mind() (Lime only in
-                // dark mode as of 2026-08-22; still InkSoft in light mode,
-                // so it was never a Lime-on-white risk for HealthAccent
-                // itself, but Lime needs its own dark backing per call site
-                // regardless of theme, not a global color swap). Navy is
-                // used as a fixed badge color in both light and dark theme,
-                // matching the doc's literal "Lime with Navy text" pairing
-                // rather than following the surrounding card's theme.
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(AugustRadius.Pill))
-                        .background(AugustColor.Navy)
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = "+$percentChange%",
-                        color = AugustColor.GrowthLime,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 14.sp
-                    )
-                }
-            } else {
-                Text(
-                    text = "$percentChange%",
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 18.sp
-                )
-            }
-        }
-    }
-}
 
 /**
  * All-time personal records card (v1.9.12, sprint 4). Only renders the
@@ -2138,35 +1895,6 @@ private fun SecondaryButton(
 }
 
 @Composable
-private fun MinimalTopBar(
-    palette: BitPalette,
-    title: String,
-    action: String,
-    onAction: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            color = palette.text,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 30.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        PrimaryButton(
-            text = action,
-            modifier = Modifier.wrapContentWidth(),
-            onClick = onAction
-        )
-    }
-}
-
-@Composable
 private fun MinimalHeader(
     palette: BitPalette,
     title: String,
@@ -2524,77 +2252,6 @@ private fun DashboardLoadingCard(palette: BitPalette) {
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp
             )
-        }
-    }
-}
-
-/**
- * Square tile for the 2x2 Summary grid (calories/workout-minutes/active-hours
- * sit side by side under the full-width Steps hero card). Follows the
- * "traffic light" rule: exactly three elements on the tile — a filled icon
- * chip, one large value, one small label. No secondary text, no extra rows —
- * the number does the talking.
- */
-@Composable
-private fun MinimalSquareTile(
-    palette: BitPalette,
-    icon: String,
-    label: String,
-    value: String,
-    accent: Color,
-    modifier: Modifier = Modifier.fillMaxWidth(),
-    progress: Float? = null,
-    onClick: (() -> Unit)? = null
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val tileModifier = if (onClick != null) {
-        modifier
-            .pressScale(interactionSource)
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
-    } else {
-        modifier
-    }
-    SoftCard(palette = palette, modifier = tileModifier, accent = accent, hero = false, tintWithAccent = true) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 132.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            if (progress != null) {
-                ProgressRingChip(progress = progress, accent = accent, size = 40.dp, centerText = icon)
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(accent.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(icon, color = accent, fontSize = 17.sp, fontWeight = FontWeight.Black)
-                }
-            }
-            Column {
-                Text(
-                    text = value,
-                    color = palette.text,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 38.sp,
-                    lineHeight = 40.sp,
-                    letterSpacing = (-1.5).sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = label.uppercase(Locale.getDefault()),
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
         }
     }
 }

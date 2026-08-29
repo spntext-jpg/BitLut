@@ -13,7 +13,6 @@ import com.openhealth.sync.data.DashboardSnapshotCache
 import com.openhealth.sync.data.GoogleDashboardSnapshot
 import com.openhealth.sync.data.PersonalRecord
 import com.openhealth.sync.data.StreakState
-import com.openhealth.sync.data.WeekComparison
 import com.openhealth.sync.util.AppLogger
 import java.time.Instant
 import java.time.LocalDate
@@ -59,7 +58,6 @@ data class DashboardUiState(
     val recentWorkouts: List<ActivitySessionData> = emptyList(),
     val visibleWidgets: Map<DashboardWidget, Boolean> = DashboardWidget.entries.associateWith { true },
     // ── Sprint 4: insights & trends (activity-only) ──────────────────────
-    val weekComparison: WeekComparison? = null,
     val bestStepsDay: PersonalRecord? = null,
     val bestDistanceDay: PersonalRecord? = null,
     val bestCaloriesDay: PersonalRecord? = null,

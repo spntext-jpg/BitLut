@@ -5,7 +5,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -679,13 +678,13 @@ class HuaweiHealthManager(
             val recordId = activityRecordString(record, "getId")
             val rawType = activityRecordString(record, "getActivityTypeId", "getActivityType")
             val rawName = activityRecordString(record, "getName")
-            val canonicalType = canonicalHuaweiActivityName(rawType)
+            val canonicalType = HuaweiWorkoutTypeMapper.canonicalName(rawType)
+            val exerciseType = HuaweiWorkoutTypeMapper.healthConnectType(canonicalType)
+                ?: return@mapNotNull null
             val title = rawName
                 ?.trim()
                 ?.takeIf { it.isNotBlank() && !isSyntheticHuaweiActivityName(it, recordId) }
                 ?: canonicalType
-
-            val exerciseType = mapHuaweiExerciseType(canonicalType)
             val summary = readActivityRecordSummary(record)
             val recordDistanceMeters = summary.distanceMeters
                 ?: readActivityRecordDistance(reply, record, distanceDetailFields)
@@ -852,225 +851,6 @@ class HuaweiHealthManager(
         val trimmed = name.trim()
         return trimmed.equals(recordId, ignoreCase = true) ||
             SYNTHETIC_HUAWEI_ACTIVITY_NAME.matches(trimmed)
-    }
-
-    private val huaweiActivityTypeNames: Map<Int, String> = mapOf(
-        1 to "aerobics",
-        2 to "archery",
-        3 to "badminton",
-        4 to "baseball",
-        5 to "basketball",
-        6 to "biathlon",
-        7 to "boxing",
-        8 to "calisthenics",
-        9 to "circuit training",
-        10 to "cricket",
-        11 to "crossfit",
-        12 to "curling",
-        13 to "cycling",
-        14 to "dancing",
-        15 to "diving",
-        16 to "elevator",
-        17 to "elliptical",
-        18 to "ergometer",
-        19 to "escalator",
-        20 to "fencing",
-        21 to "american football",
-        22 to "australian football",
-        23 to "football",
-        24 to "flying disc",
-        25 to "gardening",
-        26 to "golf",
-        27 to "gymnastics",
-        28 to "handball",
-        29 to "hiit",
-        30 to "hiking",
-        31 to "hockey",
-        32 to "horse riding",
-        33 to "housework",
-        34 to "ice skating",
-        35 to "in vehicle",
-        36 to "interval training",
-        37 to "jumping rope",
-        38 to "kayaking",
-        39 to "kettlebell training",
-        40 to "kickboxing",
-        41 to "kitesurfing",
-        42 to "martial arts",
-        43 to "mixed martial arts",
-        44 to "meditation",
-        45 to "on foot",
-        46 to "other",
-        47 to "p90x",
-        48 to "paragliding",
-        49 to "pilates",
-        50 to "polo",
-        51 to "racquetball",
-        52 to "rock climbing",
-        53 to "rowing",
-        54 to "rowing machine",
-        55 to "rugby",
-        56 to "running",
-        57 to "indoor running",
-        58 to "sailing",
-        59 to "scuba diving",
-        60 to "scooter riding",
-        61 to "skateboarding",
-        62 to "skating",
-        63 to "skiing",
-        64 to "sledding",
-        65 to "sleep",
-        70 to "snowboarding",
-        71 to "snowmobile",
-        72 to "snowshoeing",
-        73 to "softball",
-        74 to "squash",
-        75 to "stair climbing",
-        76 to "stair climbing machine",
-        77 to "standup paddleboarding",
-        78 to "still",
-        79 to "strength training",
-        80 to "surfing",
-        81 to "swimming",
-        82 to "open water swimming",
-        83 to "pool swimming",
-        84 to "table tennis",
-        85 to "team sports",
-        86 to "tennis",
-        87 to "tilting",
-        88 to "volleyball",
-        89 to "wakeboarding",
-        90 to "walking",
-        91 to "water polo",
-        92 to "weightlifting",
-        93 to "wheelchair",
-        94 to "windsurfing",
-        95 to "yoga",
-        96 to "zumba",
-        97 to "indoor cycling",
-        98 to "darts",
-        99 to "billiards",
-        100 to "shuttlecock",
-        101 to "bowling",
-        102 to "group calisthenics",
-        103 to "tug of war",
-        104 to "beach soccer",
-        105 to "beach volleyball",
-        106 to "gateball",
-        107 to "sepaktakraw",
-        108 to "dodge ball",
-        109 to "treadmill",
-        110 to "spinning",
-        111 to "stroll machine",
-        112 to "cross fit",
-        113 to "functional training",
-        114 to "physical training",
-        115 to "belly dance",
-        116 to "jazz",
-        117 to "latin dance",
-        118 to "ballet",
-        119 to "core training",
-        120 to "horizontal bar",
-        121 to "parallel bars",
-        122 to "hip hop",
-        123 to "square dance",
-        124 to "hula hoop",
-        125 to "bmx",
-        126 to "orienteering",
-        127 to "indoor walking",
-        128 to "indoor running",
-        129 to "mountain climbing",
-        130 to "trail running",
-        131 to "roller skating",
-        132 to "hunting",
-        133 to "fly a kite",
-        134 to "swing",
-        135 to "obstacle race",
-        136 to "bungee jumping",
-        137 to "parkour",
-        138 to "parachute",
-        139 to "racing car",
-        140 to "triathlon",
-        141 to "ice hockey",
-        142 to "cross country skiing",
-        143 to "sled",
-        144 to "fishing",
-        145 to "drifting",
-        146 to "dragon boat",
-        147 to "motorboat",
-        148 to "standup paddleboarding",
-        149 to "free sparring",
-        150 to "karate",
-        151 to "body combat",
-        152 to "kendo",
-        153 to "tai chi",
-    )
-
-    private fun canonicalHuaweiActivityName(rawType: String?): String {
-        val normalized = rawType.orEmpty().trim().lowercase(Locale.ROOT)
-        val numericType = normalized.toIntOrNull()
-
-        if (numericType != null) {
-            return huaweiActivityTypeNames[numericType] ?: "workout"
-        }
-
-        return normalized
-            .takeIf { it.isNotBlank() && it != "unknown" }
-            ?.replace('_', ' ')
-            ?.replace('.', ' ')
-            ?: "workout"
-    }
-
-    private fun mapHuaweiExerciseType(canonicalType: String): Int {
-        val type = canonicalType.lowercase(Locale.ROOT)
-        val constantName = when {
-            "american football" in type -> "EXERCISE_TYPE_FOOTBALL_AMERICAN"
-            "australian football" in type -> "EXERCISE_TYPE_FOOTBALL_AUSTRALIAN"
-            "football" in type || "soccer" in type -> "EXERCISE_TYPE_SOCCER"
-            "trail running" in type || "run" in type || "marathon" in type -> "EXERCISE_TYPE_RUNNING"
-            "cycl" in type || "bike" in type || "spinning" in type || type == "bmx" -> "EXERCISE_TYPE_BIKING"
-            "open water" in type -> "EXERCISE_TYPE_SWIMMING_OPEN_WATER"
-            "swim" in type -> "EXERCISE_TYPE_SWIMMING_POOL"
-            "hik" in type || "mountain climb" in type || "snowshoe" in type -> "EXERCISE_TYPE_HIKING"
-            "rowing machine" in type -> "EXERCISE_TYPE_ROWING_MACHINE"
-            "row" in type -> "EXERCISE_TYPE_ROWING"
-            "ellipt" in type || "ergometer" in type -> "EXERCISE_TYPE_ELLIPTICAL"
-            "hiit" in type || "interval" in type || "circuit training" in type ||
-                "crossfit" in type || "cross fit" in type || type == "p90x" ->
-                "EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING"
-            "strength" in type || "weight" in type || "kettlebell" in type ||
-                "functional training" in type || "physical training" in type ||
-                "core training" in type || "calisthenics" in type ||
-                "horizontal bar" in type || "parallel bars" in type ->
-                "EXERCISE_TYPE_STRENGTH_TRAINING"
-            "yoga" in type -> "EXERCISE_TYPE_YOGA"
-            "walk" in type || type == "on foot" -> "EXERCISE_TYPE_WALKING"
-            "cross country skiing" in type -> "EXERCISE_TYPE_SKIING"
-            type == "skiing" -> "EXERCISE_TYPE_SKIING"
-            "snowboard" in type -> "EXERCISE_TYPE_SNOWBOARDING"
-            "skating" in type -> "EXERCISE_TYPE_SKATING"
-            type == "tennis" -> "EXERCISE_TYPE_TENNIS"
-            "table tennis" in type -> "EXERCISE_TYPE_TABLE_TENNIS"
-            "basketball" in type -> "EXERCISE_TYPE_BASKETBALL"
-            "volleyball" in type -> "EXERCISE_TYPE_VOLLEYBALL"
-            "badminton" in type -> "EXERCISE_TYPE_BADMINTON"
-            "baseball" in type || "softball" in type -> "EXERCISE_TYPE_BASEBALL"
-            "boxing" in type || "kickboxing" in type || "body combat" in type -> "EXERCISE_TYPE_BOXING"
-            "dancing" in type || "dance" in type || "aerobics" in type ||
-                type == "zumba" || type == "jazz" || type == "ballet" || type == "hip hop" ->
-                "EXERCISE_TYPE_DANCING"
-            "pilates" in type -> "EXERCISE_TYPE_PILATES"
-            "golf" in type -> "EXERCISE_TYPE_GOLF"
-            else -> "EXERCISE_TYPE_OTHER_WORKOUT"
-        }
-
-        return try {
-            androidx.health.connect.client.records.ExerciseSessionRecord::class.java
-                .getField(constantName)
-                .getInt(null)
-        } catch (_: Exception) {
-            androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
-        }
     }
 
     private suspend fun readMetric(

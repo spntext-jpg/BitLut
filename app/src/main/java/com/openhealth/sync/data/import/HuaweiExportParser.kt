@@ -6,6 +6,7 @@ import com.openhealth.sync.data.ActiveCaloriesData
 import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.DistanceData
 import com.openhealth.sync.data.HuaweiHealthSnapshot
+import com.openhealth.sync.data.HuaweiWorkoutTypeMapper
 import com.openhealth.sync.data.StepData
 import com.openhealth.sync.util.AppLogger
 import org.json.JSONArray
@@ -126,7 +127,7 @@ class HuaweiExportParser(private val context: Context) {
         val distinctSteps = steps.distinctBy { Triple(it.startTimeMs, it.endTimeMs, it.count) }
         val distinctDistances = distances.distinctBy { Triple(it.startTimeMs, it.endTimeMs, it.meters) }
         val distinctCalories = calories.distinctBy { Triple(it.startTimeMs, it.endTimeMs, it.kilocalories) }
-        val distinctActivities = activities.distinctBy { Triple(it.startTimeMs, it.endTimeMs, it.title) }
+        val distinctActivities = activities.distinctBy { Pair(it.startTimeMs, it.endTimeMs) }
 
         val snapshot = HuaweiHealthSnapshot(
             steps = distinctSteps,
@@ -204,12 +205,60 @@ class HuaweiExportParser(private val context: Context) {
             val end = obj.huaweiTime("endTime") ?: obj.huaweiTime("end_time") ?: return@parseRecords null
             if (end - start < 60_000L) return@parseRecords null
 
-            val title = obj.optString("sportType", "")
-                .ifBlank { obj.optString("type", "") }
-                .ifBlank { obj.optString("name", "") }
-                .ifBlank { "Huawei activity" }
+            val rawType = sequenceOf(
+                "sportTypeId",
+                "sport_type_id",
+                "sportType",
+                "sport_type",
+                "workoutType",
+                "activityType",
+                "type"
+            ).map { key -> obj.optString(key, "") }
+                .firstOrNull { it.isNotBlank() }
 
-            ActivitySessionData(startTimeMs = start, endTimeMs = end, title = title)
+            val canonicalType = HuaweiWorkoutTypeMapper.canonicalName(rawType)
+            val exerciseType = HuaweiWorkoutTypeMapper.healthConnectType(canonicalType)
+                ?: return@parseRecords null
+            val explicitName = sequenceOf("name", "title", "workoutName")
+                .map { key -> obj.optString(key, "").trim() }
+                .firstOrNull { it.isNotBlank() }
+            val title = explicitName ?: canonicalType
+
+            ActivitySessionData(
+                startTimeMs = start,
+                endTimeMs = end,
+                title = title,
+                exerciseType = exerciseType,
+                distanceMeters = obj.positiveDouble(
+                    "totalDistance",
+                    "total_distance",
+                    "distanceMeters",
+                    "distance_meters",
+                    "distance"
+                ),
+                totalCaloriesKcal = obj.positiveDouble(
+                    "totalCalories",
+                    "total_calories",
+                    "calories",
+                    "kilocalories",
+                    "kcal"
+                ),
+                // Only accept keys whose unit is explicit. Older Huawei
+                // exports contain altitude fields with model-dependent units.
+                elevationMeters = obj.positiveDouble(
+                    "elevationGainMeters",
+                    "elevation_gain_meters",
+                    "ascentMeters",
+                    "ascent_meters"
+                ),
+                steps = obj.nonNegativeLong(
+                    "totalSteps",
+                    "total_steps",
+                    "steps",
+                    "stepCount",
+                    "step_count"
+                )?.takeIf { it > 0L }
+            )
         }
 
     private fun parseStepRecord(obj: JSONObject): StepData? {

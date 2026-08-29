@@ -41,6 +41,7 @@
     <string name="workout_stat_speed_label">Avg speed</string>
     <string name="workout_stat_steps_label">Steps</string>
     <string name="workout_stat_calories_label">Calories</string>
+    <string name="workout_stat_elevation_label">Elevation</string>
     <string name="workout_calories_value">%1$s kcal</string>
     <string name="workout_stat_started_label">Started</string>
     <string name="workout_stat_ended_label">Finished</string>

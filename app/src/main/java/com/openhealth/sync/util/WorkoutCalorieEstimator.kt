@@ -60,15 +60,18 @@ object WorkoutCalorieEstimator {
     /** General/moderate MET value per Health Connect exercise type, from the
      *  Compendium of Physical Activities. See [estimateTotalCaloriesKcal]. */
     private fun metValueFor(exerciseType: Int): Double = when (exerciseType) {
-        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> 8.0
-        ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> 7.5
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> 8.0
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> 7.5
         ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL,
         ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> 6.0
         ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> 6.0
         ExerciseSessionRecord.EXERCISE_TYPE_ROWING,
         ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE -> 7.0
         ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL -> 5.0
-        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> 3.5
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
+        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> 3.5
         ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> 2.5
         ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> 3.5
         ExerciseSessionRecord.EXERCISE_TYPE_SKIING -> 7.0

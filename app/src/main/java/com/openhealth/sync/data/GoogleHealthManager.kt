@@ -580,28 +580,81 @@ class GoogleHealthManager(
         )
     }
 
-    private suspend fun writeActivitySessionsBatch(records: List<ActivitySessionData>): Boolean {
-        // Huawei may revise workout metadata after the initial sync. A
-        // timestamp version ensures the same stable clientRecordId upserts the
-        // real type/title/recording method over records written by older builds.
-        val version = System.currentTimeMillis()
-        val validSessions = records.filter { it.startTimeMs < it.endTimeMs }
-        validSessions.forEach(::persistWorkoutSummary)
+    private fun workoutFingerprint(session: ActivitySessionData): String {
+        val source = listOf(
+            session.exerciseType.toString(),
+            session.title.trim(),
+            session.distanceMeters?.toString() ?: "x",
+            session.totalCaloriesKcal?.toString() ?: "x",
+            session.elevationMeters?.toString() ?: "x",
+            session.steps?.toString() ?: "x"
+        ).joinToString("|")
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(source.toByteArray(Charsets.UTF_8))
+        return digest.take(12).joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    }
 
-        val valid = validSessions.map { session ->
+    private fun workoutVersionKey(startTimeMs: Long, endTimeMs: Long): String =
+        "record_version:$startTimeMs:$endTimeMs"
+
+    /**
+     * Keeps clientRecordVersion stable while the source workout is unchanged.
+     * A new version is generated only when Huawei changes the workout summary.
+     * This avoids making downstream readers re-process every old workout on
+     * every background sync while still allowing real corrections to upsert.
+     */
+    private fun workoutRecordVersion(session: ActivitySessionData): Long {
+        val key = workoutVersionKey(session.startTimeMs, session.endTimeMs)
+        val fingerprint = workoutFingerprint(session)
+        val stored = workoutSummaryPrefs.getString(key, null)
+        val separator = stored?.indexOf('|') ?: -1
+        val previousVersion = if (separator > 0) stored?.substring(0, separator)?.toLongOrNull() else null
+        val previousFingerprint = if (separator > 0) stored?.substring(separator + 1) else null
+
+        if (previousVersion != null && previousFingerprint == fingerprint) {
+            return previousVersion
+        }
+
+        val version = maxOf(System.currentTimeMillis(), (previousVersion ?: 0L) + 1L)
+        workoutSummaryPrefs.edit().putString(key, "$version|$fingerprint").apply()
+        return version
+    }
+
+    private suspend fun writeActivitySessionsBatch(records: List<ActivitySessionData>): Boolean {
+        // BITLUT_WORKOUT_HARDENING_V3
+        val validSessions = records
+            .asSequence()
+            .filter { it.startTimeMs < it.endTimeMs }
+            .distinctBy { Pair(it.startTimeMs, it.endTimeMs) }
+            .sortedBy { it.startTimeMs }
+            .toList()
+
+        if (validSessions.isEmpty()) {
+            AppLogger.i(TAG, "No activitySessions records to write")
+            return true
+        }
+
+        val client = resolveClient() ?: run {
+            AppLogger.e(TAG, "write activitySessions: no Health Connect client")
+            return false
+        }
+
+        var allSucceeded = true
+        var written = 0
+
+        for (session in validSessions) {
+            persistWorkoutSummary(session)
+            val version = workoutRecordVersion(session)
             val start = Instant.ofEpochMilli(session.startTimeMs)
             val end = Instant.ofEpochMilli(session.endTimeMs)
-            ExerciseSessionRecord(
+
+            val exercise = ExerciseSessionRecord(
                 startTime = start,
                 endTime = end,
                 startZoneOffset = offset(start),
                 endZoneOffset = offset(end),
                 exerciseType = session.exerciseType,
                 title = session.title,
-                // Huawei ActivityRecord represents a workout the user started
-                // on Huawei Health/a wearable. Health Connect's attribution
-                // guidance therefore calls this ACTIVELY_RECORDED even though
-                // BitLut is the relay rather than the live sensor app.
                 metadata = bitlutWorkoutMetadata(
                     "exercise",
                     start.toEpochMilli(),
@@ -609,41 +662,58 @@ class GoogleHealthManager(
                     version = version
                 )
             )
-        }
 
-        val sessionsWritten = replaceRecords("activitySessions", valid, ExerciseSessionRecord::class)
-
-        // Health Connect models workout metrics as records in the same time
-        // interval, not fields on ExerciseSessionRecord. Prefer Huawei's real
-        // ActivityRecord summary calorie value. Keep the old stable
-        // "exercise_calories_estimate" client ID so an existing estimated
-        // record is upgraded in-place instead of creating a duplicate. When
-        // Huawei does not expose a summary calorie, retain the existing MET
-        // fallback solely for downstream workout interoperability.
-        val caloriesValid = validSessions.mapNotNull { session ->
+            // Health Connect models workout summaries as records sharing the
+            // exercise interval. Insert the session and its calorie summary in
+            // one request so readers never observe a newly-written bare session
+            // before the associated summary arrives.
+            val bundle = mutableListOf<Record>(exercise)
             val kcal = session.totalCaloriesKcal?.takeIf { it > 0.0 }
                 ?: estimatedTotalCaloriesKcal(session.exerciseType, session.startTimeMs, session.endTimeMs)
-                ?: return@mapNotNull null
-            val start = Instant.ofEpochMilli(session.startTimeMs)
-            val end = Instant.ofEpochMilli(session.endTimeMs)
-            TotalCaloriesBurnedRecord(
-                startTime = start,
-                endTime = end,
-                startZoneOffset = offset(start),
-                endZoneOffset = offset(end),
-                energy = Energy.kilocalories(kcal),
-                metadata = bitlutWorkoutMetadata(
-                    "exercise_calories_estimate",
-                    start.toEpochMilli(),
-                    end.toEpochMilli(),
-                    version = version
+            if (kcal != null && kcal > 0.0) {
+                bundle += TotalCaloriesBurnedRecord(
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end),
+                    energy = Energy.kilocalories(kcal),
+                    // Keep the historical ID so old estimated calorie records
+                    // are upgraded in place instead of duplicated.
+                    metadata = bitlutWorkoutMetadata(
+                        "exercise_calories_estimate",
+                        start.toEpochMilli(),
+                        end.toEpochMilli(),
+                        version = version
+                    )
                 )
-            )
-        }
-        replaceRecords("activitySessionCalories", caloriesValid, TotalCaloriesBurnedRecord::class)
+            }
 
-        return sessionsWritten
+            try {
+                client.insertRecords(bundle)
+                written += 1
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SecurityException) {
+                AppLogger.e(TAG, "write activitySessions denied by Health Connect: ${e.message}", e)
+                invalidateClientCache()
+                throw e
+            } catch (e: Exception) {
+                // One malformed/overlapping Huawei session must not prevent
+                // unrelated valid workouts in the same sync from being written.
+                allSucceeded = false
+                AppLogger.e(
+                    TAG,
+                    "Workout bundle write failed: start=${session.startTimeMs} end=${session.endTimeMs} " +
+                        "type=${session.exerciseType} error=${e.message}",
+                    e
+                )
+            }
+        }
+
+        AppLogger.i(TAG, "Workout bundles written: $written/${validSessions.size}")
+        return allSucceeded
     }
+
 
     /**
      * MET-formula estimate of total calories burned for a workout, used only
@@ -1150,67 +1220,7 @@ class GoogleHealthManager(
         return DashboardActivityWindow(dailyActivity = dailyActivity, workouts = enrichedWorkouts)
     }
 
-    /**
-     * Week-over-week comparison for the three activity-only metrics BitLut
-     * already has approved access to. "Current week" is the last 7 days
-     * including today (so it grows through the day rather than only
-     * comparing complete weeks); "previous week" is the 7 days before that.
-     * This intentionally does not require any new Huawei scope or Health
-     * Connect permission -- it's a different aggregation of data BitLut
-     * already reads for the dashboard screen.
-     */
-    override suspend fun readWeekOverWeekComparison(): WeekComparison? {
-        val client = resolveClient() ?: return null
-        return try {
-            val today = LocalDate.now()
-            val currentWeekStart = today.minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val currentWeekEnd = Instant.now()
-            val previousWeekStart = today.minusDays(13).atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val previousWeekEnd = currentWeekStart
-
-            val currentAgg = client.aggregate(
-                AggregateRequest(
-                    metrics = setOf(
-                        StepsRecord.COUNT_TOTAL,
-                        DistanceRecord.DISTANCE_TOTAL,
-                        ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL
-                    ),
-                    timeRangeFilter = TimeRangeFilter.between(currentWeekStart, currentWeekEnd),
-                    dataOriginFilter = selectedDataOrigins()
-                )
-            )
-            val previousAgg = client.aggregate(
-                AggregateRequest(
-                    metrics = setOf(
-                        StepsRecord.COUNT_TOTAL,
-                        DistanceRecord.DISTANCE_TOTAL,
-                        ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL
-                    ),
-                    timeRangeFilter = TimeRangeFilter.between(previousWeekStart, previousWeekEnd),
-                    dataOriginFilter = selectedDataOrigins()
-                )
-            )
-
-            WeekComparison(
-                currentWeekSteps = currentAgg[StepsRecord.COUNT_TOTAL] ?: 0L,
-                previousWeekSteps = previousAgg[StepsRecord.COUNT_TOTAL] ?: 0L,
-                currentWeekDistanceMeters = currentAgg[DistanceRecord.DISTANCE_TOTAL]?.inMeters ?: 0.0,
-                previousWeekDistanceMeters = previousAgg[DistanceRecord.DISTANCE_TOTAL]?.inMeters ?: 0.0,
-                currentWeekCaloriesKcal = currentAgg[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories ?: 0.0,
-                previousWeekCaloriesKcal = previousAgg[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories ?: 0.0
-            )
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: SecurityException) {
-            AppLogger.e(TAG, "readWeekOverWeekComparison denied; invalidating client cache: ${e.message}", e)
-            invalidateClientCache()
-            null
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "readWeekOverWeekComparison failed: ${e.message}", e)
-            null
-        }
-    }
-
+    suspend fun readStepsToday(): Long {
     suspend fun readStepsToday(): Long {
         val client = resolveClient() ?: return 0L
         return try {
