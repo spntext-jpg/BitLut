@@ -747,21 +747,47 @@ class HuaweiHealthManager(
             }
             val positiveValues = values.filter { it.second > 0.0 }
 
+            // Sprint 2026-08-29: Huawei's per-activity dataSummary can split
+            // one metric across multiple SamplePoints of the same DataType
+            // (e.g. one steps/calories/ascent point per walked segment
+            // rather than one point for the whole activity -- the same
+            // reason readActivityRecordDistance already sums every matching
+            // sample point instead of taking the first). The previous
+            // `positiveValues.firstOrNull()` here silently kept only the
+            // first segment's value and discarded the rest, which is the
+            // confirmed root cause of a real-device report: a walking
+            // workout with a correct 2.5 km distance (summed via the
+            // fallback path below) showing only 250 steps (the first
+            // segment's point, not the activity total). Steps, calories,
+            // and ascent are all additive across segments the same way
+            // distance is, so all three now sum every matching point
+            // instead of keeping only the first.
             when {
                 "distance.total" in typeName -> {
-                    distanceMeters = positiveValues.firstOrNull()?.second ?: distanceMeters
+                    val sum = positiveValues.sumOf { it.second }
+                    if (sum > 0.0) {
+                        distanceMeters = (distanceMeters ?: 0.0) + sum
+                    }
                 }
                 "calories.burnt.total" in typeName || "calories.burned.total" in typeName -> {
-                    totalCaloriesKcal = positiveValues.firstOrNull()?.second ?: totalCaloriesKcal
+                    val sum = positiveValues.sumOf { it.second }
+                    if (sum > 0.0) {
+                        totalCaloriesKcal = (totalCaloriesKcal ?: 0.0) + sum
+                    }
                 }
                 "steps.total" in typeName -> {
-                    steps = positiveValues.firstOrNull()?.second?.toLong()?.takeIf { it > 0L } ?: steps
+                    val sum = positiveValues.sumOf { it.second }.toLong()
+                    if (sum > 0L) {
+                        steps = (steps ?: 0L) + sum
+                    }
                 }
                 "altitude.statistics" in typeName -> {
-                    elevationMeters = positiveValues
-                        .firstOrNull { (fieldName, _) -> fieldName == "ascent_total" || "ascent" in fieldName }
-                        ?.second
-                        ?: elevationMeters
+                    val sum = positiveValues
+                        .filter { (fieldName, _) -> fieldName == "ascent_total" || "ascent" in fieldName }
+                        .sumOf { it.second }
+                    if (sum > 0.0) {
+                        elevationMeters = (elevationMeters ?: 0.0) + sum
+                    }
                 }
             }
         }

@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-08-29 (c) -- Huawei workout summary fix, Settings signature, wording pass
+
+- Fixed a confirmed real-device bug: a walking workout showed a correct
+  2.5 km distance but only 250 steps. Root cause: Huawei splits
+  steps/calories/elevation across multiple sample points per activity,
+  and `HuaweiHealthManager.readActivityRecordSummary()` kept only the
+  first matching point instead of summing them (distance already summed
+  correctly via its existing fallback path, which masked the same bug
+  class for that one metric). Steps, calories, and elevation now sum all
+  matching points, consistent with distance.
+- Settings screen: new wood-carved-style signature at the very bottom
+  (`EngravedSignature()`), built from Inter Black + letter-spacing + a
+  two-layer engraved-shadow effect (no new font asset added -- see
+  CLAUDE.md's GMS-free/Downloadable-Fonts constraint). New string
+  `settings_signature`, EN + RU.
+- Tightened `sync_status_updating` wording for both locales to match
+  existing sync terminology: EN "Updating..." -> "Syncing..."; RU
+  "Идёт обновление..." -> "Синхронизация...".
+- Delivered as `patch_huawei_workout_summary_sum_v1.py`,
+  `patch_settings_engraved_signature_v1.py`, and
+  `patch_sync_status_wording_and_docs_v1.py`; all removed after
+  verification per standing process.
+
 ## 2026-08-29 (b) -- bottom navbar resize, animated background-sync status
 
 - Bottom navbar: Today/Settings destination buttons shrunk ~20% (button

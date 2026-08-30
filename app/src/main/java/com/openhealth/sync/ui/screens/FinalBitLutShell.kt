@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openhealth.sync.data.ActivitySessionData
@@ -92,6 +94,8 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import com.openhealth.sync.ui.ImportScreen
@@ -1493,7 +1497,68 @@ private fun SettingsScreen(
                 }
             )
         }
+
+        Spacer(Modifier.height(24.dp))
+        EngravedSignature()
     }
+    }
+}
+
+/**
+ * Small wood-carved-style signature at the very bottom of Settings
+ * (2026-08-29, product request -- a personal touch, not a design-system
+ * component, so its wood-brown palette is computed locally here rather
+ * than added to AugustTokens.kt).
+ *
+ * BitLut only bundles Inter Variable (no serif/script font is included in
+ * the APK, and this app's GMS-free Huawei audience means the Android
+ * Downloadable Fonts API is not a safe option -- see CLAUDE.md). Adding a
+ * whole new bundled font file for one decorative string was judged
+ * disproportionate, so the "carved" look is built from Inter at a heavy
+ * weight with wide letter-spacing plus a two-layer engraved-shadow effect
+ * (a light "catch the light" highlight offset up-left, a dark "recessed"
+ * shadow offset down-right) rather than a literal wood texture, which
+ * Compose text styling cannot produce without a texture asset either.
+ *
+ * Colors are computed, not eyeballed: base walnut-brown #6B4326, with the
+ * highlight/shadow each derived by lightening/darkening that same base by
+ * a fixed 55% blend toward white/black respectively (highlight #BCAA9D,
+ * shadow #301E11).
+ */
+@Composable
+private fun EngravedSignature() {
+    val woodBase = Color(0xFF6B4326)
+    val woodHighlight = Color(0xFFBCAA9D)
+    val woodShadow = Color(0xFF301E11)
+    val text = stringResource(R.string.settings_signature)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontWeight = FontWeight.Black,
+            fontSize = 13.sp,
+            letterSpacing = 2.sp,
+            color = woodHighlight,
+            style = TextStyle(
+                shadow = Shadow(color = woodHighlight, offset = Offset(-1f, -1f), blurRadius = 0.5f)
+            ),
+            modifier = Modifier.offset(x = 0.6.dp, y = 0.6.dp)
+        )
+        Text(
+            text = text,
+            fontWeight = FontWeight.Black,
+            fontSize = 13.sp,
+            letterSpacing = 2.sp,
+            color = woodBase,
+            style = TextStyle(
+                shadow = Shadow(color = woodShadow, offset = Offset(1f, 1f), blurRadius = 0.5f)
+            )
+        )
     }
 }
 

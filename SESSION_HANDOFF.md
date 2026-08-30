@@ -67,7 +67,8 @@ Next useful test is on the corporate app side: confirm whether it accepts third-
 - Dashboard-card visibility/order is handled only by `DashboardCardLayoutPrefs` from the pencil editor.
 - Settings exposes only the steps goal.
 - Bottom navbar (2026-08-29): Today/Settings destination buttons are ~20% smaller than the center Refresh button (button height 46dp vs Refresh 72dp; destination icon 17/16dp vs Refresh icon 34dp), matching the exact ratios documented in `CHANGELOG.md`. The two destination buttons remain identical to each other; do not resize one without the other.
-- Today header shows an animated "Updating..." status line under the last-sync trailing text while `SyncUiState.isSyncing` is true (fades in/out via `AnimatedVisibility`, not a snap toggle). Driven entirely by existing `SyncViewModel.markSyncStarted()`/`markSyncCompleted()` state; no new sync logic was added for this.
+- Today header shows an animated "Syncing..." status line under the last-sync trailing text while `SyncUiState.isSyncing` is true (fades in/out via `AnimatedVisibility`, not a snap toggle). Driven entirely by existing `SyncViewModel.markSyncStarted()`/`markSyncCompleted()` state; no new sync logic was added for this. Wording tightened 2026-08-29 (c) to "Syncing..."/"Синхронизация...".
+- Huawei per-activity summary aggregation (2026-08-29 (c)): `readActivityRecordSummary()` in `HuaweiHealthManager.kt` sums steps/calories/elevation across ALL matching sample points for an activity, not just the first. Do not revert to `firstOrNull()` for these fields -- Huawei can and does split them across multiple points per activity (confirmed on-device: a real walk showed 2.5 km distance but only 250 steps before this fix).
 
 ## Removed dead layers
 

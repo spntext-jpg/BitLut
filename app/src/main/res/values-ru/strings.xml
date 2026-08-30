@@ -13,7 +13,7 @@
     <string name="connect_google">Подключить Google Health</string>
     <string name="connect_huawei">Подключить Huawei Health</string>
     <string name="sync_now">Синхронизировать</string>
-    <string name="sync_status_updating">Идёт обновление…</string>
+    <string name="sync_status_updating">Синхронизация…</string>
     <string name="refresh">Обновить</string>
     <string name="connected">Подключено</string>
     <string name="not_connected">Не подключено</string>
@@ -162,6 +162,7 @@
     <string name="today_metrics">Сегодня</string>
     <string name="dashboard_goals_section_title">Дневные цели</string>
     <string name="goals_section_body">Задайте дневную цель по шагам для кольца прогресса и серии дней.</string>
+    <string name="settings_signature">для вас старался пашенька</string>
     <string name="hours_unit">ч</string>
     <string name="workouts">Тренировки</string>
     <string name="recent_sessions">Последние сессии</string>

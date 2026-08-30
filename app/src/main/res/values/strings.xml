@@ -13,7 +13,7 @@
     <string name="connect_google">Connect Google Health</string>
     <string name="connect_huawei">Connect Huawei Health</string>
     <string name="sync_now">Sync now</string>
-    <string name="sync_status_updating">Updating…</string>
+    <string name="sync_status_updating">Syncing…</string>
     <string name="refresh">Refresh</string>
     <string name="connected">Connected</string>
     <string name="not_connected">Not connected</string>
@@ -162,6 +162,7 @@
     <string name="today_metrics">Today</string>
     <string name="dashboard_goals_section_title">Daily goals</string>
     <string name="goals_section_body">Set the daily steps target used by the progress ring and streak.</string>
+    <string name="settings_signature">made with care by pashenka</string>
     <string name="hours_unit">h</string>
     <string name="workouts">Workouts</string>
     <string name="recent_sessions">Recent sessions</string>
