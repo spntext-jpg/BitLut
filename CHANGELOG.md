@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-08-30 -- repo cleanup, handoff consolidation
+
+- Removed six verified/committed one-off patch scripts from the repo
+  root (`patch_navbar_resize_v1.py`, `patch_sync_status_indicator_v1.py`,
+  `patch_navbar_sync_status_docs_v1.py`,
+  `patch_huawei_workout_summary_sum_v1.py`,
+  `patch_settings_engraved_signature_v1.py`,
+  `patch_sync_status_wording_and_docs_v1.py`) and the `.bitlut_patch_backup/`
+  directory, per standing process (delivery artifacts are not kept once
+  their changes are committed).
+- Consolidated `SESSION_HANDOFF.md`'s "UI decisions" section: the three
+  same-day dated sub-entries from 2026-08-29 (b)/(c) are now described as
+  current state rather than a changelog-style trail (that history already
+  lives here). Moved the Huawei per-activity summary-sum fact into
+  "Workout import and Health Connect" where it technically belongs.
+  Added the delivered-script list for (b) and (c), and a guardrail note
+  that a patch script or backup file sitting in the repo root is stale
+  debris, not pending work.
+- Fixed a stale line in `CONTEXT.md`'s "UI baseline" that still said
+  "Updating..." after the wording was tightened to "Syncing..." in the
+  previous sprint's `strings.xml` change (the docs patch for that sprint
+  updated `SESSION_HANDOFF.md`/`CHANGELOG.md` but missed `CONTEXT.md`).
+  Also added the Settings signature and Huawei summary-sum facts that
+  were likewise missing from `CONTEXT.md`.
+
 ## 2026-08-29 (c) -- Huawei workout summary fix, Settings signature, wording pass
 
 - Fixed a confirmed real-device bug: a walking workout showed a correct

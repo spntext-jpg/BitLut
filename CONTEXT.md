@@ -1,6 +1,6 @@
 # BitLut — Current Context
 
-Updated: 2026-08-29
+Updated: 2026-08-30
 
 BitLut is a local-first Kotlin/Jetpack Compose Android bridge from HUAWEI Health to Android Health Connect.
 
@@ -23,7 +23,7 @@ Activity/workout data only. No backend/account. Real data first. The only approv
 
 - Current Huawei IDs mapped centrally.
 - Non-workout activity states filtered.
-- Per-session Huawei distance has priority.
+- Per-session Huawei distance has priority; steps/calories/elevation summary metrics are summed across all matching Huawei sample points, not just the first.
 - Workouts written `ACTIVELY_RECORDED` with Huawei device manufacturer.
 - Session + related calories written as a bundle.
 - Stable deterministic client record identity/version for unchanged workouts.
@@ -32,7 +32,7 @@ Activity/workout data only. No backend/account. Real data first. The only approv
 
 ## UI baseline
 
-August colors remain unchanged. UI direction is quieter/content-first: flat outlined cards, restrained hero depth, pill buttons, 48 dp targets, restrained tween motion, one primary Settings action, no fake press animation on non-clickable cards. Bottom navbar: destination buttons ~20% smaller than the center Refresh button (46dp vs 72dp), symmetric between Today/Settings. Today header shows a fade in/out "Updating..." line while a sync is in progress.
+August colors remain unchanged. UI direction is quieter/content-first: flat outlined cards, restrained hero depth, pill buttons, 48 dp targets, restrained tween motion, one primary Settings action, no fake press animation on non-clickable cards. Bottom navbar: destination buttons ~20% smaller than the center Refresh button (46dp vs 72dp), symmetric between Today/Settings. Today header shows a fade in/out "Syncing..." line while a sync is in progress. Settings ends with a small engraved-style signature (no new font asset).
 
 ## Do not regress
 

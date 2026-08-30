@@ -1,6 +1,6 @@
 # BitLut — Session Handoff
 
-Current handoff date: 2026-08-29.
+Current handoff date: 2026-08-30.
 
 Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus a successful `assembleDebug` + `lintDebug` is authoritative if historical notes conflict.
 
@@ -25,6 +25,7 @@ The app builds successfully after the workout interoperability hardening and fol
 - Live Huawei reads and Huawei archive import use the same mapper.
 - Archive workouts preserve exercise type plus available distance, calories, steps and elevation.
 - Workout distance comes from Huawei's per-activity `ActivityRecordReply.getSampleSet(record)` when available. Do not reconstruct session distance from coarse Health Connect daily/overlap aggregates.
+- `readActivityRecordSummary()` sums steps/calories/elevation across ALL matching Huawei sample points for an activity, not just the first. Do not revert to `firstOrNull()` for these fields -- Huawei can and does split them across multiple points per activity (confirmed on-device: a real walk showed 2.5 km distance but only 250 steps before this fix, because distance already summed via its fallback path while steps took only the first point).
 - BitLut writes workout sessions as `ACTIVELY_RECORDED`, because the original workout was actively started on the watch/phone even though BitLut relays it later.
 - `bitlutRecordingDevice` uses manufacturer `Huawei`.
 - Exercise session + related total-calorie record are inserted as one workout bundle.
@@ -66,9 +67,9 @@ Next useful test is on the corporate app side: confirm whether it accepts third-
 - Settings keeps the minimal data-source card and one merged action card. `Sync now` is the primary action; connect/import/refresh/Health Connect settings are secondary.
 - Dashboard-card visibility/order is handled only by `DashboardCardLayoutPrefs` from the pencil editor.
 - Settings exposes only the steps goal.
-- Bottom navbar (2026-08-29): Today/Settings destination buttons are ~20% smaller than the center Refresh button (button height 46dp vs Refresh 72dp; destination icon 17/16dp vs Refresh icon 34dp), matching the exact ratios documented in `CHANGELOG.md`. The two destination buttons remain identical to each other; do not resize one without the other.
-- Today header shows an animated "Syncing..." status line under the last-sync trailing text while `SyncUiState.isSyncing` is true (fades in/out via `AnimatedVisibility`, not a snap toggle). Driven entirely by existing `SyncViewModel.markSyncStarted()`/`markSyncCompleted()` state; no new sync logic was added for this. Wording tightened 2026-08-29 (c) to "Syncing..."/"Синхронизация...".
-- Huawei per-activity summary aggregation (2026-08-29 (c)): `readActivityRecordSummary()` in `HuaweiHealthManager.kt` sums steps/calories/elevation across ALL matching sample points for an activity, not just the first. Do not revert to `firstOrNull()` for these fields -- Huawei can and does split them across multiple points per activity (confirmed on-device: a real walk showed 2.5 km distance but only 250 steps before this fix).
+- Bottom navbar: Today/Settings destination buttons are ~20% smaller than the center Refresh button (button height 46dp vs Refresh 72dp; destination icon 17/16dp vs Refresh icon 34dp). Both destination buttons remain identical to each other; do not resize one without the other.
+- Today header shows an animated "Syncing..." / "Синхронизация..." status line under the last-sync trailing text while `SyncUiState.isSyncing` is true (fades in/out via `AnimatedVisibility`, not a snap toggle). Driven entirely by existing `SyncViewModel.markSyncStarted()`/`markSyncCompleted()` state.
+- Settings screen ends with a small wood-carved-style signature (`EngravedSignature()`), built from Inter Black + letter-spacing + a two-layer engraved-shadow effect -- no new font asset was added (see the GMS-free/Downloadable-Fonts constraint above).
 
 ## Removed dead layers
 
@@ -85,6 +86,8 @@ Next useful test is on the corporate app side: confirm whether it accepts third-
 2. `patch_settings_minimalism_v1.py`: simplified Settings; removed workout-filter UI only. `WorkoutFilterPrefs` remains active in sync-time filtering.
 3. `patch_hc_datasources_and_device_manufacturer_v2.py`: added Health Connect settings deep link and Huawei manufacturer metadata. v1 partially failed and is historical only.
 4. `patch_workout_distance_source_fix_v1.py`: fixed the real ~40x workout-distance error by reading Huawei per-session samples and giving them priority over aggregate reconstruction.
+5. `patch_navbar_resize_v1.py` / `patch_sync_status_indicator_v1.py` / `patch_navbar_sync_status_docs_v1.py`: navbar resize + animated background-sync status line (full detail in `CHANGELOG.md` 2026-08-29 (b)).
+6. `patch_huawei_workout_summary_sum_v1.py` / `patch_settings_engraved_signature_v1.py` / `patch_sync_status_wording_and_docs_v1.py`: Huawei summary-metric sum fix, Settings signature, sync-status wording tightening (full detail in `CHANGELOG.md` 2026-08-29 (c)).
 
 ## What failed during the 2026-08-29 hardening and how to avoid it
 
@@ -105,6 +108,7 @@ Next useful test is on the corporate app side: confirm whether it accepts third-
 - If verification fails, do not commit/push. Show only compact compiler/lint errors, not full Gradle stack traces.
 - Do not include `git diff -- ...` in delivery commands. It creates console noise and is explicitly unwanted.
 - Preserve working sync/data behavior during UI work; UI refactors must not touch workout serialization unless required by evidence.
+- Repo root is kept clean between sessions: delivered/verified patch scripts and `.bitlut_patch_backup/` are deleted once their changes are committed. A patch script or backup file sitting in the repo root is stale debris, not a sign of pending work -- check `git log`/`CHANGELOG.md` for what has actually landed.
 
 ## Final verification command used by delivery scripts
 
