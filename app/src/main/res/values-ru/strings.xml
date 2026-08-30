@@ -13,6 +13,7 @@
     <string name="connect_google">Подключить Google Health</string>
     <string name="connect_huawei">Подключить Huawei Health</string>
     <string name="sync_now">Синхронизировать</string>
+    <string name="sync_status_updating">Идёт обновление…</string>
     <string name="refresh">Обновить</string>
     <string name="connected">Подключено</string>
     <string name="not_connected">Не подключено</string>

@@ -13,6 +13,7 @@
     <string name="connect_google">Connect Google Health</string>
     <string name="connect_huawei">Connect Huawei Health</string>
     <string name="sync_now">Sync now</string>
+    <string name="sync_status_updating">Updating…</string>
     <string name="refresh">Refresh</string>
     <string name="connected">Connected</string>
     <string name="not_connected">Not connected</string>

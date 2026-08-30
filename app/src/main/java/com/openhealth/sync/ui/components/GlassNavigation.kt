@@ -119,7 +119,7 @@ private fun AugustDestination(
     val pressed by interactionSource.collectIsPressedAsState()
     val focused by interactionSource.collectIsFocusedAsState()
     val shape = remember { RoundedCornerShape(22.dp) }
-    val iconShape = remember { RoundedCornerShape(12.dp) }
+    val iconShape = remember { RoundedCornerShape(10.dp) }
     val label = when (tab) {
         MainTab.Today -> stringResource(R.string.tab_today)
         MainTab.Settings -> stringResource(R.string.tab_settings)
@@ -146,14 +146,14 @@ private fun AugustDestination(
         label = "destinationPressScale"
     )
     val iconSize by animateDpAsState(
-        targetValue = if (selected) 21.dp else 20.dp,
+        targetValue = if (selected) 17.dp else 16.dp,
         animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
         label = "destinationIconSize"
     )
 
     Column(
         modifier = modifier
-            .height(58.dp)
+            .height(46.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -177,7 +177,7 @@ private fun AugustDestination(
     ) {
         Box(
             modifier = Modifier
-                .size(30.dp)
+                .size(24.dp)
                 .clip(iconShape)
                 .background(iconTile),
             contentAlignment = Alignment.Center
@@ -224,7 +224,7 @@ private fun AugustSyncAction(onClick: () -> Unit) {
 
     Box(
         modifier = Modifier
-            .size(60.dp)
+            .size(72.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -249,7 +249,7 @@ private fun AugustSyncAction(onClick: () -> Unit) {
             contentDescription = stringResource(R.string.sync_now),
             tint = AugustColor.Ink,
             modifier = Modifier
-                .size(28.dp)
+                .size(34.dp)
                 .graphicsLayer { rotationZ = rotation }
         )
     }

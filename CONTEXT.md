@@ -32,7 +32,7 @@ Activity/workout data only. No backend/account. Real data first. The only approv
 
 ## UI baseline
 
-August colors remain unchanged. UI direction is quieter/content-first: flat outlined cards, restrained hero depth, pill buttons, 48 dp targets, restrained tween motion, one primary Settings action, no fake press animation on non-clickable cards.
+August colors remain unchanged. UI direction is quieter/content-first: flat outlined cards, restrained hero depth, pill buttons, 48 dp targets, restrained tween motion, one primary Settings action, no fake press animation on non-clickable cards. Bottom navbar: destination buttons ~20% smaller than the center Refresh button (46dp vs 72dp), symmetric between Today/Settings. Today header shows a fade in/out "Updating..." line while a sync is in progress.
 
 ## Do not regress
 

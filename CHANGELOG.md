@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-08-29 (b) -- bottom navbar resize, animated background-sync status
+
+- Bottom navbar: Today/Settings destination buttons shrunk ~20% (button
+  height 58->46dp, icon 21/20->17/16dp, icon tile 30->24dp, tile radius
+  12->10dp); center Refresh (sync) button grown ~20% (60->72dp, icon
+  28->34dp). Both destination buttons remain identical to each other
+  (shared composable, `Modifier.weight(1f)`), preserving symmetry.
+- Today screen header: new "Updating..." status line under the existing
+  "<source> - <last sync>" text, shown only while a sync is actually in
+  flight (`SyncUiState.isSyncing`, already tracked but never rendered
+  before this patch). Fades in/out via `AnimatedVisibility` +
+  `fadeIn`/`fadeOut` (`AugustMotion.MediumMs` + `StandardEasing`, the same
+  tokens already used elsewhere in this file) rather than snapping.
+- New string resource `sync_status_updating`, EN + RU, parity preserved
+  (255 keys each locale).
+- Delivered as `patch_navbar_resize_v1.py` and
+  `patch_sync_status_indicator_v1.py`; both removed after verification per
+  standing process (one-off delivery scripts are not kept in the repo).
+
 ## 2026-08-29 -- workout interoperability hardening, build/lint recovery, UI cleanup
 
 - Corrected Huawei workout IDs and centralized mapping in `HuaweiWorkoutTypeMapper`; non-workout states are filtered.

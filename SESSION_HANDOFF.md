@@ -66,6 +66,8 @@ Next useful test is on the corporate app side: confirm whether it accepts third-
 - Settings keeps the minimal data-source card and one merged action card. `Sync now` is the primary action; connect/import/refresh/Health Connect settings are secondary.
 - Dashboard-card visibility/order is handled only by `DashboardCardLayoutPrefs` from the pencil editor.
 - Settings exposes only the steps goal.
+- Bottom navbar (2026-08-29): Today/Settings destination buttons are ~20% smaller than the center Refresh button (button height 46dp vs Refresh 72dp; destination icon 17/16dp vs Refresh icon 34dp), matching the exact ratios documented in `CHANGELOG.md`. The two destination buttons remain identical to each other; do not resize one without the other.
+- Today header shows an animated "Updating..." status line under the last-sync trailing text while `SyncUiState.isSyncing` is true (fades in/out via `AnimatedVisibility`, not a snap toggle). Driven entirely by existing `SyncViewModel.markSyncStarted()`/`markSyncCompleted()` state; no new sync logic was added for this.
 
 ## Removed dead layers
 

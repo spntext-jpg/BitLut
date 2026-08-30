@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -198,7 +201,8 @@ fun FinalBitLutShell(
                 MainTab.Today -> SummaryScreen(
                     palette, dashboardState, syncState.selectedDataSource, onRefresh, wrappedOnRequestGoogle,
                     onEditLayout = { showCardLayoutEditor = true },
-                    cardLayoutVersion = cardLayoutVersion
+                    cardLayoutVersion = cardLayoutVersion,
+                    isSyncing = syncState.isSyncing
                 )
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
@@ -406,7 +410,8 @@ private fun SummaryScreen(
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit,
     onEditLayout: () -> Unit,
-    cardLayoutVersion: Int
+    cardLayoutVersion: Int,
+    isSyncing: Boolean = false
 ) {
     val context = LocalContext.current
     val orderedCards = remember(cardLayoutVersion) {
@@ -426,6 +431,16 @@ private fun SummaryScreen(
                     lastUpdatedAtMs = state.lastUpdatedAtMs,
                     isFromCache = state.isFromCache
                 ),
+                // Background-sync indicator (2026-08-29): a second status
+                // line under the last-sync trailing text, shown only while
+                // SyncUiState.isSyncing is true. This is a UI-only read of
+                // pre-existing state -- SyncViewModel.markSyncStarted()/
+                // markSyncCompleted() already flip isSyncing around every
+                // real sync attempt (manual "Sync now", the navbar Refresh
+                // action, and periodic WorkManager runs that call back into
+                // the same view model); this patch is the first thing that
+                // actually renders it anywhere.
+                isSyncing = isSyncing,
                 onEditClick = onEditLayout
             )
         }
@@ -1872,6 +1887,7 @@ private fun MinimalHeader(
     title: String,
     subtitle: String? = null,
     trailing: String? = null,
+    isSyncing: Boolean = false,
     onEditClick: (() -> Unit)? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1911,6 +1927,30 @@ private fun MinimalHeader(
                         modifier = Modifier.size(20.dp)
                     )
                 }
+            }
+        }
+        // Background-sync status (2026-08-29): a quiet second line, right
+        // under the last-sync trailing text, shown only while a sync is
+        // actually in flight. AnimatedVisibility fades it in on
+        // isSyncing=true and fades it out (rather than snapping) once
+        // markSyncCompleted() flips isSyncing back to false, per product
+        // request. Uses the Tangerine "active" accent (already the navbar
+        // Refresh action's color) rather than introducing a new token.
+        AnimatedVisibility(
+            visible = isSyncing,
+            enter = fadeIn(animationSpec = tween(AugustMotion.MediumMs, easing = AugustMotion.StandardEasing)),
+            exit = fadeOut(animationSpec = tween(AugustMotion.MediumMs, easing = AugustMotion.StandardEasing))
+        ) {
+            Column {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.sync_status_updating),
+                    color = AugustColor.Tangerine,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
         if (subtitle != null) {
