@@ -378,6 +378,20 @@ class GoogleHealthManager(
      * other category forever, retry after retry.
      */
     override suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): WriteSnapshotResult {
+        // Ordering is load-bearing (2026-08-30): writeStepsBatch's "complete
+        // daily summation" branch does a StepsRecord time-range delete across
+        // the whole affected date range before reinserting Huawei's daily
+        // total (see that function's own comment). writeActivitySessionsBatch
+        // now also writes a workout-scoped StepsRecord for walk/run/hike
+        // sessions (same BitLut-owned record type, same day). Because these
+        // are sequential suspend calls in one list literal -- not launched
+        // concurrently -- writeStepsBatch's delete-then-insert always fully
+        // completes before writeActivitySessionsBatch runs, so the workout
+        // StepsRecord is never deleted by that day's steps reconciliation.
+        // If this list is ever parallelized, activitySessions MUST still run
+        // strictly after steps, or the daily reconciliation delete will wipe
+        // out that sync's freshly-written workout step records.
+        // BITLUT_SESSION_METRICS_WRITE_ORDER_2026_08_30
         val results = listOf(
             "steps" to writeStepsBatch(snapshot.steps),
             "distance" to writeDistanceBatch(snapshot.distances),
@@ -587,7 +601,16 @@ class GoogleHealthManager(
             session.distanceMeters?.toString() ?: "x",
             session.totalCaloriesKcal?.toString() ?: "x",
             session.elevationMeters?.toString() ?: "x",
-            session.steps?.toString() ?: "x"
+            session.steps?.toString() ?: "x",
+            // 2026-08-30: added alongside the new session-scoped
+            // ActiveCaloriesBurnedRecord write below. Currently always "x"
+            // in practice (neither HuaweiHealthManager nor
+            // HuaweiExportParser populates ActivitySessionData.
+            // activeCaloriesKcal today), included for correctness the same
+            // way the other four summary fields already are, so a future
+            // source of this value automatically triggers a version bump
+            // and re-upsert instead of silently going stale.
+            session.activeCaloriesKcal?.toString() ?: "x"
         ).joinToString("|")
         val digest = java.security.MessageDigest.getInstance("SHA-256")
             .digest(source.toByteArray(Charsets.UTF_8))
@@ -618,6 +641,49 @@ class GoogleHealthManager(
         val version = maxOf(System.currentTimeMillis(), (previousVersion ?: 0L) + 1L)
         workoutSummaryPrefs.edit().putString(key, "$version|$fingerprint").apply()
         return version
+    }
+
+    /**
+     * Which of session.distanceMeters/steps/elevationMeters plausibly
+     * belong to a given exercise type, so writeActivitySessionsBatch never
+     * fabricates a metric a workout genuinely can't have (e.g. distance for
+     * a strength-training or yoga session). Mirrors the exact per-type
+     * grouping already established by workoutMetricDisplays() in
+     * FinalBitLutShell.kt -- that function is the single source of truth
+     * for which metrics make sense per exercise type; this just reuses the
+     * same groupings for what gets written instead of only what gets shown.
+     */
+    // BITLUT_SESSION_SUB_METRICS_2026_08_30
+    private enum class SessionSubMetric { DISTANCE, STEPS, ELEVATION }
+
+    private fun sessionSubMetricsFor(exerciseType: Int): Set<SessionSubMetric> = when (exerciseType) {
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL ->
+            setOf(SessionSubMetric.DISTANCE, SessionSubMetric.STEPS)
+
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING ->
+            setOf(SessionSubMetric.DISTANCE, SessionSubMetric.ELEVATION, SessionSubMetric.STEPS)
+
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING ->
+            setOf(SessionSubMetric.DISTANCE, SessionSubMetric.ELEVATION)
+
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY ->
+            setOf(SessionSubMetric.DISTANCE)
+
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL ->
+            setOf(SessionSubMetric.DISTANCE)
+
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
+        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING,
+        ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING,
+        ExerciseSessionRecord.EXERCISE_TYPE_YOGA,
+        ExerciseSessionRecord.EXERCISE_TYPE_PILATES ->
+            emptySet()
+
+        else ->
+            setOf(SessionSubMetric.DISTANCE, SessionSubMetric.STEPS, SessionSubMetric.ELEVATION)
     }
 
     private suspend fun writeActivitySessionsBatch(records: List<ActivitySessionData>): Boolean {
@@ -681,6 +747,101 @@ class GoogleHealthManager(
                     // are upgraded in place instead of duplicated.
                     metadata = bitlutWorkoutMetadata(
                         "exercise_calories_estimate",
+                        start.toEpochMilli(),
+                        end.toEpochMilli(),
+                        version = version
+                    )
+                )
+            }
+
+            // 2026-08-30: session.distanceMeters/steps/elevationMeters were
+            // computed correctly (from Huawei's own ActivityRecord summary,
+            // see readActivityRecordSummary()'s per-record fallback) but
+            // never actually written to Health Connect as records scoped to
+            // this exercise session's own time window -- only used for
+            // BitLut's own dashboard display. Per Health Connect's own
+            // documented pattern (a session's distance/steps/elevation are
+            // read back by querying those record types over the *same time
+            // range* as the exercise session -- there is no explicit
+            // foreign-key link), any third-party reader -- Google Fit,
+            // Health Connect's own UI, or another app -- had nothing
+            // trustworthy to find for this workout's own metrics: the only
+            // DistanceRecord/StepsRecord/ElevationGainedRecord in Health
+            // Connect for that time span was the coarse background
+            // aggregate written by writeDistanceBatch/writeStepsBatch/
+            // writeElevationBatch, whose sample windows are already
+            // documented (see readDistance()'s doc comment) as not lining
+            // up cleanly with an exact workout interval. Writing these
+            // session-scoped records in the same insertRecords bundle as
+            // the exercise itself fixes that for every workout, from every
+            // import source (live sync and archive import both produce the
+            // same ActivitySessionData through this one write path).
+            //
+            // Only include a metric a given exercise type can plausibly
+            // have -- sessionSubMetricsFor() mirrors workoutMetricDisplays()
+            // exactly, so a strength/yoga/HIIT/pilates session is never
+            // given a fabricated distance or step count it couldn't have
+            // produced on this device, which would itself be untrustworthy
+            // data.
+            val allowedSubMetrics = sessionSubMetricsFor(session.exerciseType)
+            val sessionDistanceMeters = session.distanceMeters?.takeIf { it > 0.0 }
+            if (SessionSubMetric.DISTANCE in allowedSubMetrics && sessionDistanceMeters != null) {
+                bundle += DistanceRecord(
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end),
+                    distance = Length.meters(sessionDistanceMeters),
+                    metadata = bitlutWorkoutMetadata(
+                        "exercise_distance",
+                        start.toEpochMilli(),
+                        end.toEpochMilli(),
+                        version = version
+                    )
+                )
+            }
+            val sessionSteps = session.steps?.takeIf { it > 0L }
+            if (SessionSubMetric.STEPS in allowedSubMetrics && sessionSteps != null) {
+                bundle += StepsRecord(
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end),
+                    count = sessionSteps,
+                    metadata = bitlutWorkoutMetadata(
+                        "exercise_steps",
+                        start.toEpochMilli(),
+                        end.toEpochMilli(),
+                        version = version
+                    )
+                )
+            }
+            val sessionElevationMeters = session.elevationMeters?.takeIf { it > 0.0 }
+            if (SessionSubMetric.ELEVATION in allowedSubMetrics && sessionElevationMeters != null) {
+                bundle += ElevationGainedRecord(
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end),
+                    elevation = Length.meters(sessionElevationMeters),
+                    metadata = bitlutWorkoutMetadata(
+                        "exercise_elevation",
+                        start.toEpochMilli(),
+                        end.toEpochMilli(),
+                        version = version
+                    )
+                )
+            }
+            val sessionActiveCaloriesKcal = session.activeCaloriesKcal?.takeIf { it > 0.0 }
+            if (sessionActiveCaloriesKcal != null) {
+                bundle += ActiveCaloriesBurnedRecord(
+                    startTime = start,
+                    endTime = end,
+                    startZoneOffset = offset(start),
+                    endZoneOffset = offset(end),
+                    energy = Energy.kilocalories(sessionActiveCaloriesKcal),
+                    metadata = bitlutWorkoutMetadata(
+                        "exercise_active_calories",
                         start.toEpochMilli(),
                         end.toEpochMilli(),
                         version = version
