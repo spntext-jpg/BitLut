@@ -737,7 +737,27 @@ class HuaweiHealthManager(
         var totalCaloriesKcal: Double? = null
         var elevationMeters: Double? = null
         var steps: Long? = null
+        var stepsMatchedPointCount = 0
 
+        // Sprint 2026-08-30 diagnostic: the 2026-08-29 sum-across-points fix
+        // is confirmed correct for what it does, but a real-device report
+        // still shows an undercount (2.5 km correctly summed via the
+        // distance fallback path below, steps still far too low from this
+        // summary-only path). Distance has a second, richer data source
+        // (readActivityRecordDistance's raw getSampleSet(record) samples);
+        // steps has no equivalent, and this project's own prior lesson
+        // (see readDailyStepTotals()'s doc comment) already found raw
+        // DT_CONTINUOUS_STEPS_DELTA samples unreliable for Huawei step
+        // totals, so blindly adding a steps raw-stream fallback here would
+        // repeat a category of fix already flagged as unsafe, without real
+        // per-point evidence from this specific bug. Logging every raw
+        // dataSummary point (type name + every field name/value, matched or
+        // not) is a pure, zero-risk addition -- it changes no computed
+        // value -- so the next real sync's logcat gives ground truth
+        // (whether Huawei is only emitting one low-value steps.total point,
+        // several points that our name/field matching silently rejects, or
+        // a genuinely-authoritative-but-low total from Huawei's own side)
+        // instead of guessing a third structural fix blind.
         points.forEach { point ->
             val dataType = try { point.dataType } catch (_: Exception) { null } ?: return@forEach
             val typeName = dataType.name.lowercase(Locale.ROOT)
@@ -746,6 +766,10 @@ class HuaweiHealthManager(
                 numeric?.let { field.name.lowercase(Locale.ROOT) to it }
             }
             val positiveValues = values.filter { it.second > 0.0 }
+            AppLogger.d(
+                TAG,
+                "Huawei activity summary point: type=$typeName fields=$values"
+            )
 
             // Sprint 2026-08-29: Huawei's per-activity dataSummary can split
             // one metric across multiple SamplePoints of the same DataType
@@ -776,6 +800,7 @@ class HuaweiHealthManager(
                     }
                 }
                 "steps.total" in typeName -> {
+                    stepsMatchedPointCount += 1
                     val sum = positiveValues.sumOf { it.second }.toLong()
                     if (sum > 0L) {
                         steps = (steps ?: 0L) + sum
@@ -791,6 +816,12 @@ class HuaweiHealthManager(
                 }
             }
         }
+
+        AppLogger.i(
+            TAG,
+            "Huawei activity summary steps diagnostic: totalPoints=${points.size} " +
+                "stepsTotalPointsMatched=$stepsMatchedPointCount summedSteps=${steps ?: "missing"}"
+        )
 
         return HuaweiWorkoutSummaryMetrics(
             distanceMeters = distanceMeters?.takeIf { it > 0.0 },

@@ -4,9 +4,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -1946,6 +1943,12 @@ private fun SecondaryButton(
     }
 }
 
+// Fixed height reserved for MinimalHeader's "Syncing..." line at all times
+// (2026-08-30), so fading it out never collapses layout and shifts the
+// subtitle below it. 2dp top spacer + an 11sp Bold line's rendered height.
+// BITLUT_SYNC_STATUS_FIXED_HEIGHT_2026_08_30
+private val SYNC_STATUS_LINE_HEIGHT = 18.dp
+
 @Composable
 private fun MinimalHeader(
     palette: BitPalette,
@@ -1994,29 +1997,40 @@ private fun MinimalHeader(
                 }
             }
         }
-        // Background-sync status (2026-08-29): a quiet second line, right
-        // under the last-sync trailing text, shown only while a sync is
-        // actually in flight. AnimatedVisibility fades it in on
-        // isSyncing=true and fades it out (rather than snapping) once
-        // markSyncCompleted() flips isSyncing back to false, per product
-        // request. Uses the Tangerine "active" accent (already the navbar
-        // Refresh action's color) rather than introducing a new token.
-        AnimatedVisibility(
-            visible = isSyncing,
-            enter = fadeIn(animationSpec = tween(AugustMotion.MediumMs, easing = AugustMotion.StandardEasing)),
-            exit = fadeOut(animationSpec = tween(AugustMotion.MediumMs, easing = AugustMotion.StandardEasing))
+        // Background-sync status (2026-08-29, fixed 2026-08-30): a quiet
+        // second line, right under the last-sync trailing text, shown only
+        // while a sync is actually in flight. The original AnimatedVisibility
+        // faded the line in/out but -- as AnimatedVisibility always does when
+        // it becomes invisible -- also collapsed its layout height to zero at
+        // the end of the exit animation, yanking the subtitle line upward the
+        // instant a sync finished (confirmed real-device report: a visible
+        // layout jump right when "Syncing..." disappeared). Fix: the Column
+        // is now always present at a fixed height (reserving the line's
+        // space at all times) and only its alpha animates via graphicsLayer,
+        // matching the alpha-only pattern already used elsewhere in this
+        // file (see AugustDestination's press-scale graphicsLayer in
+        // GlassNavigation.kt) rather than toggling presence/layout. Uses the
+        // Tangerine "active" accent (already the navbar Refresh action's
+        // color) rather than introducing a new token.
+        val syncStatusAlpha by animateFloatAsState(
+            targetValue = if (isSyncing) 1f else 0f,
+            animationSpec = tween(AugustMotion.MediumMs, easing = AugustMotion.StandardEasing),
+            label = "syncStatusAlpha"
+        )
+        Column(
+            modifier = Modifier
+                .height(SYNC_STATUS_LINE_HEIGHT)
+                .graphicsLayer { alpha = syncStatusAlpha }
         ) {
-            Column {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = stringResource(R.string.sync_status_updating),
-                    color = AugustColor.Tangerine,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = stringResource(R.string.sync_status_updating),
+                color = AugustColor.Tangerine,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                maxLines = 1,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
         if (subtitle != null) {
             Spacer(Modifier.height(4.dp))

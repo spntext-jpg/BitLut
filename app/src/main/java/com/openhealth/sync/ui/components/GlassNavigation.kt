@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
@@ -48,6 +49,21 @@ private const val SECRET_TAP_COUNT = 5
 private const val SECRET_TAP_WINDOW_MS = 2000L
 private val NAV_BAR_OUTER_HORIZONTAL_MARGIN = 24.dp
 private val NAV_BAR_OUTER_VERTICAL_MARGIN = 8.dp
+
+// 2026-08-30: navbar rebuild. The previous resize shrank destination
+// buttons' HEIGHT (58->46dp) to make them read as secondary next to the
+// Refresh action, but a Row.weight(1f) child's *height* has nothing to do
+// with how prominent it looks relative to a sibling -- only *width* does,
+// and the 46dp fixed height was too short for a 24dp icon + spacer + 10sp
+// label to lay out without the label clipping (confirmed: 24 + 3 + ~13
+// text line height already exceeds the 36dp inner budget left after 5dp
+// top/bottom padding). Fix: every control in the bar now shares one
+// common height so nothing clips or looks vertically lopsided; visual
+// hierarchy (Refresh reads as the primary action) comes entirely from
+// Refresh being wider than a destination button, not taller.
+// BITLUT_NAVBAR_REBUILD_2026_08_30
+private val NAV_BAR_CONTROL_HEIGHT = 64.dp
+private val NAV_BAR_SYNC_ACTION_WIDTH = 84.dp
 
 /** Compact two-destination dock with one explicit sync action. */
 @Composable
@@ -146,14 +162,14 @@ private fun AugustDestination(
         label = "destinationPressScale"
     )
     val iconSize by animateDpAsState(
-        targetValue = if (selected) 17.dp else 16.dp,
+        targetValue = if (selected) 18.dp else 17.dp,
         animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
         label = "destinationIconSize"
     )
 
     Column(
         modifier = modifier
-            .height(46.dp)
+            .height(NAV_BAR_CONTROL_HEIGHT)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -171,13 +187,13 @@ private fun AugustDestination(
                 role = Role.Tab,
                 onClick = onClick
             )
-            .padding(horizontal = 6.dp, vertical = 5.dp),
+            .padding(horizontal = 6.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
-                .size(24.dp)
+                .size(26.dp)
                 .clip(iconShape)
                 .background(iconTile),
             contentAlignment = Alignment.Center
@@ -189,12 +205,12 @@ private fun AugustDestination(
                 modifier = Modifier.size(iconSize)
             )
         }
-        Spacer(Modifier.height(3.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             text = label,
             color = contentColor,
             fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             maxLines = 1
         )
     }
@@ -205,7 +221,7 @@ private fun AugustSyncAction(onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val focused by interactionSource.collectIsFocusedAsState()
-    val shape = remember { RoundedCornerShape(22.dp) }
+    val shape = remember { RoundedCornerShape(24.dp) }
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.97f else 1f,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
@@ -222,9 +238,14 @@ private fun AugustSyncAction(onClick: () -> Unit) {
         label = "syncFill"
     )
 
+    // Same shared height as AugustDestination (NAV_BAR_CONTROL_HEIGHT) so
+    // the whole bar aligns on one baseline; a wider fixed width (rather
+    // than a taller box) is what makes this read as the primary action,
+    // per the 2026-08-30 navbar rebuild note above.
     Box(
         modifier = Modifier
-            .size(72.dp)
+            .width(NAV_BAR_SYNC_ACTION_WIDTH)
+            .height(NAV_BAR_CONTROL_HEIGHT)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -249,7 +270,7 @@ private fun AugustSyncAction(onClick: () -> Unit) {
             contentDescription = stringResource(R.string.sync_now),
             tint = AugustColor.Ink,
             modifier = Modifier
-                .size(34.dp)
+                .size(32.dp)
                 .graphicsLayer { rotationZ = rotation }
         )
     }
