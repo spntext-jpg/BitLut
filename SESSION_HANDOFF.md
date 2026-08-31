@@ -1,6 +1,6 @@
 # BitLut — Session Handoff
 
-Current handoff date: 2026-08-30.
+Current handoff date: 2026-08-31.
 
 Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus a successful `assembleDebug` + `lintDebug` is authoritative if historical notes conflict.
 
@@ -26,6 +26,8 @@ The app builds successfully after the workout interoperability hardening and fol
 - Archive workouts preserve exercise type plus available distance, calories, steps and elevation.
 - Workout distance comes from Huawei's per-activity `ActivityRecordReply.getSampleSet(record)` when available. Do not reconstruct session distance from coarse Health Connect daily/overlap aggregates.
 - `readActivityRecordSummary()` sums steps/calories/elevation across ALL matching Huawei sample points for an activity, not just the first. Do not revert to `firstOrNull()` for these fields -- Huawei can and does split them across multiple points per activity (confirmed on-device: a real walk showed 2.5 km distance but only 250 steps before this fix, because distance already summed via its fallback path while steps took only the first point).
+  - **2026-08-31 update: steps are still sometimes wrong after the sum fix** (real-device log showed a walking activity with `stepsTotalPointsMatched=0` -- Huawei's own `dataSummary` apparently emitted zero matching `steps.total` points for that activity, a different failure mode than the one the sum fix addressed). A raw-stream fallback (mirroring the distance fix's `getSampleSet(record)` approach) was considered and rejected: this file's own prior lesson already found raw `DT_CONTINUOUS_STEPS_DELTA` samples unreliable/absent for Huawei step totals during a daily read (see `readDailyStepTotals()`), so blindly reusing that approach for the per-activity case would repeat a category of fix already flagged unsafe, without real per-point evidence for this specific failure. Per-point diagnostic logging was added instead (type name + every field/value, matched or not, plus a final match-count summary) -- **do not attempt a structural fix here without a fresh real-device log showing what `dataSummary` actually contains for a failing activity.**
+- **2026-08-31: workout metrics are now also written to Health Connect as session-scoped records, not just used for dashboard display.** `writeActivitySessionsBatch()` bundles `DistanceRecord`/`StepsRecord`/`ElevationGainedRecord` (plus a currently-always-null `ActiveCaloriesBurnedRecord`) into the same `insertRecords` call as the exercise session and its calorie total, scoped to the exact session interval -- gated by `sessionSubMetricsFor()`, which mirrors `workoutMetricDisplays()`'s per-type contract exactly (walk/run/treadmill get distance+steps; hiking adds elevation; biking gets distance+elevation, no steps; stationary biking gets distance only; swimming gets distance only; strength/weightlifting/HIIT/yoga/pilates get none of the three). This closes a real interoperability gap: previously, any third-party Health Connect reader querying a workout's own distance/steps/elevation (Health Connect has no explicit session<->metric link; readers query by time-range overlap) found only the separate, coarser background daily aggregate, not anything scoped to the workout itself. **Write ordering in `writeSnapshot()` is load-bearing**: `writeStepsBatch` (which can delete-then-reinsert a whole day's `StepsRecord`s during "complete daily summation" reconciliation) must keep running before `writeActivitySessionsBatch`, or that reconciliation will silently wipe the new workout-scoped `StepsRecord`s. This is currently true only because these are sequential suspend calls in one list literal; if that list is ever parallelized, this ordering must be preserved explicitly.
 - BitLut writes workout sessions as `ACTIVELY_RECORDED`, because the original workout was actively started on the watch/phone even though BitLut relays it later.
 - `bitlutRecordingDevice` uses manufacturer `Huawei`.
 - Exercise session + related total-calorie record are inserted as one workout bundle.
@@ -47,6 +49,8 @@ Display is exercise-type aware and only shows meaningful available values:
 
 Never show `0` as a substitute for a missing workout metric; omit the slot or show the established no-data UI where applicable.
 
+**2026-08-31 note:** if a walking/running activity's Steps slot is missing despite the workout clearly having steps, this is very likely the still-open Huawei `dataSummary` steps issue noted above under "Workout import and Health Connect" -- not a display-layer bug. Check the diagnostic log line `Huawei activity summary steps diagnostic` for that activity's `stepsTotalPointsMatched` before assuming the display logic is at fault.
+
 ### Corporate wellness app investigation
 
 Still unresolved and likely external. Real-device evidence shows BitLut workouts arrive correctly in Health Connect but the corporate app does not count them, while Huawei -> Apple Health workouts are accepted.
@@ -56,6 +60,11 @@ Leading explanation: the corporate reader uses source-origin allowlisting/trust.
 Already tried and insufficient on their own: recording method, calorie attachment, device manufacturer, Health Connect data-source settings deep link, accurate session distance, corrected exercise types, stable record version and bundled workout writes.
 
 Next useful test is on the corporate app side: confirm whether it accepts third-party Health Connect writer origins. Do not keep changing BitLut metadata blindly without new evidence.
+
+### Dashboard cache and midnight rollover
+
+- `DashboardViewModel.buildInitialState()` zeroes daily-total fields (steps/distance/calories/workout minutes/active hours/elevation/floors) when the on-disk `DashboardSnapshotCache` predates today -- a new calendar day has genuinely started with zero activity so far, and showing yesterday's numbers as today's is misleading. `recentWorkouts` is untouched by this: a workout from yesterday is still real history.
+- **2026-08-31: `refreshFromCache()` now applies the identical check** (extracted into a shared `zeroedDailyTotals()` helper). It previously applied the cached snapshot unconditionally, which was safe when called right after a sync's own completion (the cache is fresh by then) but not when called from `SyncOrchestrator`'s lease-collision retry timer (8s/12s after the *deferred* sync's own "already running" result -- independent of when the *winning* sync's cache write actually lands). A real device log showed the exact race: right after midnight, that retry could read the still-stale, pre-sync on-disk cache and re-apply yesterday's real numbers over the already-correctly-zeroed dashboard, for the few seconds until a later refresh corrected it again. Do not reintroduce an unconditional cache apply on any new cache-consuming code path -- always go through (or replicate) `zeroedDailyTotals()`'s guard.
 
 ## UI decisions
 
@@ -67,8 +76,9 @@ Next useful test is on the corporate app side: confirm whether it accepts third-
 - Settings keeps the minimal data-source card and one merged action card. `Sync now` is the primary action; connect/import/refresh/Health Connect settings are secondary.
 - Dashboard-card visibility/order is handled only by `DashboardCardLayoutPrefs` from the pencil editor.
 - Settings exposes only the steps goal.
-- Bottom navbar: Today/Settings destination buttons are ~20% smaller than the center Refresh button (button height 46dp vs Refresh 72dp; destination icon 17/16dp vs Refresh icon 34dp). Both destination buttons remain identical to each other; do not resize one without the other.
-- Today header shows an animated "Syncing..." / "Синхронизация..." status line under the last-sync trailing text while `SyncUiState.isSyncing` is true (fades in/out via `AnimatedVisibility`, not a snap toggle). Driven entirely by existing `SyncViewModel.markSyncStarted()`/`markSyncCompleted()` state.
+- Bottom navbar: all controls (Today, Refresh, Settings) share one common height (64dp, was 46/72dp mismatched). Refresh reads as the primary action via width (84dp pill) instead of height -- the 2026-08-29 (b) height-based resize clipped the Today/Settings labels (confirmed real-device report) because a `Row.weight(1f)` child's height doesn't control its relative visual prominence, only width does. Both destination buttons remain identical to each other; do not resize one without the other. Do not resize navbar controls by height again for visual hierarchy -- use width.
+- Today header shows an animated "Syncing..." / "Синхронизация..." status line under the last-sync trailing text while `SyncUiState.isSyncing` is true. The line's container is always present at a fixed reserved height; only its alpha animates (`graphicsLayer`), never `AnimatedVisibility`'s presence/layout toggle -- the latter collapsed the line's height to zero on exit and yanked the subtitle text upward (confirmed real-device report). `isSyncing` itself is now a computed property (`isUiTriggeredSyncing || isBackgroundSyncActive`), not a single stored flag -- see "Sync activity signal" below for why.
+- **2026-08-31: "Syncing..." indicator visibility now also depends on real background sync activity, not just UI-triggered sync state.** `SyncViewModel.markSyncStarted()`/`markSyncCompleted()` alone were insufficient: they only fire from `MainActivity`'s two UI-triggered sync call sites, so a periodic background `SyncWorker` run that wins the sync-run lease race (confirmed on a real device log: the UI-triggered attempt's own started->completed pair collapsed to under a second while the periodic worker did the real ~10-second sync) never showed the indicator at all. `HuaweiConfig.SYNC_ACTIVITY_TAG` is now applied only to `SyncWorker`'s two enqueue sites (not `EveningReminderWorker`, which shares the older, broader `SYNC_WORKER_TAG` and is unrelated to health-data syncing) and observed via `WorkManager.getWorkInfosByTagLiveData()` in `MainActivity`, feeding `SyncViewModel.setBackgroundSyncActive()`.
 - Settings screen ends with a small wood-carved-style signature (`EngravedSignature()`), built from Inter Black + letter-spacing + a two-layer engraved-shadow effect -- no new font asset was added (see the GMS-free/Downloadable-Fonts constraint above).
 
 ## Removed dead layers
@@ -88,6 +98,11 @@ Next useful test is on the corporate app side: confirm whether it accepts third-
 4. `patch_workout_distance_source_fix_v1.py`: fixed the real ~40x workout-distance error by reading Huawei per-session samples and giving them priority over aggregate reconstruction.
 5. `patch_navbar_resize_v1.py` / `patch_sync_status_indicator_v1.py` / `patch_navbar_sync_status_docs_v1.py`: navbar resize + animated background-sync status line (full detail in `CHANGELOG.md` 2026-08-29 (b)).
 6. `patch_huawei_workout_summary_sum_v1.py` / `patch_settings_engraved_signature_v1.py` / `patch_sync_status_wording_and_docs_v1.py`: Huawei summary-metric sum fix, Settings signature, sync-status wording tightening (full detail in `CHANGELOG.md` 2026-08-29 (c)).
+7. `patch_navbar_rebuild_sync_status_steps_diag_v1.py`: navbar rebuild (shared height, width-based hierarchy), "Syncing..." alpha-only fixed-height fix, steps-undercount diagnostic logging.
+8. `patch_workout_session_scoped_metrics_v1.py`: session-scoped Distance/Steps/Elevation/ActiveCalories Health Connect records for every workout, gated by exercise type.
+9. `patch_sync_activity_signal_and_midnight_cache_v1.py`: `SYNC_ACTIVITY_TAG` background-sync-activity signal for the "Syncing..." indicator; `refreshFromCache()` midnight-staleness guard.
+
+(Full detail for 7-9 in `CHANGELOG.md` 2026-08-31.)
 
 ## What failed during the 2026-08-29 hardening and how to avoid it
 

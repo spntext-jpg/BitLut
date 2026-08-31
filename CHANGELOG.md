@@ -1,5 +1,89 @@
 # Changelog
 
+## 2026-08-31 -- navbar rebuild, workout Health Connect sub-records, Syncing indicator + midnight-cache fixes
+
+- **Navbar rebuild.** The 2026-08-29 (b) resize had shrunk `AugustDestination`'s
+  fixed *height* (58->46dp) to make Today/Settings read as secondary next to
+  Refresh, but a `Row.weight(1f)` child's height has nothing to do with
+  relative prominence -- only width does -- and 46dp was too short for a
+  24dp icon + spacer + 10sp label to lay out without clipping (confirmed
+  real-device report: labels invisible). Fix: every navbar control now
+  shares one common height (64dp); Refresh reads as primary via width
+  (84dp pill) instead of height. Both destination buttons remain identical
+  to each other.
+- **"Syncing..." layout jump fixed.** `AnimatedVisibility(fadeIn/fadeOut)`
+  collapsed the status line's layout height to zero the instant it became
+  invisible, yanking the subtitle text upward when a sync finished. Fixed
+  by keeping the line's `Column` always present at a fixed reserved height
+  and animating only `alpha` via `graphicsLayer`.
+- **Walking-steps undercount: diagnostics only, not yet fixed.** The
+  2026-08-29 (c) sum-across-points fix is confirmed correct for what it
+  does, but a real-device log still shows some walking activities summing
+  to zero/low steps from Huawei's own `ActivitySummary.dataSummary` (see
+  "Steps: still under investigation" below for the follow-up evidence).
+  Added per-point diagnostic logging (type name + every field name/value,
+  matched or not) plus a final match-count summary log, so the real cause
+  can be found from evidence instead of a third blind guess. Zero
+  behavior change.
+- **Workout session-scoped Health Connect records (real interoperability
+  fix).** `session.distanceMeters`/`steps`/`elevationMeters` were computed
+  correctly by `HuaweiHealthManager` but only ever used for BitLut's own
+  dashboard display -- never written to Health Connect as records scoped
+  to the workout's own time window. Per Health Connect's documented
+  pattern (a session's own metrics are read back by querying
+  Distance/Steps/Elevation records over the *same time range* as the
+  exercise session -- there is no explicit link), any third-party reader
+  had nothing trustworthy to find for a workout's own distance/steps/
+  elevation: only the separate, coarser background daily aggregate
+  existed in that window, and its sample windows are already documented
+  below as not lining up cleanly with an exact workout interval. Fixed:
+  `writeActivitySessionsBatch()` now bundles `DistanceRecord`,
+  `StepsRecord`, `ElevationGainedRecord` (plus a forward-compatible
+  `ActiveCaloriesBurnedRecord`, currently always null in practice) into
+  the same `insertRecords` call as the exercise session, scoped to its
+  exact interval -- but only for exercise types that can plausibly
+  produce each metric (new `sessionSubMetricsFor()`, mirroring
+  `workoutMetricDisplays()`'s existing per-type contract exactly, so
+  strength/weightlifting/HIIT/yoga/pilates never get a fabricated
+  distance or step count). Applies to every workout regardless of source
+  (live sync and archive import share this one write path). No new
+  Health Connect permissions required.
+- **"Syncing..." indicator never appeared (real device log, not a
+  guess).** Root cause: `SyncUiState.isSyncing` was wired only to
+  `SyncViewModel.markSyncStarted()`/`markSyncCompleted()`, called only
+  from `MainActivity`'s two UI-triggered sync paths (manual refresh,
+  auto-sync-on-launch). `SyncWorker` -- whether running as the periodic
+  30-minute job or a one-time manual job -- is a plain `CoroutineWorker`
+  with no path to that flag. The supplied log showed the periodic
+  background worker winning the sync-run lease race and doing the real
+  ~10-second sync, while the UI-triggered attempt lost the race and its
+  own started->completed pair collapsed to under a second -- too fast to
+  ever render. Fixed with a new `HuaweiConfig.SYNC_ACTIVITY_TAG`, applied
+  only to `SyncWorker`'s two enqueue sites (not the unrelated
+  `EveningReminderWorker`, which shares the older generic
+  `SYNC_WORKER_TAG`). `MainActivity` now observes
+  `WorkManager.getWorkInfosByTagLiveData(SYNC_ACTIVITY_TAG)` and feeds
+  "any tagged work RUNNING/ENQUEUED/BLOCKED" into a new
+  `SyncViewModel.setBackgroundSyncActive()`. `SyncUiState.isSyncing` is
+  now a computed property: `isUiTriggeredSyncing || isBackgroundSyncActive`.
+- **Yesterday's steps flashed before clearing at midnight (real device
+  log).** `DashboardViewModel.buildInitialState()` already zeroed daily
+  totals when the on-disk cache predates today (2026-08-26 fix), but
+  `refreshFromCache()` -- called both on a sync's own completion and on
+  `SyncOrchestrator`'s lease-collision retry timer (8s/12s after the
+  *deferred* sync's own result, independent of when the *winning* sync's
+  cache write actually lands) -- applied the cached snapshot
+  unconditionally. The retry can read the on-disk cache in the narrow
+  window before the winning sync's fresh write for the new day lands,
+  re-applying yesterday's still-cached real numbers over the
+  correctly-zeroed initial state. Fixed by extracting the zeroing logic
+  into a shared `zeroedDailyTotals()` helper and applying the identical
+  cache-predates-today check in `refreshFromCache()`.
+- Delivered as `patch_navbar_rebuild_sync_status_steps_diag_v1.py`,
+  `patch_workout_session_scoped_metrics_v1.py`, and
+  `patch_sync_activity_signal_and_midnight_cache_v1.py`; all removed
+  after verification per standing process.
+
 ## 2026-08-30 -- repo cleanup, handoff consolidation
 
 - Removed six verified/committed one-off patch scripts from the repo
