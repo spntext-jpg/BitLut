@@ -11,7 +11,10 @@ import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.openhealth.sync.config.HealthDataSource
+import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.domain.SyncOrchestrator
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.ui.DashboardViewModel
@@ -153,6 +156,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setupPeriodicSync()
+        observeBackgroundSyncActivity()
 
         setContent {
             BitLutExpressiveTheme {
@@ -295,6 +299,47 @@ class MainActivity : ComponentActivity() {
         syncOrchestrator.schedulePeriodic()
         com.openhealth.sync.data.worker.BackgroundSyncScheduler.scheduleEveningReminder(this)
         requestNotificationPermissionIfNeeded()
+    }
+
+    /**
+     * 2026-08-31: drives SyncViewModel.isSyncing's other half. See
+     * SyncUiState.isSyncing's doc comment for the full story -- in short,
+     * markSyncStarted()/markSyncCompleted() only fire from this Activity's
+     * own two sync-trigger call sites, so a real periodic background sync
+     * that wins the lease race (confirmed on a real device log) never shows
+     * "Syncing...", while a UI-triggered attempt that loses that race can
+     * flip started->completed inside under a second. Observing WorkInfo for
+     * HuaweiConfig.SYNC_ACTIVITY_TAG (applied only to SyncWorker's two
+     * enqueue sites, not the unrelated EveningReminderWorker) reflects
+     * whether any SyncWorker instance -- periodic or manual, whichever one
+     * -- is actually RUNNING/ENQUEUED/BLOCKED right now, independent of
+     * which path triggered it.
+     *
+     * getWorkInfosByTagLiveData(), not a one-shot query: WorkManager can
+     * hold multiple tagged requests concurrently (the periodic job plus a
+     * momentarily-enqueued manual one), so "any" must be recomputed on every
+     * change to that set, not just observed once. LiveData.observe(this, ...)
+     * ties this to the Activity's lifecycle automatically -- no manual
+     * removeObserver() needed, matching how PermissionController's launcher
+     * callbacks are also lifecycle-scoped in this file.
+     */
+    // BITLUT_OBSERVE_BACKGROUND_SYNC_ACTIVITY_2026_08_31
+    private fun observeBackgroundSyncActivity() {
+        WorkManager.getInstance(applicationContext)
+            .getWorkInfosByTagLiveData(HuaweiConfig.SYNC_ACTIVITY_TAG)
+            .observe(this) { infos ->
+                val active = infos.orEmpty().any { info ->
+                    when (info.state) {
+                        WorkInfo.State.RUNNING,
+                        WorkInfo.State.ENQUEUED,
+                        WorkInfo.State.BLOCKED -> true
+                        WorkInfo.State.SUCCEEDED,
+                        WorkInfo.State.FAILED,
+                        WorkInfo.State.CANCELLED -> false
+                    }
+                }
+                syncViewModel.setBackgroundSyncActive(active)
+            }
     }
 
     /**

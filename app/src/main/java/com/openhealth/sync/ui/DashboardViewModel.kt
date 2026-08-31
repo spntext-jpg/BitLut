@@ -116,8 +116,39 @@ class DashboardViewModel(
             null
         } ?: return
 
+        // 2026-08-31: this used to apply cached.snapshot unconditionally,
+        // with no check for whether the ON-DISK CACHE itself still predates
+        // today. buildInitialState() already had this exact guard for cold
+        // launch, but refreshFromCache() -- called both on a sync's own
+        // completion AND, per SyncOrchestrator's lease-collision handling,
+        // on a delayed retry timer that fires independently of whether the
+        // winning sync has actually finished writing yet -- had none. A real
+        // device log showed the race directly: a deferred sync trigger's
+        // retry (SyncOrchestrator's LEASE_COLLISION_RETRY_DELAYS_MS,
+        // 8s/12s after ITS OWN "already running" result, not after the
+        // WINNING sync's completion) could fire and read the cache a moment
+        // before the winning sync's own write landed -- at exactly the
+        // moment right after midnight, that stale on-disk blob is still
+        // yesterday's real numbers, correctly zeroed by buildInitialState()
+        // on cold launch but then overwritten right back to yesterday's
+        // totals by this unconditional apply, until the next refresh
+        // (or the winning sync's own completion callback) corrected it a
+        // few seconds later. Applying the same cachedDate-before-today
+        // check here closes that window: a stale-across-midnight cache read
+        // through this path now also zeroes daily totals instead of
+        // briefly re-displaying yesterday's numbers as if they were today's.
+        val cachedDate = Instant.ofEpochMilli(cached.savedAtMs).atZone(ZoneId.systemDefault()).toLocalDate()
+        val isStaleAcrossMidnight = cachedDate.isBefore(LocalDate.now())
+        if (isStaleAcrossMidnight) {
+            AppLogger.i(
+                TAG,
+                "refreshFromCache(): cache is from $cachedDate, before today (${LocalDate.now()}) -- " +
+                    "zeroing daily totals instead of re-showing yesterday's numbers"
+            )
+        }
+
         _state.update { current ->
-            readAchievementsIntoState(
+            val next = readAchievementsIntoState(
                 current.withSnapshot(cached.snapshot).copy(
                     isLoading = false,
                     hasPermissions = true,
@@ -126,6 +157,7 @@ class DashboardViewModel(
                     lastUpdatedAtMs = cached.dataChangedAtMs
                 )
             )
+            if (isStaleAcrossMidnight) next.zeroedDailyTotals() else next
         }
     }
 
@@ -198,16 +230,24 @@ class DashboardViewModel(
             "Cached snapshot is from $cachedDate, before today (${LocalDate.now()}) -- " +
                 "showing zeroed daily totals until the next sync completes"
         )
-        return withCachedSnapshot.copy(
-            stepsToday = 0L,
-            distanceMeters = 0.0,
-            caloriesKcal = 0.0,
-            workoutMinutesToday = 0L,
-            activeHoursToday = 0,
-            elevationMetersToday = 0.0,
-            floorsToday = 0.0
-        )
+        return withCachedSnapshot.zeroedDailyTotals()
     }
+
+    /**
+     * 2026-08-31: same midnight-rollover zeroing buildInitialState() already
+     * applied when the cache predates today, extracted so refreshFromCache()
+     * can apply the identical rule. Only the daily-total fields reset;
+     * recentWorkouts (real history) is untouched.
+     */
+    private fun DashboardUiState.zeroedDailyTotals(): DashboardUiState = copy(
+        stepsToday = 0L,
+        distanceMeters = 0.0,
+        caloriesKcal = 0.0,
+        workoutMinutesToday = 0L,
+        activeHoursToday = 0,
+        elevationMetersToday = 0.0,
+        floorsToday = 0.0
+    )
 
     private fun readGoalsIntoState(state: DashboardUiState): DashboardUiState = state.copy(
         stepsGoal = goalPrefs.stepsGoal()

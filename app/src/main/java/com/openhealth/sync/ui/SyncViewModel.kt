@@ -28,10 +28,40 @@ data class SyncUiState(
     val isHuaweiAuthorized: Boolean = false,
     val lastHuaweiAuthFailureReason: HuaweiAuthFailureReason? = null,
     val selectedDataSource: HealthDataSource = HealthDataSource.HUAWEI_HEALTH,
-    val isSyncing: Boolean = false,
+    // 2026-08-31: isSyncing (below) is now the OR of these two independent
+    // raw signals -- see its own doc comment for why a single flag wasn't
+    // enough. Not private: SyncViewModel's markSyncStarted()/
+    // markSyncCompleted()/setBackgroundSyncActive() need to set these via
+    // copy(), and a private constructor property's generated copy()
+    // parameter is only accessible from inside this class, not from
+    // SyncViewModel even though it lives in the same file -- Kotlin scopes
+    // member visibility to the class, not the file. Callers outside this
+    // file should still read isSyncing, not these two fields directly.
+    val isUiTriggeredSyncing: Boolean = false,
+    val isBackgroundSyncActive: Boolean = false,
     val syncStatus: String = "sync_status_idle",
     val lastSyncTime: String = "sync_no_data"
-)
+) {
+    /**
+     * True while the "Syncing..." indicator should show. Previously this was
+     * one flag, flipped only by SyncViewModel.markSyncStarted()/
+     * markSyncCompleted(), which MainActivity calls only from its two
+     * UI-triggered sync paths (manual refresh, auto-sync-on-launch). A real
+     * device log showed that signal alone is not reliable: when the
+     * periodic background SyncWorker happens to win the sync-run lease
+     * race, the UI-triggered attempt gets deferred by SyncReliability's
+     * lease check almost immediately, so its own started->completed pair
+     * can collapse to well under a second -- too fast to ever render a
+     * fade-in -- while the periodic worker actually doing the real,
+     * multi-second sync has no path to this flag at all. isBackgroundSyncActive
+     * (fed from a WorkManager tag observer in MainActivity, see
+     * HuaweiConfig.SYNC_ACTIVITY_TAG) reflects "is any SyncWorker instance,
+     * whichever one, actually RUNNING or ENQUEUED right now" regardless of
+     * which path triggered it, so the indicator now shows for the sync that
+     * is really doing the work.
+     */
+    val isSyncing: Boolean get() = isUiTriggeredSyncing || isBackgroundSyncActive
+}
 
 class SyncViewModel(
     val googleManager: HealthConnectManager,
@@ -90,17 +120,29 @@ class SyncViewModel(
     }
 
     fun markSyncStarted() {
-        _uiState.update { it.copy(isSyncing = true, syncStatus = "sync_status_syncing") }
+        _uiState.update { it.copy(isUiTriggeredSyncing = true, syncStatus = "sync_status_syncing") }
     }
 
     fun markSyncCompleted(success: Boolean) {
         val statusMsg = if (success) "sync_status_success" else "sync_status_error"
         val time = if (success) SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()) else _uiState.value.lastSyncTime
         if (success) prefs.edit().putString("last_sync_time", time).apply()
-        _uiState.update { it.copy(isSyncing = false, syncStatus = statusMsg, lastSyncTime = time) }
+        _uiState.update { it.copy(isUiTriggeredSyncing = false, syncStatus = statusMsg, lastSyncTime = time) }
         // Do not re-query Health Connect permissions here. A completed sync
         // already proved the provider path; repeating the permission snapshot
         // was one contributor to the quota storm.
+    }
+
+    /**
+     * Fed by MainActivity's WorkManager tag observer (HuaweiConfig.
+     * SYNC_ACTIVITY_TAG) -- see SyncUiState.isSyncing's doc comment for why
+     * this exists alongside markSyncStarted()/markSyncCompleted(). Does not
+     * touch syncStatus: that field carries a specific outcome message
+     * (success/error) that only the UI-triggered path, which actually
+     * observes a result, can meaningfully report.
+     */
+    fun setBackgroundSyncActive(active: Boolean) {
+        _uiState.update { it.copy(isBackgroundSyncActive = active) }
     }
 
     companion object {

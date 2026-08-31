@@ -59,6 +59,7 @@ object BackgroundSyncScheduler {
             .setConstraints(syncConstraints())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, INITIAL_BACKOFF_MINUTES, TimeUnit.MINUTES)
             .addTag(HuaweiConfig.SYNC_WORKER_TAG)
+            .addTag(HuaweiConfig.SYNC_ACTIVITY_TAG)
             .build()
 
         // schedulePeriodic() runs on every single cold launch (from
@@ -153,6 +154,7 @@ object BackgroundSyncScheduler {
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, INITIAL_BACKOFF_MINUTES, TimeUnit.MINUTES)
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .addTag(HuaweiConfig.SYNC_WORKER_TAG)
+            .addTag(HuaweiConfig.SYNC_ACTIVITY_TAG)
             .build()
 
         workManager.enqueueUniqueWork(

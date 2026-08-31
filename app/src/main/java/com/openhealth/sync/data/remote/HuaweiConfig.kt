@@ -34,6 +34,26 @@ object HuaweiConfig {
     const val KEY_SYNC_LEASE_OWNER: String = "sync_lease_owner"
     const val SYNC_WORKER_TAG: String = "BitLutSyncWorker"
 
+    // 2026-08-31: SYNC_WORKER_TAG above is applied to every worker in this
+    // app (SyncWorker's periodic + one-time requests, AND
+    // EveningReminderWorker's periodic request) -- fine for WorkManager
+    // maintenance/cancellation, but useless for driving a "Syncing..." UI
+    // indicator, since it can't tell a real health-data sync apart from an
+    // unrelated notification-scheduling worker. This tag is applied only to
+    // SyncWorker's two enqueue sites (schedulePeriodic + enqueueImmediateSync
+    // in BackgroundSyncScheduler), so observing WorkInfo for THIS tag
+    // reflects "is any SyncWorker (periodic or manual, whichever one)
+    // actually running right now" -- a real device log showed the previous
+    // isSyncing signal (SyncViewModel.markSyncStarted/markSyncCompleted,
+    // wired only to the two MainActivity-triggered call sites) never fired
+    // at all when the periodic background worker happened to win the sync
+    // lease race: the UI-triggered attempt got deferred and its own
+    // started/completed pair collapsed to well under a second, too fast to
+    // ever render, while the periodic worker that did the real 10-second
+    // sync had no path to isSyncing whatsoever.
+    // BITLUT_SYNC_ACTIVITY_TAG_2026_08_31
+    const val SYNC_ACTIVITY_TAG: String = "BitLutSyncActivity"
+
     // Bounded, persisted diagnostic event log (v1.9.11+). Survives process
     // death/restart, unlike the in-memory-only AppLogger ring buffer, so a
     // person (or a future debugging session) can see *why* the circuit
