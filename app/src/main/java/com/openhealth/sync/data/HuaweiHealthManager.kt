@@ -1159,9 +1159,6 @@ class HuaweiHealthManager(
         const val HUAWEI_INVALID_ARGS = 907135000
         const val HUAWEI_CERT_VERIFY_FAILED = 6003
 
-        const val ACTIVITY_SESSION_MIN_DURATION_MS = 60_000L
-        const val ACTIVITY_SESSION_MAX_GAP_MS = 10L * 60L * 1000L
-
         val VALUE_NUMERIC_METHODS = listOf(
             "asIntValue",
             "asLongValue",

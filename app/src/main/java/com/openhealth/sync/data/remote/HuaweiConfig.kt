@@ -4,9 +4,6 @@ import com.openhealth.sync.BuildConfig
 
 object HuaweiConfig {
     val APP_ID: String get() = BuildConfig.HUAWEI_APP_ID
-    val CLIENT_ID: String get() = BuildConfig.HUAWEI_CLIENT_ID
-    val CLIENT_SECRET: String get() = BuildConfig.HUAWEI_CLIENT_SECRET
-    val REDIRECT_URI: String get() = BuildConfig.HUAWEI_REDIRECT_URI
 
     const val PREFS_NAME: String = "bitlut_prefs"
     const val KEY_HUAWEI_AUTHORIZED: String = "huawei_authorized"

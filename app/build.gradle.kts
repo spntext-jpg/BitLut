@@ -64,9 +64,6 @@ android {
         manifestPlaceholders["huaweiAppId"] = huaweiAppId
 
         buildConfigField("String", "HUAWEI_APP_ID", "\"${escapedBuildConfig("HUAWEI_APP_ID", "117824685")}\"")
-        buildConfigField("String", "HUAWEI_CLIENT_ID", "\"${escapedBuildConfig("HUAWEI_CLIENT_ID")}\"")
-        buildConfigField("String", "HUAWEI_CLIENT_SECRET", "\"${escapedBuildConfig("HUAWEI_CLIENT_SECRET")}\"")
-        buildConfigField("String", "HUAWEI_REDIRECT_URI", "\"${escapedBuildConfig("HUAWEI_REDIRECT_URI", "https://com.openhealth.sync/oauth_callback")}\"")
     }
 
     signingConfigs {
