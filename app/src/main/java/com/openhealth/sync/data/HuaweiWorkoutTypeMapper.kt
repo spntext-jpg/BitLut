@@ -1,6 +1,8 @@
 package com.openhealth.sync.data
 
+import android.content.Context
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import com.openhealth.sync.R
 import java.util.Locale
 
 /**
@@ -296,5 +298,86 @@ internal object HuaweiWorkoutTypeMapper {
         ExerciseSessionRecord::class.java.getField(name).getInt(null)
     } catch (_: Exception) {
         ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
+    }
+
+    /**
+     * Health Connect's ExerciseType int constant is the only locale-independent
+     * identifier the platform standardizes; it does not ship its own localized
+     * label. Every entry here maps one EXERCISE_TYPE_* constant reachable from
+     * healthConnectType() above to a string resource in values/values-ru, so
+     * getString() returns the right language for the device's locale.
+     */
+    // BITLUT_EXERCISE_TYPE_LOCALIZATION_2026_09_01
+    private val displayNameRes: Map<Int, Int> = mapOf(
+        ExerciseSessionRecord.EXERCISE_TYPE_BADMINTON to R.string.exercise_type_badminton,
+        ExerciseSessionRecord.EXERCISE_TYPE_BASEBALL to R.string.exercise_type_baseball,
+        ExerciseSessionRecord.EXERCISE_TYPE_BASKETBALL to R.string.exercise_type_basketball,
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING to R.string.exercise_type_biking,
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY to R.string.exercise_type_biking_stationary,
+        ExerciseSessionRecord.EXERCISE_TYPE_BOXING to R.string.exercise_type_boxing,
+        ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS to R.string.exercise_type_calisthenics,
+        ExerciseSessionRecord.EXERCISE_TYPE_CRICKET to R.string.exercise_type_cricket,
+        ExerciseSessionRecord.EXERCISE_TYPE_DANCING to R.string.exercise_type_dancing,
+        ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL to R.string.exercise_type_elliptical,
+        ExerciseSessionRecord.EXERCISE_TYPE_EXERCISE_CLASS to R.string.exercise_type_exercise_class,
+        ExerciseSessionRecord.EXERCISE_TYPE_FENCING to R.string.exercise_type_fencing,
+        ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AMERICAN to R.string.exercise_type_football_american,
+        ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AUSTRALIAN to R.string.exercise_type_football_australian,
+        ExerciseSessionRecord.EXERCISE_TYPE_FRISBEE_DISC to R.string.exercise_type_frisbee_disc,
+        ExerciseSessionRecord.EXERCISE_TYPE_GOLF to R.string.exercise_type_golf,
+        ExerciseSessionRecord.EXERCISE_TYPE_GYMNASTICS to R.string.exercise_type_gymnastics,
+        ExerciseSessionRecord.EXERCISE_TYPE_HANDBALL to R.string.exercise_type_handball,
+        ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING to R.string.exercise_type_hiit,
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING to R.string.exercise_type_hiking,
+        ExerciseSessionRecord.EXERCISE_TYPE_ICE_HOCKEY to R.string.exercise_type_ice_hockey,
+        ExerciseSessionRecord.EXERCISE_TYPE_ICE_SKATING to R.string.exercise_type_ice_skating,
+        ExerciseSessionRecord.EXERCISE_TYPE_MARTIAL_ARTS to R.string.exercise_type_martial_arts,
+        ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT to R.string.exercise_type_other_workout,
+        ExerciseSessionRecord.EXERCISE_TYPE_PADDLING to R.string.exercise_type_paddling,
+        ExerciseSessionRecord.EXERCISE_TYPE_PARAGLIDING to R.string.exercise_type_paragliding,
+        ExerciseSessionRecord.EXERCISE_TYPE_PILATES to R.string.exercise_type_pilates,
+        ExerciseSessionRecord.EXERCISE_TYPE_RACQUETBALL to R.string.exercise_type_racquetball,
+        ExerciseSessionRecord.EXERCISE_TYPE_ROCK_CLIMBING to R.string.exercise_type_rock_climbing,
+        ExerciseSessionRecord.EXERCISE_TYPE_ROWING to R.string.exercise_type_rowing,
+        ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE to R.string.exercise_type_rowing_machine,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUGBY to R.string.exercise_type_rugby,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING to R.string.exercise_type_running,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL to R.string.exercise_type_running_treadmill,
+        ExerciseSessionRecord.EXERCISE_TYPE_SAILING to R.string.exercise_type_sailing,
+        ExerciseSessionRecord.EXERCISE_TYPE_SCUBA_DIVING to R.string.exercise_type_scuba_diving,
+        ExerciseSessionRecord.EXERCISE_TYPE_SKATING to R.string.exercise_type_skating,
+        ExerciseSessionRecord.EXERCISE_TYPE_SKIING to R.string.exercise_type_skiing,
+        ExerciseSessionRecord.EXERCISE_TYPE_SNOWBOARDING to R.string.exercise_type_snowboarding,
+        ExerciseSessionRecord.EXERCISE_TYPE_SNOWSHOEING to R.string.exercise_type_snowshoeing,
+        ExerciseSessionRecord.EXERCISE_TYPE_SOCCER to R.string.exercise_type_soccer,
+        ExerciseSessionRecord.EXERCISE_TYPE_SOFTBALL to R.string.exercise_type_softball,
+        ExerciseSessionRecord.EXERCISE_TYPE_SQUASH to R.string.exercise_type_squash,
+        ExerciseSessionRecord.EXERCISE_TYPE_STAIR_CLIMBING to R.string.exercise_type_stair_climbing,
+        ExerciseSessionRecord.EXERCISE_TYPE_STAIR_CLIMBING_MACHINE to R.string.exercise_type_stair_climbing_machine,
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING to R.string.exercise_type_strength_training,
+        ExerciseSessionRecord.EXERCISE_TYPE_SURFING to R.string.exercise_type_surfing,
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER to R.string.exercise_type_swimming_open_water,
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL to R.string.exercise_type_swimming_pool,
+        ExerciseSessionRecord.EXERCISE_TYPE_TABLE_TENNIS to R.string.exercise_type_table_tennis,
+        ExerciseSessionRecord.EXERCISE_TYPE_TENNIS to R.string.exercise_type_tennis,
+        ExerciseSessionRecord.EXERCISE_TYPE_VOLLEYBALL to R.string.exercise_type_volleyball,
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING to R.string.exercise_type_walking,
+        ExerciseSessionRecord.EXERCISE_TYPE_WATER_POLO to R.string.exercise_type_water_polo,
+        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING to R.string.exercise_type_weightlifting,
+        ExerciseSessionRecord.EXERCISE_TYPE_WHEELCHAIR to R.string.exercise_type_wheelchair,
+        ExerciseSessionRecord.EXERCISE_TYPE_YOGA to R.string.exercise_type_yoga
+    )
+
+    /**
+     * Localized fallback title for a workout, used only when Huawei did not
+     * provide its own name for the session. [exerciseType] should be the
+     * value already returned by [healthConnectType] for this record. Falls
+     * back to the generic "Workout"/"Тренировка" string for any type not in
+     * the table (there should not be any, since every branch of
+     * [healthConnectType] is covered above).
+     */
+    fun localizedDisplayName(context: Context, exerciseType: Int): String {
+        val resId = displayNameRes[exerciseType] ?: R.string.exercise_type_other_workout
+        return context.getString(resId)
     }
 }

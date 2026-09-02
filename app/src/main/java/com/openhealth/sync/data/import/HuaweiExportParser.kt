@@ -222,7 +222,7 @@ class HuaweiExportParser(private val context: Context) {
             val explicitName = sequenceOf("name", "title", "workoutName")
                 .map { key -> obj.optString(key, "").trim() }
                 .firstOrNull { it.isNotBlank() }
-            val title = explicitName ?: canonicalType
+            val title = explicitName ?: HuaweiWorkoutTypeMapper.localizedDisplayName(context, exerciseType)
 
             ActivitySessionData(
                 startTimeMs = start,
