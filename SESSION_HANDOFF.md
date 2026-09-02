@@ -1,6 +1,6 @@
 # BitLut — Session Handoff
 
-Current handoff date: 2026-08-31.
+Current handoff date: 2026-09-02.
 
 Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus a successful `assembleDebug` + `lintDebug` is authoritative if historical notes conflict.
 
@@ -51,15 +51,13 @@ Never show `0` as a substitute for a missing workout metric; omit the slot or sh
 
 **2026-08-31 note:** if a walking/running activity's Steps slot is missing despite the workout clearly having steps, this is very likely the still-open Huawei `dataSummary` steps issue noted above under "Workout import and Health Connect" -- not a display-layer bug. Check the diagnostic log line `Huawei activity summary steps diagnostic` for that activity's `stepsTotalPointsMatched` before assuming the display logic is at fault.
 
-### Corporate wellness app investigation
+### Corporate wellness app investigation — resolved 2026-08-31/09-01
 
-Still unresolved and likely external. Real-device evidence shows BitLut workouts arrive correctly in Health Connect but the corporate app does not count them, while Huawei -> Apple Health workouts are accepted.
+Real-device evidence now confirms the corporate app reliably imports and accepts BitLut-synced workouts. The fix was the 2026-08-31 session-scoped Health Connect sub-metric write (`writeActivitySessionsBatch()` now bundles `DistanceRecord`/`StepsRecord`/`ElevationGainedRecord` into the workout's own time window instead of leaving the reader to fall back on the separate, coarser background daily aggregate). Full technical detail lives in `sync.md` section 4.6.
 
-Leading explanation: the corporate reader uses source-origin allowlisting/trust. Apple Health receives records from Huawei's first-party iOS app (`HKSource`), while Android Health Connect records written by BitLut necessarily have `Metadata.dataOrigin.packageName = com.openhealth.sync`. BitLut cannot legally/technically impersonate another package's `DataOrigin`.
+The original leading explanation (source-origin allowlisting/trust on the reader side) is still believed to be part of why earlier metadata-only attempts didn't work, but is no longer an open question requiring further code changes: recording method, calorie attachment, device manufacturer, Health Connect data-source settings deep link, accurate session distance, corrected exercise types, and stable record version were all tried and individually insufficient; the session-scoped sub-metrics were the piece that closed the gap.
 
-Already tried and insufficient on their own: recording method, calorie attachment, device manufacturer, Health Connect data-source settings deep link, accurate session distance, corrected exercise types, stable record version and bundled workout writes.
-
-Next useful test is on the corporate app side: confirm whether it accepts third-party Health Connect writer origins. Do not keep changing BitLut metadata blindly without new evidence.
+No further work is planned here unless a new, different reader-compatibility issue surfaces.
 
 ### Dashboard cache and midnight rollover
 

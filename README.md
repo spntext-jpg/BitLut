@@ -1,42 +1,42 @@
 # BitLut
 
-Открытый локальный Android-мост между **HUAWEI Health** и **Android Health Connect**.
+Open-source, local Android bridge between **HUAWEI Health** and **Android Health Connect**.
 
 ```text
-HUAWEI Health -> BitLut -> Health Connect -> совместимые приложения
+HUAWEI Health -> BitLut -> Health Connect -> compatible apps
 ```
 
-Без аккаунта BitLut, backend, рекламы и серверного хранения health data.
+No BitLut account, backend, ads, or server-side health data storage.
 
-## Что синхронизируется
+## What syncs
 
-Текущий scope — только активность и тренировки: шаги, дистанция, этажи/набор высоты, калории при наличии данных и workout sessions. Типы тренировок HUAWEI нормализуются через единый `HuaweiWorkoutTypeMapper`; состояния, которые не являются тренировками, фильтруются.
+Current scope is activity and workout data only: steps, distance, floors/elevation gain, calories when available, and workout sessions. HUAWEI workout types are normalized through a single `HuaweiWorkoutTypeMapper`; non-workout states are filtered out.
 
-Дистанция тренировки берётся из activity-scoped данных HUAWEI, когда они доступны. BitLut не восстанавливает workout distance из грубых дневных Health Connect aggregates.
+Workout distance comes from HUAWEI's activity-scoped data when available. BitLut does not reconstruct workout distance from coarse daily Health Connect aggregates.
 
 ## Workout records
 
-Exercise sessions записываются в Health Connect как `ACTIVELY_RECORDED` с Huawei device metadata, детерминированным `clientRecordId` и стабильным `clientRecordVersion` для неизменённой тренировки. Session и связанные total calories записываются одним bundle.
+Exercise sessions are written to Health Connect as `ACTIVELY_RECORDED` with Huawei device metadata, a deterministic `clientRecordId`, and a stable `clientRecordVersion` for an unchanged workout. The session and its related total calories are written as one bundle. Since 2026-08-31, distance/steps/elevation are also written as their own Health Connect records scoped to the exact session interval (per exercise type), so third-party readers see real per-workout metrics.
 
-Единственное одобренное производное значение — документированный fallback для total workout calories, когда HUAWEI не отдаёт калории конкретной реальной тренировки. Этот exception нельзя расширять на дистанцию, шаги, высоту или другие метрики.
+The only approved derived value is the documented fallback for total workout calories, used when HUAWEI doesn't provide calories for a specific real workout. This exception is not extended to distance, steps, elevation, or any other metric.
 
 ## Dashboard
 
-Workout cards зависят от типа тренировки: walking/running используют pace, cycling — average speed, hiking — elevation, swimming — pace/100 m, strength — duration/calories. Отсутствующие метрики не заменяются выдуманными нулями.
+Workout cards depend on exercise type: walking/running use pace, cycling uses average speed, hiking uses elevation, swimming uses pace/100 m, strength uses duration/calories. Missing metrics are never replaced with invented zeros.
 
 ## Corporate wellness compatibility
 
-Корпоративное приложение пока игнорирует BitLut-origin workouts, хотя записи корректно присутствуют в Health Connect. Ведущая гипотеза — allowlist/trust policy источников на стороне reader app: Health Connect правильно указывает writer package `com.openhealth.sync`, а BitLut не может подменить `DataOrigin` Huawei.
+The corporate wellness app now reliably imports and accepts BitLut-synced workouts, confirmed on a real device after workout distance/steps/elevation began being written as Health Connect records scoped to the workout's own time window (see `sync.md` section 4.6 for the full mechanism).
 
-## Интерфейс
+## Interface
 
-Сохраняется August palette: Navy, Lime, Tangerine, Purple, Inter Variable и системные light/dark themes. Текущая UI-направленность — спокойная и content-first: плоские outlined cards, restrained hero depth, pill controls, удобные touch targets и минимальная анимация.
+Keeps the August palette: Navy, Lime, Tangerine, Purple, Inter Variable, and system light/dark themes. Current UI direction is calm and content-first: flat outlined cards, restrained hero depth, pill controls, comfortable touch targets, and minimal animation.
 
-Settings намеренно минимален: data source, единая группа connection/sync actions, Health Connect settings deep link и steps goal. Workout-filter UI удалён, но `WorkoutFilterPrefs` по-прежнему применяется в sync path.
+Settings is deliberately minimal: data source, one grouped connection/sync actions card, a Health Connect settings deep link, and the steps goal. Workout-filter UI has been removed, but `WorkoutFilterPrefs` still applies in the sync path.
 
-## Проверка перед commit
+## Verification before commit
 
-Обязательны обе проверки:
+Both checks are mandatory:
 
 ```bash
 ./gradlew :app:assembleDebug :app:lintDebug \
@@ -48,4 +48,4 @@ Settings намеренно минимален: data source, единая гру
   -Pkotlin.compiler.execution.strategy=in-process
 ```
 
-Перед изменениями прочитайте `CLAUDE.md`, `CONTEXT.md`, `SESSION_HANDOFF.md` и `design.md`.
+Before making changes, read `CLAUDE.md`, `CONTEXT.md`, `SESSION_HANDOFF.md`, `design.md`, and `sync.md`.

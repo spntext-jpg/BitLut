@@ -1,12 +1,12 @@
 # BitLut Backlog
 
-Updated: 2026-08-29
+Updated: 2026-09-02
 
 ## Highest priority
 
-- Confirm with the corporate wellness app/vendor whether third-party Health Connect `DataOrigin` packages are accepted or allowlisted. Do not keep mutating BitLut workout metadata without evidence.
 - Add focused unit tests for `HuaweiWorkoutTypeMapper` and workout metric selection.
 - Add screenshot/UI tests for Summary, Settings, dashboard editor, light mode and dark mode.
+- Walking-steps undercount: awaiting a real-device diagnostic log showing `ActivitySummary.dataSummary`'s actual contents for a failing activity before attempting a structural fix (see `sync.md` section 8, `SESSION_HANDOFF.md`).
 
 ## Nice to have
 
@@ -23,3 +23,4 @@ Updated: 2026-08-29
 - Removed dead CSV, widget-visibility, unused goal and achievement-summary layers.
 - Modernized cards/buttons/navigation while preserving the August palette.
 - Removed one-off delivery patch scripts from the repository.
+- Workout session-scoped Distance/Steps/Elevation Health Connect records; corporate wellness app now reliably imports BitLut-synced workouts (confirmed on a real device, `sync.md` section 4.6).

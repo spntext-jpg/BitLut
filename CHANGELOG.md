@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-09-02 -- documentation sync pass, repo root cleanup
+
+- **Corporate wellness app status corrected across all docs.** `sync.md`
+  (2026-08-31) already recorded that the corporate wellness app reliably
+  imports and accepts BitLut-synced workouts once the session-scoped
+  Distance/Steps/Elevation sub-metric write landed, but `CLAUDE.md`,
+  `CONTEXT.md`, `SESSION_HANDOFF.md`, `docs/BACKLOG.md`, and `README.md`
+  had not been updated to match and still described this as an open,
+  unresolved investigation. All five now point to `sync.md` section 4.6 as
+  the resolved explanation; no code change, documentation only.
+- `CLAUDE.md`'s "Current baseline" header was still dated 2026-08-29, a day
+  behind its own already-current content plus the 2026-08-31 work recorded
+  everywhere else (navbar rebuild, session-scoped workout sub-metrics,
+  sync-activity signal, midnight-cache guard). Updated the header and added
+  the two missing baseline bullets so the file matches its own sibling docs.
+- `design.md` described only the Navy/Lime/Tangerine/Purple palette names;
+  `AugustTokens.kt` is the actual source of truth and additionally uses
+  Ink/Canvas/Surface as the core neutral-role names (Navy is a same-color
+  alias for Ink in its architectural/navigation role). Doc now names both
+  so it doesn't read as a mismatch against the real token file.
+- `README.md` translated from Russian to English for parity with every
+  other project doc, and its corporate-app section corrected to match.
+- Removed `patch_localize_exercise_titles_v1.py` and
+  `patch_security_audit_cleanup_v1.py` from the repo root -- both verified
+  already fully applied in source (localized fallback workout titles;
+  removal of the dead Huawei OAuth-style client secret, dead activity-
+  session constants, and duplicated manifest comments) -- per the standing
+  "repo root stays clean between sessions" rule.
+
 ## 2026-08-31 -- navbar rebuild, workout Health Connect sub-records, Syncing indicator + midnight-cache fixes
 
 - **Navbar rebuild.** The 2026-08-29 (b) resize had shrunk `AugustDestination`'s

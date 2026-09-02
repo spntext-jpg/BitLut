@@ -1,8 +1,10 @@
 # BitLut — Current Context
 
-Updated: 2026-08-31
+Updated: 2026-09-02
 
 BitLut is a local-first Kotlin/Jetpack Compose Android bridge from HUAWEI Health to Android Health Connect.
+
+`sync.md` is the durable technical reference for the full sync pipeline (why it's built the way it is); this file stays the short current-state summary.
 
 ## Current product scope
 
@@ -28,7 +30,7 @@ Activity/workout data only. No backend/account. Real data first. The only approv
 - Session + related calories written as a bundle; distance/steps/elevation (when the exercise type plausibly has them) are also written as their own Health Connect records scoped to the exact session interval, so third-party readers see real per-workout metrics rather than only a bare session plus an unrelated background aggregate.
 - Stable deterministic client record identity/version for unchanged workouts.
 - Type-aware dashboard metrics.
-- Corporate wellness app still ignores BitLut-origin workouts; source-origin allowlisting is the leading external explanation. BitLut cannot spoof Health Connect `DataOrigin`.
+- Corporate wellness app now reliably imports and accepts BitLut-synced workouts, confirmed on a real device after the session-scoped Distance/Steps/Elevation sub-metric write landed (see `sync.md` section 4.6). The earlier source-origin-allowlisting theory remains the explanation for why it took the interoperability fix to work; no further code changes are planned on this front.
 
 ## UI baseline
 

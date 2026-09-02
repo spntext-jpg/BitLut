@@ -1,6 +1,6 @@
 # BitLut Design System
 
-Updated: 2026-08-29
+Updated: 2026-09-02
 
 ## Direction
 
@@ -8,12 +8,14 @@ BitLut keeps the August v3 palette but moves to a quieter 2026 content-first int
 
 ## Color roles — unchanged
 
-- Navy `#151728`: architectural anchor/navigation/dark canvas.
+`AugustTokens.kt` (`AugustColor`) is the single source of truth for the exact hex values; this section names the semantic roles.
+
+- Ink `#151728`: core neutral / foreground-on-Lime / dark canvas. Also aliased as Navy in its architectural-anchor/navigation role — same color, two semantic names for two roles.
 - Navy Raised `#1C1E33`: dark raised/hero surface.
+- Canvas `#F7F8FC`: light background. Surface `#FFFFFF`: white card fill.
 - Lime `#DFFF6A`: primary action and hero progress.
-- Tangerine `#F28500`: sync action / active toggle signal.
+- Tangerine `#F28500`: sync action / active toggle signal (Settings toggle "on" track and the bottom nav Refresh fill only; Purple keeps every other focus/selection role).
 - Purple `#6E5CF6`: focus and secondary interaction detail.
-- Light canvas `#F7F8FC`, white surface.
 - Inter Variable remains the app font.
 
 Do not add new colors when an existing semantic role works.

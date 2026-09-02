@@ -14,16 +14,18 @@ No BitLut backend/account. Production scope is activity/workout data only: steps
 
 Real-data rule: never fabricate missing metrics. The only approved exception is the existing workout total-calorie estimate used when Huawei supplies no workout calories; keep that exception isolated to `TotalCaloriesBurnedRecord`.
 
-## Current baseline — 2026-08-29
+## Current baseline — 2026-08-31
 
 - Huawei Health Kit authorization and real activity reads work.
 - `HuaweiWorkoutTypeMapper` is the single Huawei workout-ID mapping source.
 - Per-session Huawei workout distance has priority over aggregate reconstruction.
 - Health Connect workouts are `ACTIVELY_RECORDED`, use Huawei device manufacturer metadata, deterministic client record IDs and stable versions, and write session + related calories as one bundle.
+- Workout distance/steps/elevation are also written as their own Health Connect records scoped to the exact session interval (gated per exercise type), so third-party readers see real per-workout metrics instead of only a coarser background aggregate. See `sync.md` section 4.6-4.7 for the full mechanism.
 - Dashboard workout metrics are type-aware and omit unavailable values.
 - `DashboardCardLayoutPrefs` is the sole dashboard card order/visibility layer.
 - `GoalPrefs` stores the steps goal only.
 - August colors and system light/dark themes remain the design baseline; surfaces are now quieter and flatter.
+- Bottom navbar: all controls share one common height (64dp); Refresh reads as primary via width (84dp pill), not height.
 - `assembleDebug` and `lintDebug` are mandatory before commit.
 
 ## Architecture anchors
@@ -38,7 +40,7 @@ Do not rebuild workout distance from daily Health Connect overlap aggregates. Us
 
 `GoogleHealthManager` owns read/write behavior. Keep deterministic identities/upsert semantics. Do not change workout recording method back to automatic/unknown. Do not attempt to spoof `DataOrigin`; Health Connect attributes records to the actual writer package (`com.openhealth.sync`).
 
-The corporate wellness app currently ignores BitLut-origin workouts despite valid Health Connect records. Treat source-origin allowlisting on the reader side as the leading hypothesis until new evidence appears; do not keep mutating metadata blindly.
+The corporate wellness app now reliably imports BitLut-origin workouts, confirmed on a real device after the 2026-08-31 session-scoped Distance/Steps/Elevation sub-metric write (see `sync.md` section 4.6). Do not mutate workout write metadata further on this front without new evidence of a different problem.
 
 ### Sync and resilience
 
