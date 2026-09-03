@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-09-03 -- scaling roadmap: 100-user cap, calorie scope gap
+
+- **New `docs/SCALING_ROADMAP.md`**, the durable reference for lifting the
+  Huawei Health Kit 100-user test-phase cap (the current top-priority
+  goal) and for the one Basic-tier scope BitLut hasn't requested yet.
+  Researched against Huawei's current (2026) developer documentation;
+  sources linked in the doc itself.
+- **Key finding: the 100-user cap and the data-scope tier are separate
+  gates.** Lifting the cap is Huawei's "Applying for Verification" step --
+  individual account, no new scopes, no cost beyond developer time, ~15
+  working day review. It does not require Enterprise status.
+- **Key finding: `HEALTHKIT_CALORIES_READ` has never been requested.**
+  BitLut's scope array (`HuaweiHealthManager.kt`) is Step/Distance/
+  Activity/ActivityRecord/HistoryWeek only. Calories are a separate OAuth
+  scope, not a field bundled into those five. Huawei's own documentation
+  places calories (and separately, height/weight) in the unrestricted,
+  quickly-approved Basic-tier bucket -- distinct from the manually-reviewed
+  bucket (heart rate, blood pressure, blood glucose, SpO2) and the
+  individual-developer-closed Advanced bucket (sleep, stress). This is
+  reachable without an Enterprise account.
+- **Correction: `sync.md` section 4.11 and
+  `docs/HEALTH_DATA_PERMISSION_MATRIX.md` previously described Huawei
+  `activeCalories`/`ActiveCaloriesBurnedRecord` as permanently blocked**,
+  conflating it with the genuinely permanent Advanced-tier ceiling
+  (sleep/heart rate/SpO2/stress). `sync.md` section 3.2 itself already
+  correctly listed active calories as part of the individual-developer-
+  reachable activity tier -- the 50005 error is fully explained by the
+  scope never having been requested, not by a platform-level block. Both
+  documents corrected; the MET-formula estimate (`WorkoutCalorieEstimator`)
+  remains in place and in use until/unless the real scope is requested and
+  approved. No code changed -- both existing call sites already prefer
+  real Huawei data over the estimate via a plain `?:` fallback, so adding
+  the scope later needs no restructuring.
+- `docs/BACKLOG.md`, `CONTEXT.md`, `CLAUDE.md`, and `SESSION_HANDOFF.md`
+  updated with pointers to `docs/SCALING_ROADMAP.md` and the two action
+  items (Verification submission, calorie-scope request) as current
+  highest priority.
+- Explicitly not recommended: `HEALTHKIT_HEIGHTWEIGHT_READ` (also
+  Basic-tier/quickly-approved, but BitLut has no feature that would use
+  it) and anything in the Advanced tier (still permanently closed to
+  individual developers; the only path is incorporating an enterprise
+  entity with >= CNY 5,000,000 paid-up capital, out of scope for this
+  project).
+
 ## 2026-09-02 -- documentation sync pass, repo root cleanup
 
 - **Corporate wellness app status corrected across all docs.** `sync.md`

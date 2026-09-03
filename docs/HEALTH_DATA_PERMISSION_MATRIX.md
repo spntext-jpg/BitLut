@@ -20,7 +20,12 @@ This document is the sprint contract for Huawei Health -> BitLut -> Android Heal
 - Huawei import is enabled in `FeatureFlags`.
 - Health Connect permissions are declared in `AndroidManifest.xml`.
 - Runtime permission requests are centralized in `HealthPermissionPolicy`.
-- Huawei Health Kit application scope is approved; individual metric availability may still vary and must be handled independently.
+- Huawei Health Kit application scope is approved for 5 of 6 reachable
+  Basic-tier categories; individual metric availability may still vary and
+  must be handled independently. `HEALTHKIT_CALORIES_READ` is the one
+  reachable-but-unrequested scope -- see `docs/SCALING_ROADMAP.md`.
+- The app is currently limited to 100 trial users under Huawei's Health
+  Kit test phase; lifting this is tracked in `docs/SCALING_ROADMAP.md`.
 - The app must never synthesize fake health data to satisfy a visual KPI.
 
 ## Documented exception: estimated workout calories (2026-08-25)
@@ -35,7 +40,10 @@ scoped narrowly:
 - Dashboard strength calories may use the same documented estimator only as a clearly bounded fallback when a measured workout calorie value is absent. Other workout metrics are never synthesized.
 - `TotalCaloriesBurnedRecord` is used specifically because it is a distinct
   Health Connect data type from `ActiveCaloriesBurnedRecord` (Huawei's
-  permanently-blocked, sensor-measured category) -- this avoids conflating
+  active-calorie category, currently returning 50005 because BitLut has
+  never requested the `HEALTHKIT_CALORIES_READ` scope for it -- see
+  `docs/SCALING_ROADMAP.md` -- not because it is permanently blocked) --
+  this avoids conflating
   an estimate with the exact record type users and other apps already
   expect to mean "measured by a real sensor."
 - Requires `android.permission.health.READ_TOTAL_CALORIES_BURNED` /

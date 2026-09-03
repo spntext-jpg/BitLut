@@ -1,10 +1,10 @@
 # BitLut — Current Context
 
-Updated: 2026-09-02
+Updated: 2026-09-03
 
 BitLut is a local-first Kotlin/Jetpack Compose Android bridge from HUAWEI Health to Android Health Connect.
 
-`sync.md` is the durable technical reference for the full sync pipeline (why it's built the way it is); this file stays the short current-state summary.
+`sync.md` is the durable technical reference for the full sync pipeline (why it's built the way it is); this file stays the short current-state summary. `docs/SCALING_ROADMAP.md` is the durable reference for lifting the 100-user Huawei test-phase cap and any reachable scope expansion -- this is the current top-priority goal.
 
 ## Current product scope
 

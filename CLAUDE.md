@@ -14,6 +14,8 @@ No BitLut backend/account. Production scope is activity/workout data only: steps
 
 Real-data rule: never fabricate missing metrics. The only approved exception is the existing workout total-calorie estimate used when Huawei supplies no workout calories; keep that exception isolated to `TotalCaloriesBurnedRecord`.
 
+Current top-priority goal: lift the Huawei Health Kit 100-user test-phase cap, and add `HEALTHKIT_CALORIES_READ` if it can be done without an Enterprise account. See `docs/SCALING_ROADMAP.md` for the plan; do not add any Advanced-tier scope (sleep/heart rate/SpO2/stress) regardless -- that remains permanently closed to individual developers.
+
 ## Current baseline — 2026-08-31
 
 - Huawei Health Kit authorization and real activity reads work.

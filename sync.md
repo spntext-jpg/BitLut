@@ -699,11 +699,19 @@ recently displayed workouts, and only when the sidecar has nothing.
 
 ### 4.11 Calorie estimation (`WorkoutCalorieEstimator`) — the one explicit exception to "never fabricate data"
 
-Real per-workout active-calorie data from Huawei is gated behind the
-`activeCalories` scope, which returns 50005 for this individual-developer
-account (and is not expected to ever be approved — see 3.2's ceiling). To
-give third-party readers *something* non-zero to import for a workout's
-total calories, `WorkoutCalorieEstimator.estimateTotalCaloriesKcal(exerciseType,
+Real per-workout active-calorie data from Huawei requires the
+`HEALTHKIT_CALORIES_READ` scope, which BitLut has never requested (its
+current scope array is Step/Distance/Activity/ActivityRecord/HistoryWeek
+only — see `docs/SCALING_ROADMAP.md` section 3). This is why
+`activeCalories` reads return 50005: an unrequested scope, not a denied
+one. It is **not** part of the permanently-closed Advanced tier (3.2
+correctly lists active calories as part of the individual-developer-
+reachable activity tier) and is understood, per Huawei's own developer
+documentation, to be unrestricted, quickly-approved Basic-tier data — see
+`docs/SCALING_ROADMAP.md` for the request plan. Until that scope is
+requested and approved, to give third-party readers *something* non-zero
+to import for a workout's total calories,
+`WorkoutCalorieEstimator.estimateTotalCaloriesKcal(exerciseType,
 startTimeMs, endTimeMs)` computes a standard MET-formula estimate:
 
 ```

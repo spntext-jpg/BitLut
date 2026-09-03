@@ -1,6 +1,6 @@
 # BitLut — Session Handoff
 
-Current handoff date: 2026-09-02.
+Current handoff date: 2026-09-03.
 
 Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus a successful `assembleDebug` + `lintDebug` is authoritative if historical notes conflict.
 
@@ -13,6 +13,15 @@ HUAWEI Health -> BitLut -> Android Health Connect -> compatible readers
 ```
 
 Scope is activity/workout data only. No account/backend. Do not fabricate missing metrics. The only documented exception is the existing workout total-calorie estimate used when Huawei provides no workout calories; do not extend that exception to distance, steps, elevation, heart data, sleep, etc.
+
+## Current top-priority goal: scaling
+
+`docs/SCALING_ROADMAP.md` is the durable reference. Two separate tracks:
+
+1. **Lift the Huawei Health Kit 100-user test-phase cap** via Huawei's "Applying for Verification" step -- individual account, no new scopes, ~15 working day review. This is the actual current goal; start here.
+2. **Request `HEALTHKIT_CALORIES_READ`** -- a Basic-tier, individual-developer-reachable scope BitLut has never requested (its scope array is Step/Distance/Activity/ActivityRecord/HistoryWeek only). This would let real Huawei active-calorie data replace the `WorkoutCalorieEstimator` MET fallback wherever Huawei provides it; both call sites already prefer real data via `?:`, so no code restructuring is needed, only the scope addition + console request.
+
+Do not pursue Advanced-tier scopes (sleep/heart rate/SpO2/stress) — permanently closed to individual developers regardless of app quality or review history; the only path is incorporating an enterprise entity with ≥CNY 5,000,000 paid-up capital, which is out of scope for this project.
 
 ## 2026-08-29 baseline
 

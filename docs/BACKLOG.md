@@ -1,9 +1,11 @@
 # BitLut Backlog
 
-Updated: 2026-09-02
+Updated: 2026-09-03
 
 ## Highest priority
 
+- **Scaling: submit Huawei Health Kit Verification** to lift the 100-user test-phase cap -- the top current goal. See `docs/SCALING_ROADMAP.md` section 2 for the concrete action items (~15 working day review, no code changes required).
+- **Scaling: request `HEALTHKIT_CALORIES_READ`** scope for real per-workout active-calorie data -- Basic-tier, individual-developer-reachable, no Enterprise account needed. See `docs/SCALING_ROADMAP.md` section 3.
 - Add focused unit tests for `HuaweiWorkoutTypeMapper` and workout metric selection.
 - Add screenshot/UI tests for Summary, Settings, dashboard editor, light mode and dark mode.
 - Walking-steps undercount: awaiting a real-device diagnostic log showing `ActivitySummary.dataSummary`'s actual contents for a failing activity before attempting a structural fix (see `sync.md` section 8, `SESSION_HANDOFF.md`).
