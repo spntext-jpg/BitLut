@@ -14,7 +14,7 @@ Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code.
 
 ## 2026-09-11 current source-of-truth update
 
-The temporary same-day Health Connect compatibility rollback is now superseded by a full, controlled Android 16 modernization. BitLut remains Huawei AppGallery/Huawei Health first, but the complete production stack now satisfies stable Health Connect requirements instead of pinning one old client: `compileSdk/targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin/Compose plugin `2.3.21`, AGConnect `1.9.6.300`, and Health Connect `1.1.0`. JDK stays 17. All sync/GUI hardening from earlier on 2026-09-11 remains in force.
+The temporary same-day Health Connect compatibility rollback is now superseded by a full, controlled Android 16 modernization. BitLut remains Huawei AppGallery/Huawei Health first. The first GitHub Actions AAR gate proved that Compose 1.12 / Core 1.19 / Lifecycle 2.11 already require API 37 and AGP 9.1+, so the production lane is intentionally capped at the newest stable AGP 8.13-compatible set: `compileSdk 36.1`, `targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin/Compose plugin `2.3.21`, AGConnect `1.9.6.300`, Health Connect `1.1.0`, Compose BOM `2026.06.01`, Core `1.18.0`, and Lifecycle `2.10.0`. JDK stays 17. All sync/GUI hardening from earlier on 2026-09-11 remains in force.
 
 
 The 2026-09-11 Repomix snapshot supersedes older handoff wording. The previously fixed corporate-reader interoperability path is still preserved, but a new intermittent downstream import symptom appeared after late-August/early-September Google Health updates. Current evidence does **not** show a new Health Connect record schema requirement. Google Health 5.05 had a confirmed Health Connect permission/connection regression; Google Health 5.07 began rolling out on 2026-08-28 with a fix. Android's workout guidance updated 2026-09-08 also explicitly calls out overlapping sessions as a write-failure cause.
@@ -25,11 +25,11 @@ Current hardening in source:
 
 The sprint intentionally stops at the newest stable classic Android Gradle/Kotlin lane: AGP `8.13.2` explicitly supports API 36.1 and Kotlin 2.3, while Kotlin `2.3.21` is the current bug-fix release for that compiler line. Do not move to AGP 9/Kotlin 2.4 as an incidental dependency bump: AGP 9 changes Android projects to built-in Kotlin and Huawei's current AGConnect Android guide does not establish compatibility with that migration. Treat a future AGP 9 move as a Huawei compatibility task, not routine maintenance.
 
-The release workflow installs API 36 explicitly and runs `lintRelease` before packaging. Codespaces does not run Gradle at all; only lightweight structural/static checks run before commit. GitHub Actions owns compile, lint, release packaging, signing, and final verification.
+The release workflow installs Android 16 QPR2 / API 36.1 explicitly and runs `lintRelease` before packaging. Codespaces does not run Gradle at all; only lightweight structural/static checks run before commit. GitHub Actions owns dependency/AAR validation, compile, lint, release packaging, signing, and final verification.
 
 Huawei's current Android Health Service documentation still warns that device-side `DataController` calls may fail while the app is backgrounded or the screen is off. This is not treated as an Android 16 migration regression and this sprint does not convert the proven WorkManager pipeline into a foreground service without device evidence. The post-upgrade Huawei gate must explicitly cover foreground sync, screen-off/background behavior, periodic catch-up, and recovery after HMS/Huawei Health restarts.
 
-- Production build baseline: `compileSdk/targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin/Compose plugin `2.3.21`, AGConnect `1.9.6.300`, Health Connect `1.1.0`, JDK 17. `minSdk` remains 26. Huawei device-side Health Kit remains `6.11.0.303`.
+- Production build baseline: `compileSdk 36.1`, `targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin/Compose plugin `2.3.21`, AGConnect `1.9.6.300`, Health Connect `1.1.0`, Compose BOM `2026.06.01`, Core `1.18.0`, Lifecycle `2.10.0`, JDK 17. `minSdk` remains 26. Huawei device-side Health Kit remains `6.11.0.303`.
 - `writeActivitySessionsBatch()` preserves the interoperability-critical single bundle and stable IDs, but now normalizes overlapping source sessions by keeping the richer real source record rather than fabricating clipped timestamps.
 - Huawei -> Health Connect export is gated by write permissions; dashboard reads are gated by read permissions. Revoking an unrelated read permission no longer blocks valid background export.
 - WorkManager UI activity means `RUNNING` only. `ENQUEUED` is the normal idle state of periodic work and must never drive the Syncing indicator.
@@ -172,3 +172,5 @@ That specific failure mode remains fixed. The newer 2026-09-11 intermittent down
 Codespaces: no Gradle. Run only the patch's built-in static verification, `git diff --check`, and `git status --short`.
 
 GitHub Actions: clean dependency resolution, compile, lint, release APK packaging, signing, and artifact verification. This is the authoritative build gate.
+
+<!-- BITLUT_ANDROIDX_COMPAT_2026_09_11 -->

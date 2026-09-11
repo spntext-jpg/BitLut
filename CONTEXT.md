@@ -15,10 +15,10 @@ Activity/workout data only. No backend/account. Real data first. The only approv
 ## Production build baseline (2026-09-11)
 
 - Huawei AppGallery / Huawei Health remain first-class release constraints.
-- Android: `compileSdk 36`, `targetSdk 36`, `minSdk 26`.
+- Android: `compileSdk 36.1`, `targetSdk 36`, `minSdk 26`.
 - Build: AGP `8.13.2`, Gradle `8.13`, Kotlin + Compose compiler plugin `2.3.21`, JDK 17.
 - Huawei: AGConnect plugin `1.9.6.300`; device-side Health Kit artifact remains the proven `com.huawei.hms:health:6.11.0.303`.
-- AndroidX: stable Health Connect `1.1.0`; Compose BOM `2026.08.00`; WorkManager `2.11.2`; current stable Core/Activity/Lifecycle/AppCompat/Glance pins from the sprint.
+- AndroidX: stable Health Connect `1.1.0`; Compose BOM `2026.06.01` (Compose 1.11.4 line); Core `1.18.0`; Activity `1.13.0`; Lifecycle `2.10.0`; AppCompat `1.8.0`; Glance `1.2.0`; WorkManager `2.11.2`. This is the newest stable dependency lane retained below the API 37 / AGP 9.1 boundary exposed by the first GitHub Actions AAR gate.
 - No preview dependencies. AGP 9/Kotlin 2.4 are deferred until Huawei publishes or BitLut proves AGConnect compatibility with AGP 9's built-in Kotlin model.
 
 - Huawei live source: `HuaweiHealthManager`

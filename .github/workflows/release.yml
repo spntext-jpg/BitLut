@@ -33,7 +33,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          packages: "platform-tools platforms;android-36 build-tools;35.0.0"
+          packages: "platform-tools platforms;android-36.1 build-tools;35.0.0"
 
       - name: Restore release keystore
         run: |
@@ -55,6 +55,11 @@ jobs:
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "Version: $VERSION → versionCode: $VERSION_CODE"
 
+      - name: Verify Android dependency compatibility
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:checkReleaseAarMetadata --stacktrace
+
       - name: Build release APK
         env:
           BITLUT_KEYSTORE_PASSWORD: ${{ secrets.BITLUT_KEYSTORE_PASSWORD }}
@@ -64,8 +69,7 @@ jobs:
           RELEASE_VERSION: ${{ github.event.inputs.version }}
           RELEASE_VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
-          chmod +x ./gradlew
-          ./gradlew clean :app:lintRelease :app:assembleRelease --stacktrace
+          ./gradlew :app:lintRelease :app:assembleRelease --stacktrace
 
       - name: Prepare signed APK
         env:

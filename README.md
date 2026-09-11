@@ -34,11 +34,13 @@ Keeps the August palette: Navy, Lime, Tangerine, Purple, Inter Variable, and sys
 
 Settings is deliberately minimal: data source, one grouped connection/sync actions card, a Health Connect settings deep link, and the steps goal. Workout-filter UI has been removed, but `WorkoutFilterPrefs` still applies in the sync path.
 
-'## Verification before commit
+## Verification before commit
 
 Codespaces is intentionally **static-check only**. Do not run Gradle, lint, or APK builds locally: even configuration-only AGP tasks can exhaust the project Codespace. Before committing, run the patch's built-in verification plus `git diff --check` and inspect `git status --short`.
 
 The authoritative compile/lint/release gate runs in GitHub Actions on a clean runner. A release workflow must pass before a release is considered verified.
+
+Production build baseline: Android 16 QPR2 `compileSdk 36.1`, `targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin `2.3.21`, AGConnect `1.9.6.300`, Health Connect `1.1.0`, Compose BOM `2026.06.01`, Core `1.18.0`, and Lifecycle `2.10.0`. Newer AndroidX lines that require API 37 / AGP 9.1 are intentionally deferred until Huawei AGConnect compatibility with AGP 9 is proven.
 
 Before making changes, read `CLAUDE.md`, `CONTEXT.md`, `SESSION_HANDOFF.md`, `design.md`, and `sync.md`.
 
