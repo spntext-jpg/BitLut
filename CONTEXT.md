@@ -30,7 +30,7 @@ Activity/workout data only. No backend/account. Real data first. The only approv
 - Session + related calories written as a bundle; distance/steps/elevation (when the exercise type plausibly has them) are also written as their own Health Connect records scoped to the exact session interval, so third-party readers see real per-workout metrics rather than only a bare session plus an unrelated background aggregate.
 - Stable deterministic client record identity/version for unchanged workouts.
 - Type-aware dashboard metrics.
-- The 2026-08-31 corporate-reader failure mode remains fixed by session-scoped workout sub-metrics. A separate intermittent downstream import symptom appeared after the late-August/early-September Google Health update cycle; 2026-09-11 hardening keeps the bundle/IDs intact, rejects overlapping source sessions deterministically, uses stable Health Connect 1.1.0, and documents connection/data-source-priority checks before changing serialization again.
+- The 2026-08-31 corporate-reader failure mode remains fixed by session-scoped workout sub-metrics. A separate intermittent downstream import symptom appeared after the late-August/early-September Google Health update cycle; 2026-09-11 hardening keeps the bundle/IDs intact, rejects overlapping source sessions deterministically, uses the AppGallery-compatible Health Connect `1.1.0-alpha12` pin, and documents connection/data-source-priority checks before changing serialization again.
 
 ## UI baseline
 

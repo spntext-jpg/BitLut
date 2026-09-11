@@ -139,7 +139,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.appcompat:appcompat:1.7.0")
 
-    implementation("androidx.health.connect:connect-client:1.1.0")
+    // Huawei/AppGallery production compatibility: Health Connect 1.1.0 stable
+    // requires compileSdk 36 and AGP 8.9.1+, while BitLut intentionally keeps
+    // the validated Huawei stack on compileSdk/targetSdk 35 and AGP 8.7.3.
+    // alpha12 is the last repository-proven client for this toolchain; do not
+    // upgrade Health Connect in isolation from the Huawei build stack.
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha12")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
     implementation("com.huawei.hms:health:6.11.0.303")

@@ -792,9 +792,9 @@ this codebase, matching the hard constraint in 3.2.
 ---
 
 
-### 4.14 2026-09-11 interoperability hardening: overlap hygiene and stable client
+### 4.14 2026-09-11 interoperability hardening: overlap hygiene and AppGallery-compatible client
 
-The production dependency is now `androidx.health.connect:connect-client:1.1.0` (stable). The repository had remained on `1.1.0-alpha12`; the stable train includes post-alpha provider-validation/device fixes and is the appropriate production baseline. The current 1.2 alpha line is not adopted for this reliability patch.
+The production dependency is intentionally pinned to `androidx.health.connect:connect-client:1.1.0-alpha12`. An attempted move to stable `1.1.0` on 2026-09-11 failed AAR metadata validation because that artifact requires `compileSdk 36` and Android Gradle Plugin `8.9.1+`. BitLut's primary release path is Huawei AppGallery/Huawei Health, whose repository-validated build profile remains `compileSdk/targetSdk 35`, AGP `8.7.3`, Gradle `8.9`, and AGConnect plugin `1.9.1.300`. The Health Connect pin therefore stays on the last version already proven with this stack. This dependency correction does not revert any workout, permission, or orchestration hardening in this section.
 
 `writeActivitySessionsBatch()` still writes each workout as the same single interoperability-critical bundle (ExerciseSession + calories + type-appropriate session-scoped sub-records) with stable deterministic IDs/versions. Before writing, it now removes invalid intervals, resolves exact duplicates in favor of the richer session, then prevents non-identical overlaps by retaining the richer source session. It never clips or invents timestamps. This follows current Health Connect workout guidance, which identifies overlapping same-app sessions as a write-failure/conflict cause.
 

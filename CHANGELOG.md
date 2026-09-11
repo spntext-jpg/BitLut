@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-11 -- AppGallery build compatibility correction
+
+- Restored `androidx.health.connect:connect-client:1.1.0-alpha12` after the stable `1.1.0` AAR failed the repository's validated Huawei build profile: stable `1.1.0` requires `compileSdk 36` and Android Gradle Plugin `8.9.1+`, while BitLut remains on `compileSdk/targetSdk 35`, AGP `8.7.3`, Gradle `8.9`, and AppGallery Connect plugin `1.9.1.300`.
+- This is an intentional Huawei/AppGallery compatibility pin, not a rollback of the 2026-09-11 synchronization hardening. Overlap normalization, role-specific Health Connect permissions, stable workout IDs/bundles, WorkManager `RUNNING` semantics, and the August GUI fixes remain unchanged.
+- Do not raise Android API/AGP levels only to satisfy Health Connect while the Huawei toolchain is the primary release path. Re-evaluate the stack as one tested migration when Huawei/AGConnect compatibility and a concrete product need justify it.
+
 ## 2026-09-11 -- Health Connect reliability + August GUI hardening
 
 - Moved the production Health Connect client from `1.1.0-alpha12` to stable `1.1.0`.

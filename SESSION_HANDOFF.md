@@ -6,11 +6,14 @@ Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code.
 
 ## 2026-09-11 current source-of-truth update
 
+Build correction on the same date: the attempted Health Connect stable `1.1.0` upgrade was rejected by AAR metadata before compilation because it requires `compileSdk 36` and AGP `8.9.1+`. BitLut is distributed through Huawei AppGallery and prioritizes Huawei Health/HMS reliability, so the dependency is pinned back to repository-proven `1.1.0-alpha12` instead of forcing a broad Android/AGConnect toolchain migration. The sync/GUI code from the hardening patch remains in force.
+
+
 The 2026-09-11 Repomix snapshot supersedes older handoff wording. The previously fixed corporate-reader interoperability path is still preserved, but a new intermittent downstream import symptom appeared after late-August/early-September Google Health updates. Current evidence does **not** show a new Health Connect record schema requirement. Google Health 5.05 had a confirmed Health Connect permission/connection regression; Google Health 5.07 began rolling out on 2026-08-28 with a fix. Android's workout guidance updated 2026-09-08 also explicitly calls out overlapping sessions as a write-failure cause.
 
 Current hardening in source:
 
-- Health Connect Jetpack is stable `1.1.0`, not `1.1.0-alpha12`.
+- Health Connect Jetpack is intentionally pinned to `1.1.0-alpha12` for the Huawei/AppGallery production toolchain. Stable `1.1.0` requires `compileSdk 36` and AGP `8.9.1+`; BitLut keeps the validated `compileSdk/targetSdk 35`, AGP `8.7.3`, Gradle `8.9`, AGConnect `1.9.1.300` stack.
 - `writeActivitySessionsBatch()` preserves the interoperability-critical single bundle and stable IDs, but now normalizes overlapping source sessions by keeping the richer real source record rather than fabricating clipped timestamps.
 - Huawei -> Health Connect export is gated by write permissions; dashboard reads are gated by read permissions. Revoking an unrelated read permission no longer blocks valid background export.
 - WorkManager UI activity means `RUNNING` only. `ENQUEUED` is the normal idle state of periodic work and must never drive the Syncing indicator.
