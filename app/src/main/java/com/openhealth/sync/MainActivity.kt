@@ -162,7 +162,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Sprint (2026-07-14): targetSdk 35 already forces edge-to-edge on
+        // Sprint (2026-09-11): targetSdk 36 keeps edge-to-edge enforced on
         // real Android 15+ devices with or without this call (that's the
         // whole point of the platform enforcement) -- what enableEdgeToEdge()
         // actually buys us is (a) the same look on Android 8-14 devices,

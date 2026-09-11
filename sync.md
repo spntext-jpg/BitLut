@@ -792,9 +792,9 @@ this codebase, matching the hard constraint in 3.2.
 ---
 
 
-### 4.14 2026-09-11 interoperability hardening: overlap hygiene and AppGallery-compatible client
+### 4.14 2026-09-11 interoperability hardening: overlap hygiene and stable Health Connect client
 
-The production dependency is intentionally pinned to `androidx.health.connect:connect-client:1.1.0-alpha12`. An attempted move to stable `1.1.0` on 2026-09-11 failed AAR metadata validation because that artifact requires `compileSdk 36` and Android Gradle Plugin `8.9.1+`. BitLut's primary release path is Huawei AppGallery/Huawei Health, whose repository-validated build profile remains `compileSdk/targetSdk 35`, AGP `8.7.3`, Gradle `8.9`, and AGConnect plugin `1.9.1.300`. The Health Connect pin therefore stays on the last version already proven with this stack. This dependency correction does not revert any workout, permission, or orchestration hardening in this section.
+The production dependency is `androidx.health.connect:connect-client:1.1.0` stable. The earlier same-day AAR metadata failure was resolved by moving the complete Huawei/AppGallery production toolchain to Android 16 (`compileSdk/targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin `2.3.21`, AGConnect `1.9.6.300`) rather than upgrading Health Connect in isolation. Huawei device-side Health Kit stays on the repository-proven `com.huawei.hms:health:6.11.0.303`. This toolchain migration does not change workout serialization, permission roles, source attribution, or orchestration behavior.
 
 `writeActivitySessionsBatch()` still writes each workout as the same single interoperability-critical bundle (ExerciseSession + calories + type-appropriate session-scoped sub-records) with stable deterministic IDs/versions. Before writing, it now removes invalid intervals, resolves exact duplicates in favor of the richer session, then prevents non-identical overlaps by retaining the richer source session. It never clips or invents timestamps. This follows current Health Connect workout guidance, which identifies overlapping same-app sessions as a write-failure/conflict cause.
 

@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
@@ -47,12 +48,12 @@ val hasReleaseSigning = releaseKeystorePath.isNotBlank() &&
 
 android {
     namespace = "com.openhealth.sync"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.openhealth.sync"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         val envVersionName = System.getenv("RELEASE_VERSION")?.takeIf { it.isNotBlank() } ?: "1.6.0"
         val envVersionCode = System.getenv("RELEASE_VERSION_CODE")?.toIntOrNull() ?: 26
         versionCode = envVersionCode
@@ -95,7 +96,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions { jvmTarget = "17" }
+    // Kotlin JVM target is configured below via kotlin.compilerOptions.
 
     buildFeatures {
         compose = true
@@ -112,8 +113,15 @@ android {
     }
 }
 
+// `android.kotlinOptions` is deprecated; use the typed Kotlin compiler DSL.
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+    }
+}
+
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2025.04.01")
+    val composeBom = platform("androidx.compose:compose-bom:2026.08.00")
     implementation(composeBom)
 
     implementation("androidx.compose.ui:ui")
@@ -129,25 +137,24 @@ dependencies {
     // Home screen widget (see widget/HomeWidget.kt). glance-appwidget alone
     // is sufficient. Light/dark colors stay in qualified Android resources;
     // HomeWidget resolves them through a small public ColorProvider adapter
-    // because Glance 1.1.1 restricts the resource-id ColorProvider factory.
-    implementation("androidx.glance:glance-appwidget:1.1.1")
+    // because the widget keeps resource-backed colors behind a small public ColorProvider adapter.
+    implementation("androidx.glance:glance-appwidget:1.2.0")
 
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+    implementation("androidx.appcompat:appcompat:1.8.0")
 
-    // Huawei/AppGallery production compatibility: Health Connect 1.1.0 stable
-    // requires compileSdk 36 and AGP 8.9.1+, while BitLut intentionally keeps
-    // the validated Huawei stack on compileSdk/targetSdk 35 and AGP 8.7.3.
-    // alpha12 is the last repository-proven client for this toolchain; do not
-    // upgrade Health Connect in isolation from the Huawei build stack.
-    implementation("androidx.health.connect:connect-client:1.1.0-alpha12")
-    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    // Android 16 production baseline: Health Connect can now stay on its stable
+    // production line without forcing a one-off toolchain exception.
+    implementation("androidx.health.connect:connect-client:1.1.0")
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
 
+    // Keep the repository-proven Huawei device-side Health Kit artifact. Do not
+    // confuse Huawei's newer cloud/API release numbers with this Android Maven artifact.
     implementation("com.huawei.hms:health:6.11.0.303")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 }

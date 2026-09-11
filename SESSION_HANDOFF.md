@@ -2,18 +2,26 @@
 
 Current handoff date: 2026-09-11.
 
-Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus a successful `assembleDebug` + `lintDebug` is authoritative if historical notes conflict.
+Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus successful `assembleDebug` + `lintDebug` + `lintRelease` + `assembleRelease` is authoritative if historical notes conflict.
 
 ## 2026-09-11 current source-of-truth update
 
-Build correction on the same date: the attempted Health Connect stable `1.1.0` upgrade was rejected by AAR metadata before compilation because it requires `compileSdk 36` and AGP `8.9.1+`. BitLut is distributed through Huawei AppGallery and prioritizes Huawei Health/HMS reliability, so the dependency is pinned back to repository-proven `1.1.0-alpha12` instead of forcing a broad Android/AGConnect toolchain migration. The sync/GUI code from the hardening patch remains in force.
+The temporary same-day Health Connect compatibility rollback is now superseded by a full, controlled Android 16 modernization. BitLut remains Huawei AppGallery/Huawei Health first, but the complete production stack now satisfies stable Health Connect requirements instead of pinning one old client: `compileSdk/targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin/Compose plugin `2.3.21`, AGConnect `1.9.6.300`, and Health Connect `1.1.0`. JDK stays 17. All sync/GUI hardening from earlier on 2026-09-11 remains in force.
 
 
 The 2026-09-11 Repomix snapshot supersedes older handoff wording. The previously fixed corporate-reader interoperability path is still preserved, but a new intermittent downstream import symptom appeared after late-August/early-September Google Health updates. Current evidence does **not** show a new Health Connect record schema requirement. Google Health 5.05 had a confirmed Health Connect permission/connection regression; Google Health 5.07 began rolling out on 2026-08-28 with a fix. Android's workout guidance updated 2026-09-08 also explicitly calls out overlapping sessions as a write-failure cause.
 
 Current hardening in source:
 
-- Health Connect Jetpack is intentionally pinned to `1.1.0-alpha12` for the Huawei/AppGallery production toolchain. Stable `1.1.0` requires `compileSdk 36` and AGP `8.9.1+`; BitLut keeps the validated `compileSdk/targetSdk 35`, AGP `8.7.3`, Gradle `8.9`, AGConnect `1.9.1.300` stack.
+### 2026-09-11 modernization boundary
+
+The sprint intentionally stops at the newest stable classic Android Gradle/Kotlin lane: AGP `8.13.2` explicitly supports API 36.1 and Kotlin 2.3, while Kotlin `2.3.21` is the current bug-fix release for that compiler line. Do not move to AGP 9/Kotlin 2.4 as an incidental dependency bump: AGP 9 changes Android projects to built-in Kotlin and Huawei's current AGConnect Android guide does not establish compatibility with that migration. Treat a future AGP 9 move as a Huawei compatibility task, not routine maintenance.
+
+The release workflow installs API 36 explicitly and runs `lintRelease` before packaging. Local/Codespaces verification is `assembleDebug + lintDebug + lintRelease + assembleRelease`; any failure must stop before commit/push.
+
+Huawei's current Android Health Service documentation still warns that device-side `DataController` calls may fail while the app is backgrounded or the screen is off. This is not treated as an Android 16 migration regression and this sprint does not convert the proven WorkManager pipeline into a foreground service without device evidence. The post-upgrade Huawei gate must explicitly cover foreground sync, screen-off/background behavior, periodic catch-up, and recovery after HMS/Huawei Health restarts.
+
+- Production build baseline: `compileSdk/targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin/Compose plugin `2.3.21`, AGConnect `1.9.6.300`, Health Connect `1.1.0`, JDK 17. `minSdk` remains 26. Huawei device-side Health Kit remains `6.11.0.303`.
 - `writeActivitySessionsBatch()` preserves the interoperability-critical single bundle and stable IDs, but now normalizes overlapping source sessions by keeping the richer real source record rather than fabricating clipped timestamps.
 - Huawei -> Health Connect export is gated by write permissions; dashboard reads are gated by read permissions. Revoking an unrelated read permission no longer blocks valid background export.
 - WorkManager UI activity means `RUNNING` only. `ENQUEUED` is the normal idle state of periodic work and must never drive the Syncing indicator.
@@ -144,7 +152,7 @@ That specific failure mode remains fixed. The newer 2026-09-11 intermittent down
 - When touching `values/strings.xml`, keep `values-ru/strings.xml` key parity in the same patch. Run XML parsing plus locale-key parity checks before Gradle.
 - XML comments must never contain literal `--`.
 - Patch scripts must be idempotent/fail-closed and use small symptom-based anchors, not one huge fragile multiline anchor.
-- Verification gate: `:app:assembleDebug` AND `:app:lintDebug`. A compile-only pass is not enough.
+- Verification gate: `:app:assembleDebug` AND `:app:lintDebug` AND `:app:lintRelease` AND `:app:assembleRelease`. A compile-only pass is not enough.
 - Do not suppress lint, create a lint baseline, or weaken checks merely to get green output.
 - If verification fails, do not commit/push. Show only compact compiler/lint errors, not full Gradle stack traces.
 - Do not include `git diff -- ...` in delivery commands. It creates console noise and is explicitly unwanted.

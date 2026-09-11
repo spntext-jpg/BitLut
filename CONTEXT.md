@@ -1,6 +1,6 @@
 # BitLut — Current Context
 
-Updated: 2026-09-03
+Updated: 2026-09-11
 
 BitLut is a local-first Kotlin/Jetpack Compose Android bridge from HUAWEI Health to Android Health Connect.
 
@@ -11,6 +11,15 @@ BitLut is a local-first Kotlin/Jetpack Compose Android bridge from HUAWEI Health
 Activity/workout data only. No backend/account. Real data first. The only approved estimate is workout `TotalCaloriesBurnedRecord` fallback documented in project docs.
 
 ## Current architecture
+
+## Production build baseline (2026-09-11)
+
+- Huawei AppGallery / Huawei Health remain first-class release constraints.
+- Android: `compileSdk 36`, `targetSdk 36`, `minSdk 26`.
+- Build: AGP `8.13.2`, Gradle `8.13`, Kotlin + Compose compiler plugin `2.3.21`, JDK 17.
+- Huawei: AGConnect plugin `1.9.6.300`; device-side Health Kit artifact remains the proven `com.huawei.hms:health:6.11.0.303`.
+- AndroidX: stable Health Connect `1.1.0`; Compose BOM `2026.08.00`; WorkManager `2.11.2`; current stable Core/Activity/Lifecycle/AppCompat/Glance pins from the sprint.
+- No preview dependencies. AGP 9/Kotlin 2.4 are deferred until Huawei publishes or BitLut proves AGConnect compatibility with AGP 9's built-in Kotlin model.
 
 - Huawei live source: `HuaweiHealthManager`
 - Huawei archive source: `HuaweiExportParser`
@@ -30,7 +39,7 @@ Activity/workout data only. No backend/account. Real data first. The only approv
 - Session + related calories written as a bundle; distance/steps/elevation (when the exercise type plausibly has them) are also written as their own Health Connect records scoped to the exact session interval, so third-party readers see real per-workout metrics rather than only a bare session plus an unrelated background aggregate.
 - Stable deterministic client record identity/version for unchanged workouts.
 - Type-aware dashboard metrics.
-- The 2026-08-31 corporate-reader failure mode remains fixed by session-scoped workout sub-metrics. A separate intermittent downstream import symptom appeared after the late-August/early-September Google Health update cycle; 2026-09-11 hardening keeps the bundle/IDs intact, rejects overlapping source sessions deterministically, uses the AppGallery-compatible Health Connect `1.1.0-alpha12` pin, and documents connection/data-source-priority checks before changing serialization again.
+- The 2026-08-31 corporate-reader failure mode remains fixed by session-scoped workout sub-metrics. A separate intermittent downstream import symptom appeared after the late-August/early-September Google Health update cycle; 2026-09-11 hardening keeps the bundle/IDs intact, rejects overlapping source sessions deterministically, uses stable Health Connect `1.1.0` on the Android 16 production toolchain, and documents connection/data-source-priority checks before changing serialization again.
 
 ## UI baseline
 

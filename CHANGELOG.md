@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-11 -- Android 16 production modernization sprint
+
+- Raised the production Android baseline to `compileSdk/targetSdk 36` with AGP `8.13.2`, Gradle `8.13`, Kotlin/Compose compiler plugin `2.3.21`, and AppGallery Connect plugin `1.9.6.300`. JDK stays on 17, the required/default AGP 8.13 runtime.
+- Restored stable `androidx.health.connect:connect-client:1.1.0` now that its API/AGP metadata requirements are satisfied by the whole toolchain instead of bypassed in isolation. The 2026-09-11 overlap/permission/workout-bundle hardening remains unchanged.
+- Updated the production library baseline to Compose BOM `2026.08.00`, Core `1.19.0`, Activity `1.13.0`, Lifecycle `2.11.0`, AppCompat `1.8.0`, Glance `1.2.0`, WorkManager `2.11.2`, and coroutines `1.11.0`. Preview/alpha/RC dependencies are not used.
+- Kept `com.huawei.hms:health:6.11.0.303` deliberately: it is the repository-proven Android device-side Health Kit artifact and no newer device-side Maven coordinate was authoritatively verified during this sprint. Huawei cloud/HarmonyOS release numbers must not be substituted for the Android artifact.
+- AGP 9.x / Kotlin 2.4.x are deliberately outside this production sprint. They require AGP 9's built-in Kotlin migration and a newer R8 line, while Huawei's current AGConnect Android integration documentation still describes the classic Android/Kotlin plugin model and does not establish AGP 9 compatibility. `8.13.2 + Kotlin 2.3.21` is therefore the newest stable classic lane with explicit Android compatibility and materially lower AppGallery risk.
+- Modernized the GitHub release workflow to checkout v7, setup-java v6, setup-android v4, upload-artifact v7, deterministic API 36 SDK installation, Gradle caching, and `lintRelease` before packaging/signing. The existing proven AppGallery APK signing path is unchanged.
+
 ## 2026-09-11 -- AppGallery build compatibility correction
 
 - Restored `androidx.health.connect:connect-client:1.1.0-alpha12` after the stable `1.1.0` AAR failed the repository's validated Huawei build profile: stable `1.1.0` requires `compileSdk 36` and Android Gradle Plugin `8.9.1+`, while BitLut remains on `compileSdk/targetSdk 35`, AGP `8.7.3`, Gradle `8.9`, and AppGallery Connect plugin `1.9.1.300`.
