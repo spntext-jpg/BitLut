@@ -2,6 +2,14 @@
 
 Current handoff date: 2026-09-11.
 
+## 2026-09-11 lint/compiler cleanup sprint
+
+- The API 36.1 / AGP 8.13.2 compatibility gate passes; the next GitHub Actions failure was lint-only: five `NonObservableLocale` errors in `FinalBitLutShell.kt`. All UI locale reads now observe `LocalConfiguration`, including number/date formatting helpers, so runtime locale changes recompose correctly instead of merely silencing lint.
+- Explicit Kotlin compiler warnings from that run were cleaned surgically: AutoMirrored directional icons, Observer parameter naming, platform clipboard instead of deprecated Compose `LocalClipboardManager`, explicit `@param:ColorRes`, and removal of redundant deprecated Window system-bar color writes. `ComponentActivity.enableEdgeToEdge()` remains the single system-bar owner.
+- Release CI is now staged as AAR compatibility -> lint -> build/sign. Lint reports upload with `if: always()`; a lint failure no longer wastes time assembling the APK before failing.
+- No sync serialization, Huawei Health reads, Health Connect writes, permissions, workout mapping, August motion, or dashboard business logic changed in this cleanup.
+- Codespaces remains static-check only. Do not run Gradle locally.
+
 Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus a successful GitHub Actions release workflow is authoritative if historical notes conflict. Codespaces is static-check only; do not run local Gradle tasks.
 
 ## 2026-09-11 final UI sprint
@@ -167,7 +175,7 @@ That specific failure mode remains fixed. The newer 2026-09-11 intermittent down
 - Preserve working sync/data behavior during UI work; UI refactors must not touch workout serialization unless required by evidence.
 - Repo root is kept clean between sessions: delivered/verified patch scripts and `.bitlut_patch_backup/` are deleted once their changes are committed. A patch script or backup file sitting in the repo root is stale debris, not a sign of pending work -- check `git log`/`CHANGELOG.md` for what has actually landed.
 
-'## Verification split
+## Verification split
 
 Codespaces: no Gradle. Run only the patch's built-in static verification, `git diff --check`, and `git status --short`.
 

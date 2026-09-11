@@ -60,6 +60,21 @@ jobs:
           chmod +x ./gradlew
           ./gradlew :app:checkReleaseAarMetadata --stacktrace
 
+      - name: Lint release
+        run: |
+          ./gradlew :app:lintRelease --stacktrace
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: BitLut-${{ env.RELEASE_TAG }}-lint
+          path: |
+            app/build/reports/lint-results-release.html
+            app/build/intermediates/lint_intermediate_text_report/release/**/lint-results-release.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Build release APK
         env:
           BITLUT_KEYSTORE_PASSWORD: ${{ secrets.BITLUT_KEYSTORE_PASSWORD }}
@@ -69,7 +84,7 @@ jobs:
           RELEASE_VERSION: ${{ github.event.inputs.version }}
           RELEASE_VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
-          ./gradlew :app:lintRelease :app:assembleRelease --stacktrace
+          ./gradlew :app:assembleRelease --stacktrace
 
       - name: Prepare signed APK
         env:

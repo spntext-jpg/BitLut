@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
@@ -74,11 +75,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Today
-import androidx.compose.material.icons.rounded.TrendingUp
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.DirectionsRun
-import androidx.compose.material.icons.rounded.DirectionsWalk
-import androidx.compose.material.icons.rounded.DirectionsBike
+import androidx.compose.material.icons.automirrored.rounded.DirectionsRun
+import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
+import androidx.compose.material.icons.automirrored.rounded.DirectionsBike
 import androidx.compose.material.icons.rounded.Pool
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.SelfImprovement
@@ -116,6 +117,11 @@ internal enum class MainTab(val key: String, val icon: ImageVector) {
     Today("tab_today", Icons.Rounded.Today),
     Settings("tab_settings", Icons.Rounded.Settings)
 }
+
+@Composable
+private fun currentUiLocale(): Locale = LocalConfiguration.current.locales[0]
+
+// BITLUT_LINT_CLEANUP_2026_09_11
 
 @Composable
 fun FinalBitLutShell(
@@ -252,7 +258,9 @@ fun FinalBitLutShell(
 @Composable
 private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val clipboardManager = remember(context) {
+        context.getSystemService(android.content.ClipboardManager::class.java)
+    }
     val logs by com.openhealth.sync.util.AppLogger.logs.collectAsStateWithLifecycle()
 
     // Sprint (2026-07-16): same fix as PermissionsOnboardingScreen just
@@ -287,7 +295,9 @@ private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
                         modifier = Modifier,
                         onClick = {
                             val dump = com.openhealth.sync.util.AppLogger.exportFullDump(context)
-                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(dump))
+                            clipboardManager?.setPrimaryClip(
+                                android.content.ClipData.newPlainText("BitLut diagnostic log", dump)
+                            )
                         }
                     )
                     PrimaryButton(
@@ -376,9 +386,9 @@ private fun PermissionsOnboardingScreen(palette: BitPalette, onContinue: () -> U
                     lineHeight = 21.sp
                 )
                 Spacer(Modifier.height(24.dp))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.TrendingUp, text = stringResource(R.string.onboarding_scope_steps))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.TrendingUp, text = stringResource(R.string.onboarding_scope_distance))
-                OnboardingScopeRow(palette = palette, icon = Icons.Rounded.TrendingUp, text = stringResource(R.string.onboarding_scope_workouts))
+                OnboardingScopeRow(palette = palette, icon = Icons.AutoMirrored.Rounded.TrendingUp, text = stringResource(R.string.onboarding_scope_steps))
+                OnboardingScopeRow(palette = palette, icon = Icons.AutoMirrored.Rounded.TrendingUp, text = stringResource(R.string.onboarding_scope_distance))
+                OnboardingScopeRow(palette = palette, icon = Icons.AutoMirrored.Rounded.TrendingUp, text = stringResource(R.string.onboarding_scope_workouts))
                 Spacer(Modifier.height(16.dp))
                 Text(
                     text = stringResource(R.string.onboarding_privacy_note),
@@ -762,9 +772,9 @@ private fun SevenDayStat(
  * already the card's default before per-type icons existed.
  */
 private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
-    ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> Icons.Rounded.DirectionsWalk
+    ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> Icons.AutoMirrored.Rounded.DirectionsWalk
     ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
-    ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> Icons.Rounded.DirectionsBike
+    ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> Icons.AutoMirrored.Rounded.DirectionsBike
     ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
     ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> Icons.Rounded.Pool
     ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
@@ -774,8 +784,8 @@ private fun workoutIcon(exerciseType: Int?): ImageVector = when (exerciseType) {
     ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> Icons.Rounded.SelfImprovement
     ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> Icons.Rounded.Hiking
     ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
-    ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> Icons.Rounded.DirectionsRun
-    else -> Icons.Rounded.DirectionsRun
+    ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> Icons.AutoMirrored.Rounded.DirectionsRun
+    else -> Icons.AutoMirrored.Rounded.DirectionsRun
 }
 
 /**
@@ -974,7 +984,7 @@ private fun WorkoutRecencyCard(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = label.uppercase(Locale.getDefault()),
+                        text = label.uppercase(currentUiLocale()),
                         color = palette.secondaryText,
                         fontWeight = FontWeight.Black,
                         fontSize = 11.sp,
@@ -1072,7 +1082,7 @@ private fun WorkoutStat(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = label.uppercase(Locale.getDefault()),
+            text = label.uppercase(currentUiLocale()),
             color = palette.secondaryText,
             fontWeight = FontWeight.Black,
             fontSize = 9.sp,
@@ -1103,13 +1113,14 @@ private const val MIN_DISTANCE_METERS_FOR_PACE = 500.0
 private const val MIN_DISTANCE_METERS_FOR_SPEED = 500.0
 private const val MIN_DISTANCE_METERS_FOR_SWIM_PACE = 100.0
 
+@Composable
 private fun formatWorkoutDateTime(epochMs: Long): String =
     java.time.Instant.ofEpochMilli(epochMs)
         .atZone(java.time.ZoneId.systemDefault())
         .format(
             java.time.format.DateTimeFormatter.ofPattern(
                 "d MMM · HH:mm",
-                Locale.getDefault()
+                currentUiLocale()
             )
         )
 
@@ -1310,7 +1321,7 @@ private fun pluralDaysStreak(days: Int): String {
     // vs plural. This keeps the grammar correct in both shipped locales
     // without pulling in Android <plurals> resource complexity for a single
     // string.
-    val isRussian = java.util.Locale.getDefault().language == "ru"
+    val isRussian = currentUiLocale().language == "ru"
     if (!isRussian) {
         return if (days == 1) stringResource(R.string.insights_streak_days_one, days)
         else stringResource(R.string.insights_streak_days_other, days)
@@ -1326,8 +1337,9 @@ private fun pluralDaysStreak(days: Int): String {
     }
 }
 
+@Composable
 private fun formatRecordDate(date: java.time.LocalDate): String {
-    val formatter = java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.getDefault())
+    val formatter = java.time.format.DateTimeFormatter.ofPattern("d MMM", currentUiLocale())
     return date.format(formatter)
 }
 
@@ -2189,7 +2201,7 @@ private fun MinimalMetricCard(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = title.uppercase(Locale.getDefault()),
+                    text = title.uppercase(currentUiLocale()),
                     color = titleColor,
                     fontWeight = FontWeight.Black,
                     fontSize = 12.sp
@@ -2294,7 +2306,7 @@ private fun StepsHeroCard(
         hero = true
     ) {
         Text(
-            text = title.uppercase(Locale.getDefault()),
+            text = title.uppercase(currentUiLocale()),
             color = AugustColor.DarkSecondaryText,
             fontWeight = FontWeight.Black,
             fontSize = 12.sp
@@ -2477,8 +2489,9 @@ private fun coerceProgress(value: Double, goal: Double): Float =
 private fun List<Double>.safeAverage(): Double =
     if (isEmpty()) 0.0 else average()
 
+@Composable
 private fun formatOneDecimal(value: Double): String =
-    String.format(Locale.getDefault(), "%.1f", value)
+    String.format(currentUiLocale(), "%.1f", value)
 
 internal data class BitPalette(
     val dark: Boolean,
@@ -2545,7 +2558,8 @@ internal data class BitPalette(
  * New UI strings should be added to res/values and res/values-ru first.
  */
 
-private fun formatNumber(value: Long): String = String.format(Locale.getDefault(), "%,d", value).replace(',', ' ')
+@Composable
+private fun formatNumber(value: Long): String = String.format(currentUiLocale(), "%,d", value).replace(',', ' ')
 
 /**
  * Builds the "Обновлено только что / N мин назад / N ч назад" subtitle shown

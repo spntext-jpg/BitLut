@@ -53,7 +53,7 @@ import java.util.concurrent.TimeUnit
  * cache says right now.
  */
 private class ResourceColorProvider(
-    @ColorRes private val colorRes: Int
+    @param:ColorRes private val colorRes: Int
 ) : ColorProvider {
     override fun getColor(context: Context): Color =
         Color(ContextCompat.getColor(context, colorRes))

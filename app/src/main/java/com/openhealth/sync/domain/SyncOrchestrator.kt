@@ -71,7 +71,8 @@ class SyncOrchestrator(
         val workId = BackgroundSyncScheduler.enqueueImmediateSync(appContext)
         val liveData = workManager.getWorkInfoByIdLiveData(workId)
         val observer = object : Observer<WorkInfo?> {
-            override fun onChanged(info: WorkInfo?) {
+            override fun onChanged(value: WorkInfo?) {
+                val info = value
                 when (info?.state) {
                     WorkInfo.State.SUCCEEDED -> {
                         liveData.removeObserver(this)

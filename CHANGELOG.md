@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-11 -- lint/compiler cleanup after Android 16 migration
+
+- Fixed all five release-lint blockers reported after the API 36.1 migration. Compose-facing locale reads now come from observable `LocalConfiguration` rather than `Locale.getDefault()`, including UI number/date formatters.
+- Removed the explicit compiler warnings surfaced by the same run where safe and behavior-preserving: AutoMirrored directional icons, Lifecycle Observer parameter naming, deprecated Compose clipboard access, the Kotlin annotation target warning in the widget, and redundant deprecated system-bar color writes.
+- `ComponentActivity.enableEdgeToEdge()` is now the sole system-bar styling owner, matching current Android guidance and Activity 1.13 behavior.
+- Release CI now runs dependency metadata validation, then lint, then APK assembly/signing as separate gates and always uploads the lint report for diagnosis.
+
 ## 2026-09-11 -- Android 16 production modernization sprint
 
 - Raised the production Android baseline to `compileSdk 36.1` / `targetSdk 36` with AGP `8.13.2`, Gradle `8.13`, Kotlin/Compose compiler plugin `2.3.21`, and AppGallery Connect plugin `1.9.6.300`. JDK stays on 17, the required/default AGP 8.13 runtime.

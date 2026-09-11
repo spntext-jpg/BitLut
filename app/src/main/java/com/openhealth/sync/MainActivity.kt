@@ -168,11 +168,11 @@ class MainActivity : ComponentActivity() {
         // actually buys us is (a) the same look on Android 8-14 devices,
         // which would otherwise render with old-style opaque system bars,
         // and (b) correct light/dark status- and navigation-bar icon
-        // contrast that auto-follows system dark mode, matching how
-        // isSystemInDarkTheme() is read in BitLutExpressiveTheme (status/nav
-        // bar icon contrast) and in FinalBitLutShell (card palette, since
-        // 2026-08-22's dark theme) -- no manual SystemBarStyle wiring needed
-        // since all three read the same system signal. The root Scaffold in
+        // contrast that auto-follows system dark mode. Activity 1.13
+        // re-applies the edge-to-edge style on configuration changes, so the
+        // Compose theme no longer performs redundant deprecated Window color
+        // writes. FinalBitLutShell still reads the system theme for its August
+        // card palette. The root Scaffold in
         // FinalBitLutShell already applies M3's default contentWindowInsets,
         // and the bottom nav bar already calls navigationBarsPadding()
         // itself, so no other insets work was needed for this.

@@ -1,16 +1,11 @@
 package com.openhealth.sync.ui.theme
 
-import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
 
 /**
  * August v3's own doc (section 1: "Dark Workbench, Light Controls") only
@@ -112,24 +107,12 @@ private val AugustDarkScheme = darkColorScheme(
 @Composable
 fun BitLutExpressiveTheme(content: @Composable () -> Unit) {
     val isDark = isSystemInDarkTheme()
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as Activity).window
-            // Navy anchors navigation chrome in both modes already (August
-            // v3's own permanent-anchor rule); the status bar follows the
-            // active scheme's background/canvas so its icons keep enough
-            // contrast against whatever is actually behind them.
-            window.statusBarColor =
-                (if (isDark) AugustColor.Navy else AugustColor.Canvas).toArgb()
-            window.navigationBarColor = AugustColor.Navy.toArgb()
-            WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = !isDark
-                isAppearanceLightNavigationBars = false
-            }
-        }
-    }
 
+    // System bars are owned by ComponentActivity.enableEdgeToEdge(). Activity 1.13
+    // re-applies edge-to-edge on configuration changes and handles light/dark icon
+    // contrast itself. Keeping deprecated Window.statusBarColor/navigationBarColor
+    // writes here would be both redundant and ineffective on Android 15+ gesture nav.
+    // BITLUT_LINT_CLEANUP_2026_09_11
     MaterialTheme(
         colorScheme = if (isDark) AugustDarkScheme else AugustLightScheme,
         typography = AugustTypography,
