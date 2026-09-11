@@ -21,6 +21,13 @@ import com.openhealth.sync.data.remote.HuaweiConfig
  * Defaults to "everything syncs" (0-minute minimum, nothing excluded), so
  * existing installs see no behavior change until the person explicitly
  * opens Settings and changes something.
+ *
+ * Read-only from the sync path's perspective: the Settings UI that used to
+ * let a person change these values was removed, so only the read
+ * accessors below (minDurationMinutes(), excludedExerciseTypes(), apply())
+ * remain. If that UI comes back, reintroduce setters at that point rather
+ * than keeping unused write-side API around in the meantime (2026-09 code
+ * review, DRY/YAGNI pass).
  */
 class WorkoutFilterPrefs(context: Context) {
 
@@ -31,22 +38,11 @@ class WorkoutFilterPrefs(context: Context) {
 
     fun minDurationMinutes(): Int = prefs.getInt(KEY_MIN_DURATION_MINUTES, 0)
 
-    fun setMinDurationMinutes(value: Int) {
-        require(value >= 0) { "Minimum duration cannot be negative" }
-        prefs.edit().putInt(KEY_MIN_DURATION_MINUTES, value).apply()
-    }
-
     fun excludedExerciseTypes(): Set<Int> =
         prefs.getStringSet(KEY_EXCLUDED_EXERCISE_TYPES, emptySet())
             .orEmpty()
             .mapNotNull { it.toIntOrNull() }
             .toSet()
-
-    fun setExcludedExerciseTypes(types: Set<Int>) {
-        prefs.edit()
-            .putStringSet(KEY_EXCLUDED_EXERCISE_TYPES, types.map { it.toString() }.toSet())
-            .apply()
-    }
 
     /** Applied right before a freshly-read batch of sessions is written to Health Connect. */
     fun apply(sessions: List<ActivitySessionData>): List<ActivitySessionData> {
@@ -62,8 +58,5 @@ class WorkoutFilterPrefs(context: Context) {
     companion object {
         private const val KEY_MIN_DURATION_MINUTES = "workout_filter_min_duration_minutes"
         private const val KEY_EXCLUDED_EXERCISE_TYPES = "workout_filter_excluded_exercise_types"
-
-        /** Preset chips offered in Settings for the minimum-duration filter. */
-        val MIN_DURATION_PRESETS_MINUTES = listOf(0, 5, 10, 15, 30)
     }
 }

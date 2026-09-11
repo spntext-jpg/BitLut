@@ -178,6 +178,7 @@
     <string name="toast_hc_needs_update">Health Connect needs an update. Update it to connect Google Health.</string>
     <string name="toast_hc_not_supported">This phone doesn\'t support Health Connect.</string>
     <string name="toast_hc_launch_failed">Couldn\'t open the Health Connect permissions screen. Please try again.</string>
+    <string name="toast_battery_settings_launch_failed">Couldn\'t open battery settings. Please try again.</string>
     <string name="tab_today">Today</string>
     <string name="summary_short_title">Summary</string>
     <string name="huawei_pending_approval_title">Waiting for Huawei\'s approval</string>
@@ -193,6 +194,9 @@
     <string name="huawei_retry_connect">Try connecting again</string>
     <string name="import_archive_title">Import archive</string>
     <string name="health_connect_data_sources_button">Open Health Connect settings</string>
+    <string name="battery_optimization_title">Keep background sync reliable</string>
+    <string name="battery_optimization_body">Your phone\'s battery settings may stop BitLut from syncing in the background unless it\'s allowed to ignore battery optimization. This is a one-time setting on your device, not in the app.</string>
+    <string name="battery_optimization_button">Open battery settings</string>
     <string name="import_archive_selected">Huawei Health archive selected</string>
 <string name="kcal_unit">kcal</string>
     <string name="score_100_unit">/100</string>

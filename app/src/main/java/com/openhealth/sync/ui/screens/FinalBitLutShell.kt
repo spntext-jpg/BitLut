@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
@@ -85,6 +86,7 @@ import androidx.compose.material.icons.rounded.Hiking
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -128,6 +130,8 @@ fun FinalBitLutShell(
     onStepsGoalChanged: (Long) -> Unit = {},
     hasSeenPermissionsOnboarding: Boolean = true,
     onPermissionsOnboardingSeen: () -> Unit = {},
+    showBatteryHint: Boolean = false,
+    onOpenBatterySettings: () -> Unit = {},
     importViewModel: ImportViewModel) {
     var selected by rememberSaveable { mutableStateOf(MainTab.Today) }
     var showArchiveImport by rememberSaveable { mutableStateOf(false) }
@@ -210,7 +214,9 @@ fun FinalBitLutShell(
                     onOpenHealthConnectSettings = onOpenHealthConnectSettings,
                     onDataSourceSelected = onDataSourceSelected,
                     stepsGoal = dashboardState.stepsGoal,
-                    onStepsGoalChanged = onStepsGoalChanged)
+                    onStepsGoalChanged = onStepsGoalChanged,
+                    showBatteryHint = showBatteryHint,
+                    onOpenBatterySettings = onOpenBatterySettings)
             }
         }
     }
@@ -1344,7 +1350,9 @@ private fun SettingsScreen(
     onOpenHealthConnectSettings: () -> Unit,
     onDataSourceSelected: (HealthDataSource) -> Unit,
     stepsGoal: Long,
-    onStepsGoalChanged: (Long) -> Unit
+    onStepsGoalChanged: (Long) -> Unit,
+    showBatteryHint: Boolean,
+    onOpenBatterySettings: () -> Unit
 ) {
     // Settings exposes only the steps goal because it is the only daily goal
     // currently used by the product. Other health targets must not exist as
@@ -1456,6 +1464,14 @@ private fun SettingsScreen(
         val huaweiFailureReason = syncState.lastHuaweiAuthFailureReason
         if (!syncState.isHuaweiAuthorized && huaweiFailureReason != null) {
             HuaweiAuthIssueCard(palette = palette, reason = huaweiFailureReason, onRetryConnect = onRequestHuawei)
+        }
+
+        // Android 12+ battery-optimization advisory (2026-09): see
+        // BatteryOptimizationCard's doc comment. showBatteryHint is
+        // re-evaluated by the caller on every onResume, so this
+        // disappears immediately once the person grants the exemption.
+        if (showBatteryHint) {
+            BatteryOptimizationCard(palette = palette, onOpenBatterySettings = onOpenBatterySettings)
         }
 
         Text(
@@ -1655,6 +1671,67 @@ private fun HuaweiAuthIssueCard(palette: BitPalette, reason: HuaweiAuthFailureRe
     }
 }
 
+/**
+ * Android 12+ (API 31) advisory: warns when the OS reports BitLut is not
+ * exempt from battery optimization, since OEM battery managers (Huawei
+ * EMUI/Magic UI "Protected Apps", Xiaomi MIUI/HyperOS autostart/battery
+ * saver, and similar) can force-stop the app well before its 30-minute
+ * background sync would otherwise run again. See
+ * util/BatteryOptimizationHelper.kt's doc comment for why this only opens
+ * the general settings list rather than requesting the exemption directly.
+ * Re-evaluated by the caller on every return to Settings (see
+ * SettingsScreen's showBatteryHint parameter), so this card disappears as
+ * soon as the person grants the exemption and comes back -- it does not
+ * poll or observe on its own.
+ */
+@Composable
+private fun BatteryOptimizationCard(palette: BitPalette, onOpenBatterySettings: () -> Unit) {
+    SoftCard(palette = palette) {
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(
+                Icons.Rounded.BatteryAlert,
+                contentDescription = null,
+                tint = HealthAccent.activity(),
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = stringResource(R.string.battery_optimization_title),
+                    color = palette.text,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.battery_optimization_body),
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+                Spacer(Modifier.height(10.dp))
+                val interactionSource = remember { MutableInteractionSource() }
+                Box(
+                    modifier = Modifier
+                        .pressScale(interactionSource)
+                        .clip(RoundedCornerShape(AugustRadius.Button))
+                        .background(AugustColor.Lime)
+                        .clickable(interactionSource = interactionSource, indication = null) { onOpenBatterySettings() }
+                        .padding(horizontal = 16.dp, vertical = 9.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.battery_optimization_button),
+                        color = AugustColor.LimeInk,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** One row in the exclusive source selector. A selected switch cannot
  *  be turned off by itself, which guarantees there is never a zero-source
  *  state; enabling the other row atomically deselects this one. */
@@ -1824,21 +1901,32 @@ internal fun Modifier.pressScale(interactionSource: MutableInteractionSource): M
     return this.scale(scale)
 }
 
+/**
+ * Shared pill-button core for PrimaryButton and SecondaryButton below, which
+ * previously duplicated this entire interaction-source/press-scale-
+ * animation/shape/elevation/content-padding/text block, differing only in
+ * colors and border (2026-09 DRY pass). Kept private and un-exported: call
+ * sites should keep using the two named wrappers below, not this directly,
+ * so "which button style am I using" stays a one-word decision at the call
+ * site rather than requiring callers to assemble ButtonColors themselves.
+ */
 @Composable
-private fun PrimaryButton(
+private fun PillActionButton(
     text: String,
-    enabled: Boolean = true,
-    compact: Boolean = false,
-    modifier: Modifier = Modifier.fillMaxWidth(),
+    colors: ButtonColors,
+    border: BorderStroke?,
+    enabled: Boolean,
+    compact: Boolean,
+    modifier: Modifier,
+    animationLabel: String,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val focused by interactionSource.collectIsFocusedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.985f else 1f,
         animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
-        label = "primaryButtonScale"
+        label = animationLabel
     )
     val shape = RoundedCornerShape(AugustRadius.Pill)
 
@@ -1853,13 +1941,8 @@ private fun PrimaryButton(
                 scaleY = scale
             },
         shape = shape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = AugustColor.Lime,
-            contentColor = AugustColor.LimeInk,
-            disabledContainerColor = AugustColor.Soft,
-            disabledContentColor = AugustColor.Muted
-        ),
-        border = if (focused) BorderStroke(2.dp, AugustColor.Purple) else null,
+        colors = colors,
+        border = border,
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 0.dp,
             pressedElevation = 0.dp,
@@ -1881,6 +1964,33 @@ private fun PrimaryButton(
     }
 }
 
+@Composable
+private fun PrimaryButton(
+    text: String,
+    enabled: Boolean = true,
+    compact: Boolean = false,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    PillActionButton(
+        text = text,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = AugustColor.Lime,
+            contentColor = AugustColor.LimeInk,
+            disabledContainerColor = AugustColor.Soft,
+            disabledContentColor = AugustColor.Muted
+        ),
+        border = if (focused) BorderStroke(2.dp, AugustColor.Purple) else null,
+        enabled = enabled,
+        compact = compact,
+        modifier = modifier,
+        animationLabel = "primaryButtonScale",
+        onClick = onClick
+    )
+}
+
 /** Quiet secondary action: flat neutral fill, pill shape, Purple focus. */
 @Composable
 private fun SecondaryButton(
@@ -1892,26 +2002,9 @@ private fun SecondaryButton(
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
     val focused by interactionSource.collectIsFocusedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.985f else 1f,
-        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
-        label = "secondaryButtonScale"
-    )
-    val shape = RoundedCornerShape(AugustRadius.Pill)
-
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        interactionSource = interactionSource,
-        modifier = modifier
-            .heightIn(min = 48.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            },
-        shape = shape,
+    PillActionButton(
+        text = text,
         colors = ButtonDefaults.buttonColors(
             containerColor = if (palette.dark) AugustColor.NavySoft else AugustColor.Soft,
             contentColor = if (palette.dark) AugustColor.Surface else AugustColor.Ink,
@@ -1922,25 +2015,12 @@ private fun SecondaryButton(
             width = if (focused) 2.dp else 1.dp,
             color = if (focused) AugustColor.Purple else palette.stroke
         ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            disabledElevation = 0.dp
-        ),
-        contentPadding = if (compact) {
-            PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-        } else {
-            PaddingValues(horizontal = 20.dp, vertical = 12.dp)
-        }
-    ) {
-        Text(
-            text = text,
-            fontWeight = FontWeight.Bold,
-            fontSize = if (compact) 12.sp else 14.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
+        enabled = enabled,
+        compact = compact,
+        modifier = modifier,
+        animationLabel = "secondaryButtonScale",
+        onClick = onClick
+    )
 }
 
 // Fixed height reserved for MinimalHeader's "Syncing..." line at all times

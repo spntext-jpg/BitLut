@@ -476,14 +476,46 @@ class GoogleHealthManager(
         }
     }
 
-    private suspend fun writeDistanceBatch(records: List<DistanceData>): Boolean {
+    /**
+     * Shared filter -> map -> replaceRecords shape used by the four simple
+     * continuous-metric writers below (distance/floors/elevation/active
+     * calories). Each of those record types differs only in which field
+     * counts as "present" (a positive value) and how to construct its own
+     * Health Connect record; both are supplied by the caller so this stays
+     * a plain helper rather than a new abstraction layer (2026-09 DRY pass
+     * -- the four call sites were previously hand-duplicated).
+     */
+    private suspend fun <T> writeContinuousMetricBatch(
+        label: String,
+        records: List<T>,
+        recordType: KClass<out Record>,
+        hasValue: (T) -> Boolean,
+        startTimeMs: (T) -> Long,
+        endTimeMs: (T) -> Long,
+        toRecord: (T, Instant, Instant) -> Record
+    ): Boolean {
         val valid = records
-            .filter { it.meters > 0.0 && it.startTimeMs < it.endTimeMs }
+            .filter { hasValue(it) && startTimeMs(it) < endTimeMs(it) }
             .map {
-                val start = Instant.ofEpochMilli(it.startTimeMs)
-                val end = Instant.ofEpochMilli(it.endTimeMs)
+                val start = Instant.ofEpochMilli(startTimeMs(it))
+                val end = Instant.ofEpochMilli(endTimeMs(it))
+                toRecord(it, start, end)
+            }
+
+        return replaceRecords(label, valid, recordType)
+    }
+
+    private suspend fun writeDistanceBatch(records: List<DistanceData>): Boolean =
+        writeContinuousMetricBatch(
+            label = "distance",
+            records = records,
+            recordType = DistanceRecord::class,
+            hasValue = { it.meters > 0.0 },
+            startTimeMs = { it.startTimeMs },
+            endTimeMs = { it.endTimeMs },
+            toRecord = { data, start, end ->
                 DistanceRecord(
-                    distance = Length.meters(it.meters),
+                    distance = Length.meters(data.meters),
                     startTime = start,
                     endTime = end,
                     startZoneOffset = offset(start),
@@ -491,18 +523,19 @@ class GoogleHealthManager(
                     metadata = bitlutMetadata("distance", start.toEpochMilli(), end.toEpochMilli())
                 )
             }
+        )
 
-        return replaceRecords("distance", valid, DistanceRecord::class)
-    }
-
-    private suspend fun writeFloorsBatch(records: List<FloorsData>): Boolean {
-        val valid = records
-            .filter { it.floors > 0.0 && it.startTimeMs < it.endTimeMs }
-            .map {
-                val start = Instant.ofEpochMilli(it.startTimeMs)
-                val end = Instant.ofEpochMilli(it.endTimeMs)
+    private suspend fun writeFloorsBatch(records: List<FloorsData>): Boolean =
+        writeContinuousMetricBatch(
+            label = "floors",
+            records = records,
+            recordType = FloorsClimbedRecord::class,
+            hasValue = { it.floors > 0.0 },
+            startTimeMs = { it.startTimeMs },
+            endTimeMs = { it.endTimeMs },
+            toRecord = { data, start, end ->
                 FloorsClimbedRecord(
-                    floors = it.floors,
+                    floors = data.floors,
                     startTime = start,
                     endTime = end,
                     startZoneOffset = offset(start),
@@ -510,18 +543,19 @@ class GoogleHealthManager(
                     metadata = bitlutMetadata("floors", start.toEpochMilli(), end.toEpochMilli())
                 )
             }
+        )
 
-        return replaceRecords("floors", valid, FloorsClimbedRecord::class)
-    }
-
-    private suspend fun writeElevationBatch(records: List<ElevationData>): Boolean {
-        val valid = records
-            .filter { it.meters > 0.0 && it.startTimeMs < it.endTimeMs }
-            .map {
-                val start = Instant.ofEpochMilli(it.startTimeMs)
-                val end = Instant.ofEpochMilli(it.endTimeMs)
+    private suspend fun writeElevationBatch(records: List<ElevationData>): Boolean =
+        writeContinuousMetricBatch(
+            label = "elevation",
+            records = records,
+            recordType = ElevationGainedRecord::class,
+            hasValue = { it.meters > 0.0 },
+            startTimeMs = { it.startTimeMs },
+            endTimeMs = { it.endTimeMs },
+            toRecord = { data, start, end ->
                 ElevationGainedRecord(
-                    elevation = Length.meters(it.meters),
+                    elevation = Length.meters(data.meters),
                     startTime = start,
                     endTime = end,
                     startZoneOffset = offset(start),
@@ -529,18 +563,19 @@ class GoogleHealthManager(
                     metadata = bitlutMetadata("elevation", start.toEpochMilli(), end.toEpochMilli())
                 )
             }
+        )
 
-        return replaceRecords("elevation", valid, ElevationGainedRecord::class)
-    }
-
-    private suspend fun writeActiveCaloriesBatch(records: List<ActiveCaloriesData>): Boolean {
-        val valid = records
-            .filter { it.kilocalories > 0.0 && it.startTimeMs < it.endTimeMs }
-            .map {
-                val start = Instant.ofEpochMilli(it.startTimeMs)
-                val end = Instant.ofEpochMilli(it.endTimeMs)
+    private suspend fun writeActiveCaloriesBatch(records: List<ActiveCaloriesData>): Boolean =
+        writeContinuousMetricBatch(
+            label = "activeCalories",
+            records = records,
+            recordType = ActiveCaloriesBurnedRecord::class,
+            hasValue = { it.kilocalories > 0.0 },
+            startTimeMs = { it.startTimeMs },
+            endTimeMs = { it.endTimeMs },
+            toRecord = { data, start, end ->
                 ActiveCaloriesBurnedRecord(
-                    energy = Energy.kilocalories(it.kilocalories),
+                    energy = Energy.kilocalories(data.kilocalories),
                     startTime = start,
                     endTime = end,
                     startZoneOffset = offset(start),
@@ -548,9 +583,7 @@ class GoogleHealthManager(
                     metadata = bitlutMetadata("active_calories", start.toEpochMilli(), end.toEpochMilli())
                 )
             }
-
-        return replaceRecords("activeCalories", valid, ActiveCaloriesBurnedRecord::class)
-    }
+        )
 
     private data class StoredWorkoutSummary(
         val distanceMeters: Double?,

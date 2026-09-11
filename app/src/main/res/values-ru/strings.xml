@@ -178,6 +178,7 @@
     <string name="toast_hc_needs_update">Health Connect нужно обновить. Обновите его, чтобы подключить Google Health.</string>
     <string name="toast_hc_not_supported">Этот телефон не поддерживает Health Connect.</string>
     <string name="toast_hc_launch_failed">Не удалось открыть экран разрешений Health Connect. Попробуйте ещё раз.</string>
+    <string name="toast_battery_settings_launch_failed">Не удалось открыть настройки батареи. Попробуйте ещё раз.</string>
     <string name="tab_today">Сегодня</string>
     <string name="summary_short_title">Сводка</string>
     <string name="huawei_pending_approval_title">Ждём подтверждения от Huawei</string>
@@ -193,6 +194,9 @@
     <string name="huawei_retry_connect">Попробовать снова</string>
     <string name="import_archive_title">Импорт архива</string>
     <string name="health_connect_data_sources_button">Открыть настройки Health Connect</string>
+    <string name="battery_optimization_title">Сделайте фоновую синхронизацию надёжнее</string>
+    <string name="battery_optimization_body">Настройки батареи вашего телефона могут мешать BitLut синхронизироваться в фоне, если приложению не разрешено игнорировать оптимизацию батареи. Это одноразовая настройка устройства, не самого приложения.</string>
+    <string name="battery_optimization_button">Открыть настройки батареи</string>
     <string name="import_archive_selected">Архив Huawei Health выбран</string>
 <string name="kcal_unit">ккал</string>
     <string name="score_100_unit">/100</string>

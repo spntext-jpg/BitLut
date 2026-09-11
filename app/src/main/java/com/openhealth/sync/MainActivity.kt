@@ -64,6 +64,29 @@ class MainActivity : ComponentActivity() {
         SyncOrchestrator(this, syncViewModel.googleManager)
     }
 
+    // 2026-09: read by FinalBitLutShell/SettingsScreen to show/hide
+    // BatteryOptimizationCard. Backed by a mutableStateOf (not a plain var)
+    // so Compose recomposes the moment onResume() updates it -- e.g. right
+    // after the person returns from granting the exemption in system
+    // settings. androidx.compose.runtime.mutableStateOf is used directly
+    // (matching the existing hasSeenOnboarding pattern in setContent)
+    // rather than adding this to a ViewModel: it's pure OS state with no
+    // persistence or business logic of its own.
+    private var showBatteryHint by androidx.compose.runtime.mutableStateOf(false)
+
+    private fun refreshBatteryHintState() {
+        showBatteryHint = com.openhealth.sync.util.BatteryOptimizationHelper.shouldShowHint(this)
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        try {
+            startActivity(com.openhealth.sync.util.BatteryOptimizationHelper.settingsIntent())
+        } catch (e: Exception) {
+            AppLogger.e("MainActivity", "Failed to open battery optimization settings: ${e.message}", e)
+            Toast.makeText(this, getString(R.string.toast_battery_settings_launch_failed), Toast.LENGTH_LONG).show()
+        }
+    }
+
     /**
      * onResume() is meant to catch a genuine "person switched back to the
      * app" event and kick off a fresh sync. A system permission dialog
@@ -185,6 +208,8 @@ class MainActivity : ComponentActivity() {
                         onboardingPrefs.markPermissionsRationaleSeen()
                         hasSeenOnboarding = true
                     },
+                    showBatteryHint = showBatteryHint,
+                    onOpenBatterySettings = { openBatteryOptimizationSettings() },
                     importViewModel = importViewModel
                 )
             }
@@ -209,6 +234,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshUiStatusOnLaunch()
+        refreshBatteryHintState()
         if (awaitingSystemResult) {
             AppLogger.i("MainActivity", "Skipping onResume auto-sync: a system permission/authorization screen is still in progress")
         } else {
@@ -295,9 +321,11 @@ class MainActivity : ComponentActivity() {
         triggerImmediateSync()
     }
 
+    // 2026-09: periodic-sync and evening-reminder scheduling moved to
+    // SyncApplication.onCreate() (runs on every process start, not just
+    // when this Activity is created); this now only requests the
+    // notification permission, which needs an Activity/launcher.
     private fun setupPeriodicSync() {
-        syncOrchestrator.schedulePeriodic()
-        com.openhealth.sync.data.worker.BackgroundSyncScheduler.scheduleEveningReminder(this)
         requestNotificationPermissionIfNeeded()
     }
 
