@@ -276,14 +276,14 @@ private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Diagnostic log",
+                    text = stringResource(R.string.diagnostic_log_title),
                     color = palette.text,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 22.sp
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     PrimaryButton(
-                        text = "Copy",
+                        text = stringResource(R.string.diagnostic_log_copy),
                         modifier = Modifier,
                         onClick = {
                             val dump = com.openhealth.sync.util.AppLogger.exportFullDump(context)
@@ -291,7 +291,7 @@ private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
                         }
                     )
                     PrimaryButton(
-                        text = "Close",
+                        text = stringResource(R.string.diagnostic_log_close),
                         modifier = Modifier,
                         onClick = onClose
                     )
@@ -306,7 +306,7 @@ private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
                 if (logs.isEmpty()) {
                     item {
                         Text(
-                            text = "No log entries yet.",
+                            text = stringResource(R.string.diagnostic_log_empty),
                             color = palette.secondaryText,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 13.sp
@@ -438,15 +438,8 @@ private fun SummaryScreen(
                     lastUpdatedAtMs = state.lastUpdatedAtMs,
                     isFromCache = state.isFromCache
                 ),
-                // Background-sync indicator (2026-08-29): a second status
-                // line under the last-sync trailing text, shown only while
-                // SyncUiState.isSyncing is true. This is a UI-only read of
-                // pre-existing state -- SyncViewModel.markSyncStarted()/
-                // markSyncCompleted() already flip isSyncing around every
-                // real sync attempt (manual "Sync now", the navbar Refresh
-                // action, and periodic WorkManager runs that call back into
-                // the same view model); this patch is the first thing that
-                // actually renders it anywhere.
+                // One UI signal covers UI-triggered work plus actually RUNNING
+                // tagged background SyncWorker instances. Header layout stays stable.
                 isSyncing = isSyncing,
                 onEditClick = onEditLayout
             )
@@ -1918,10 +1911,10 @@ private fun PillActionButton(
     enabled: Boolean,
     compact: Boolean,
     modifier: Modifier,
+    interactionSource: MutableInteractionSource,
     animationLabel: String,
     onClick: () -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.985f else 1f,
@@ -1986,6 +1979,7 @@ private fun PrimaryButton(
         enabled = enabled,
         compact = compact,
         modifier = modifier,
+        interactionSource = interactionSource,
         animationLabel = "primaryButtonScale",
         onClick = onClick
     )
@@ -2018,16 +2012,17 @@ private fun SecondaryButton(
         enabled = enabled,
         compact = compact,
         modifier = modifier,
+        interactionSource = interactionSource,
         animationLabel = "secondaryButtonScale",
         onClick = onClick
     )
 }
 
-// Fixed height reserved for MinimalHeader's "Syncing..." line at all times
-// (2026-08-30), so fading it out never collapses layout and shifts the
-// subtitle below it. 2dp top spacer + an 11sp Bold line's rendered height.
-// BITLUT_SYNC_STATUS_FIXED_HEIGHT_2026_08_30
-private val SYNC_STATUS_LINE_HEIGHT = 18.dp
+// Summary metadata gets one stable row: source/freshness at rest, sync state
+// while work is actually running. Keeping the row height fixed prevents the
+// real-device layout jump fixed in 2026-08-30, while moving Tangerine from
+// small text to a progress indicator restores contrast in the light theme.
+private val HEADER_META_LINE_HEIGHT = 22.dp
 
 @Composable
 private fun MinimalHeader(
@@ -2048,16 +2043,6 @@ private fun MinimalHeader(
                 maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
-            if (trailing != null) {
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = trailing,
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    maxLines = 1
-                )
-            }
             if (onEditClick != null) {
                 Spacer(Modifier.width(10.dp))
                 Box(
@@ -2077,41 +2062,51 @@ private fun MinimalHeader(
                 }
             }
         }
-        // Background-sync status (2026-08-29, fixed 2026-08-30): a quiet
-        // second line, right under the last-sync trailing text, shown only
-        // while a sync is actually in flight. The original AnimatedVisibility
-        // faded the line in/out but -- as AnimatedVisibility always does when
-        // it becomes invisible -- also collapsed its layout height to zero at
-        // the end of the exit animation, yanking the subtitle line upward the
-        // instant a sync finished (confirmed real-device report: a visible
-        // layout jump right when "Syncing..." disappeared). Fix: the Column
-        // is now always present at a fixed height (reserving the line's
-        // space at all times) and only its alpha animates via graphicsLayer,
-        // matching the alpha-only pattern already used elsewhere in this
-        // file (see AugustDestination's press-scale graphicsLayer in
-        // GlassNavigation.kt) rather than toggling presence/layout. Uses the
-        // Tangerine "active" accent (already the navbar Refresh action's
-        // color) rather than introducing a new token.
-        val syncStatusAlpha by animateFloatAsState(
-            targetValue = if (isSyncing) 1f else 0f,
-            animationSpec = tween(AugustMotion.MediumMs, easing = AugustMotion.StandardEasing),
-            label = "syncStatusAlpha"
-        )
-        Column(
-            modifier = Modifier
-                .height(SYNC_STATUS_LINE_HEIGHT)
-                .graphicsLayer { alpha = syncStatusAlpha }
-        ) {
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = stringResource(R.string.sync_status_updating),
-                color = AugustColor.Tangerine,
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
-                maxLines = 1,
-                modifier = Modifier.fillMaxWidth()
+
+        if (trailing != null || isSyncing) {
+            val syncStatusAlpha by animateFloatAsState(
+                targetValue = if (isSyncing) 1f else 0f,
+                animationSpec = tween(AugustMotion.MediumMs, easing = AugustMotion.StandardEasing),
+                label = "syncStatusAlpha"
             )
+            Spacer(Modifier.height(3.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(HEADER_META_LINE_HEIGHT),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (trailing != null) {
+                    Text(
+                        text = trailing,
+                        color = palette.secondaryText,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        modifier = Modifier.graphicsLayer { alpha = 1f - syncStatusAlpha }
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.graphicsLayer { alpha = syncStatusAlpha }
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(13.dp),
+                        color = AugustColor.Tangerine,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.sync_status_updating),
+                        color = palette.text,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        maxLines = 1
+                    )
+                }
+            }
         }
+
         if (subtitle != null) {
             Spacer(Modifier.height(4.dp))
             Text(
@@ -2537,7 +2532,7 @@ internal data class BitPalette(
             stroke = AugustColor.BorderDark,
             activity = AugustColor.Lime,
             mind = AugustColor.Lime,
-            backgroundBrush = Brush.verticalGradient(listOf(AugustColor.Navy, AugustColor.DarkPanel))
+            backgroundBrush = Brush.verticalGradient(listOf(AugustColor.Navy, AugustColor.Navy))
         )
     }
 }

@@ -56,9 +56,8 @@ data class SyncUiState(
      * multi-second sync has no path to this flag at all. isBackgroundSyncActive
      * (fed from a WorkManager tag observer in MainActivity, see
      * HuaweiConfig.SYNC_ACTIVITY_TAG) reflects "is any SyncWorker instance,
-     * whichever one, actually RUNNING or ENQUEUED right now" regardless of
-     * which path triggered it, so the indicator now shows for the sync that
-     * is really doing the work.
+     * whichever one, actually RUNNING right now" regardless of which path
+     * triggered it. ENQUEUED periodic work is idle scheduling, not active sync.
      */
     val isSyncing: Boolean get() = isUiTriggeredSyncing || isBackgroundSyncActive
 }

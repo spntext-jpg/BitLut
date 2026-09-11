@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-11 -- Health Connect reliability + August GUI hardening
+
+- Moved the production Health Connect client from `1.1.0-alpha12` to stable `1.1.0`.
+- Hardened workout interoperability against overlapping Huawei sessions: exact duplicates prefer the richer session; remaining overlaps keep the richer source session without clipping/fabricating timestamps, and log the dropped overlap. Session + calorie + scoped sub-metric bundle semantics and write ordering remain unchanged.
+- Decoupled selected-source sync permissions from dashboard permissions: Huawei export requires Health Connect writes; Google Fit dashboard refresh requires reads; full connection/onboarding status still reports the complete requested set.
+- Fixed the WorkManager activity signal: only `RUNNING` is an active background sync. Periodic `ENQUEUED`/`BLOCKED` work no longer causes a false persistent syncing state.
+- Reworked Today header metadata into one stable-height crossfade row. Tangerine remains the active spinner; syncing copy uses semantic foreground and light-theme metadata uses InkSoft so small status text stays readable.
+- Fixed Primary/Secondary button focus rings to observe the Material Button's real interaction source, added selected semantics to bottom-nav tabs, localized the diagnostic viewer, and restored stronger dark surface hierarchy with a Navy canvas behind DarkPanel cards.
+- September 2026 investigation: Google Health 5.05 introduced a Health Connect permission/connection regression and 5.07 (rolling from 2026-08-28) shipped the fix. No September Health Connect write-schema break was found. Current Android guidance also explicitly warns against overlapping workout sessions and documents user-controlled Activity source priority for aggregate reads; both are now reflected in code/docs.
+
 ## 2026-09-03 -- scaling roadmap: 100-user cap, calorie scope gap
 
 - **New `docs/SCALING_ROADMAP.md`**, the durable reference for lifting the

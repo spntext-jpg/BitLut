@@ -324,4 +324,8 @@
     <string name="exercise_type_weightlifting">Weightlifting</string>
     <string name="exercise_type_wheelchair">Wheelchair</string>
     <string name="exercise_type_yoga">Yoga</string>
+    <string name="diagnostic_log_title">Diagnostic log</string>
+    <string name="diagnostic_log_copy">Copy</string>
+    <string name="diagnostic_log_close">Close</string>
+    <string name="diagnostic_log_empty">No log entries yet.</string>
 </resources>

@@ -21,6 +21,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Length
 import com.openhealth.sync.config.DataSourcePrefs
+import com.openhealth.sync.config.HealthDataSource
 import com.openhealth.sync.config.HealthPermissionPolicy
 import com.openhealth.sync.util.AppLogger
 import java.time.Instant
@@ -265,15 +266,12 @@ class GoogleHealthManager(
     /**
      * Sprint 2026-08-27: opens Health Connect's own settings screen, from
      * which the user can reach "Manage data > Data sources and priority".
-     * This is a distinct, separate consent step from the runtime read/write
-     * permission grant BitLut already requests: Health Connect requires a
-     * writing app to be explicitly added as a contributing data source for
-     * each category (Steps, Distance, Exercise, etc.) before its records
-     * count toward totals a reader relies on, even though the records exist
-     * in the store and are visible to BitLut itself the moment the runtime
-     * permission is granted. This was a plausible, previously-unaddressed
-     * reason a third-party reader could show no BitLut-synced activity: the
-     * permission grant alone does not guarantee BitLut is listed there.
+     * This is distinct from BitLut's runtime read/write permission grant.
+     * Health Connect lets the user order Activity data sources; aggregate
+     * reads de-duplicate overlapping Activity data using that priority. A
+     * downstream app that relies on aggregate totals can therefore prefer
+     * another source even while BitLut's raw records are present. This screen
+     * is the supported place to inspect that user-controlled priority.
      *
      * `ACTION_HEALTH_CONNECT_SETTINGS` (declared as
      * `androidx.health.ACTION_HEALTH_CONNECT_SETTINGS` in the manifest's
@@ -343,29 +341,49 @@ class GoogleHealthManager(
         }
     }
 
-    override suspend fun missingRequiredPermissions(): Set<String> {
+    private fun currentSyncPermissions(): Set<String> = when (dataSourcePrefs.selected()) {
+        HealthDataSource.HUAWEI_HEALTH -> HealthPermissionPolicy.importWritePermissions
+        HealthDataSource.GOOGLE_FIT -> HealthPermissionPolicy.dashboardReadPermissions
+    }
+
+    private suspend fun missingPermissions(required: Set<String>, label: String): Set<String> {
         return try {
-            requiredPermissions() - grantedPermissionsOrEmpty()
+            required - grantedPermissionsOrEmpty()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Missing permission check failed: ${e.message}", e)
-            requiredPermissions()
+            AppLogger.e(TAG, "$label permission check failed: ${e.message}", e)
+            required
         }
     }
 
-    override suspend fun hasAllPermissions(): Boolean {
+    private suspend fun hasPermissions(required: Set<String>, label: String): Boolean {
         return try {
             val granted = grantedPermissionsOrEmpty()
-            AppLogger.d(TAG, "Granted Health Connect permissions: $granted")
-            granted.containsAll(requiredPermissions())
+            AppLogger.d(TAG, "Granted Health Connect permissions for $label: $granted")
+            granted.containsAll(required)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Permission check failed: ${e.message}", e)
+            AppLogger.e(TAG, "$label permission check failed: ${e.message}", e)
             false
         }
     }
+
+    override suspend fun missingRequiredPermissions(): Set<String> =
+        missingPermissions(requiredPermissions(), "full connection")
+
+    override suspend fun hasAllPermissions(): Boolean =
+        hasPermissions(requiredPermissions(), "full connection")
+
+    override suspend fun missingSyncPermissions(): Set<String> =
+        missingPermissions(currentSyncPermissions(), "selected-source sync")
+
+    override suspend fun hasSyncPermissions(): Boolean =
+        hasPermissions(currentSyncPermissions(), "selected-source sync")
+
+    override suspend fun hasDashboardReadPermissions(): Boolean =
+        hasPermissions(HealthPermissionPolicy.dashboardReadPermissions, "dashboard read")
 
     /**
      * Writes every category in [snapshot] independently and reports which
@@ -719,14 +737,81 @@ class GoogleHealthManager(
             setOf(SessionSubMetric.DISTANCE, SessionSubMetric.STEPS, SessionSubMetric.ELEVATION)
     }
 
-    private suspend fun writeActivitySessionsBatch(records: List<ActivitySessionData>): Boolean {
-        // BITLUT_WORKOUT_HARDENING_V3
-        val validSessions = records
+
+    /**
+     * Health Connect's current workout guidance explicitly rejects overlapping
+     * sessions from the same app. Huawei can occasionally return an explicit
+     * workout together with a lower-information auto-detected session that
+     * overlaps it. Keep the richer source session instead of clipping times
+     * (which would fabricate source data) or letting one malformed overlap
+     * poison the activitySessions category and retry cursor indefinitely.
+     */
+    private fun workoutInteropScore(session: ActivitySessionData): Int {
+        var score = 0
+        if (session.exerciseType != ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT) score += 8
+        if (session.title.isNotBlank() && !SYNTHETIC_WORKOUT_TITLE.matches(session.title)) score += 4
+        if ((session.distanceMeters ?: 0.0) > 0.0) score += 2
+        if ((session.steps ?: 0L) > 0L) score += 2
+        if ((session.totalCaloriesKcal ?: 0.0) > 0.0) score += 2
+        if ((session.activeCaloriesKcal ?: 0.0) > 0.0) score += 1
+        if ((session.elevationMeters ?: 0.0) > 0.0) score += 1
+        return score
+    }
+
+    private fun preferWorkoutSession(
+        current: ActivitySessionData,
+        candidate: ActivitySessionData
+    ): ActivitySessionData {
+        val currentScore = workoutInteropScore(current)
+        val candidateScore = workoutInteropScore(candidate)
+        if (candidateScore != currentScore) return if (candidateScore > currentScore) candidate else current
+
+        val currentDuration = current.endTimeMs - current.startTimeMs
+        val candidateDuration = candidate.endTimeMs - candidate.startTimeMs
+        if (candidateDuration != currentDuration) return if (candidateDuration > currentDuration) candidate else current
+
+        // Stable final tie-break: earlier source session wins.
+        return if (candidate.startTimeMs < current.startTimeMs) candidate else current
+    }
+
+    private fun normalizeWorkoutSessionsForHealthConnect(
+        records: List<ActivitySessionData>
+    ): List<ActivitySessionData> {
+        val exactDeduplicated = records
             .asSequence()
             .filter { it.startTimeMs < it.endTimeMs }
-            .distinctBy { Pair(it.startTimeMs, it.endTimeMs) }
+            .groupBy { Pair(it.startTimeMs, it.endTimeMs) }
+            .values
+            .map { duplicates -> duplicates.reduce(::preferWorkoutSession) }
             .sortedBy { it.startTimeMs }
-            .toList()
+
+        if (exactDeduplicated.size < 2) return exactDeduplicated
+
+        val normalized = mutableListOf<ActivitySessionData>()
+        for (session in exactDeduplicated) {
+            val previous = normalized.lastOrNull()
+            if (previous == null || session.startTimeMs >= previous.endTimeMs) {
+                normalized += session
+                continue
+            }
+
+            val preferred = preferWorkoutSession(previous, session)
+            val dropped = if (preferred === previous) session else previous
+            if (preferred !== previous) normalized[normalized.lastIndex] = preferred
+
+            AppLogger.w(
+                TAG,
+                "Dropped overlapping workout before Health Connect write: " +
+                    "kept=${preferred.startTimeMs}..${preferred.endTimeMs}/type=${preferred.exerciseType} " +
+                    "dropped=${dropped.startTimeMs}..${dropped.endTimeMs}/type=${dropped.exerciseType}"
+            )
+        }
+        return normalized
+    }
+
+    private suspend fun writeActivitySessionsBatch(records: List<ActivitySessionData>): Boolean {
+        // BITLUT_WORKOUT_HARDENING_V4
+        val validSessions = normalizeWorkoutSessionsForHealthConnect(records)
 
         if (validSessions.isEmpty()) {
             AppLogger.i(TAG, "No activitySessions records to write")

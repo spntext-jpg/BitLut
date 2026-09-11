@@ -791,6 +791,17 @@ this codebase, matching the hard constraint in 3.2.
 
 ---
 
+
+### 4.14 2026-09-11 interoperability hardening: overlap hygiene and stable client
+
+The production dependency is now `androidx.health.connect:connect-client:1.1.0` (stable). The repository had remained on `1.1.0-alpha12`; the stable train includes post-alpha provider-validation/device fixes and is the appropriate production baseline. The current 1.2 alpha line is not adopted for this reliability patch.
+
+`writeActivitySessionsBatch()` still writes each workout as the same single interoperability-critical bundle (ExerciseSession + calories + type-appropriate session-scoped sub-records) with stable deterministic IDs/versions. Before writing, it now removes invalid intervals, resolves exact duplicates in favor of the richer session, then prevents non-identical overlaps by retaining the richer source session. It never clips or invents timestamps. This follows current Health Connect workout guidance, which identifies overlapping same-app sessions as a write-failure/conflict cause.
+
+Permission gates are now role-specific. Huawei import/export requires the Health Connect write permissions it actually consumes. The Google Fit-selected refresh and dashboard live reads require the read permissions they consume. Full connection/onboarding state still checks the complete request set, so the UI can still tell the user when the installation is not fully connected without unnecessarily blocking a valid write pipeline.
+
+Late-August/September 2026 Google investigation: Google Health 5.05 introduced a confirmed bug that could strand Health Connect sharing/permission toggles or lose the connection; Google Health 5.07 began rolling out 2026-08-28 with the official fix. No corresponding September Health Connect record-schema break was found. Health Connect's aggregate Activity reads are also affected by user-selected data-source priority, so a downstream reader using aggregates can prefer another overlapping source even when BitLut raw records exist.
+
 ## 5. Orchestration: making an unattended background pipeline resilient
 
 Everything in this section exists because `readSnapshot()` +
@@ -976,11 +987,14 @@ evening-reminder job happened to run.
 `onCreate()`) observes `WorkManager.getWorkInfosByTagLiveData(SYNC_ACTIVITY_TAG)`,
 tied to the Activity's own lifecycle via `LiveData.observe(this, ...)` (no
 manual `removeObserver()` needed), and computes "is any tagged work
-currently `RUNNING`, `ENQUEUED`, or `BLOCKED`" on every change to that set —
-recomputed on every change, not queried once, since WorkManager can hold
-multiple tagged requests concurrently (the periodic job plus a
-momentarily-enqueued manual one, exactly the 5.1 race). That boolean feeds
-a new `SyncViewModel.setBackgroundSyncActive(Boolean)`.
+currently `RUNNING`" on every change to that set. Periodic work normally
+remains `ENQUEUED` while waiting for its next execution, and `BLOCKED` can
+represent scheduling/dependency state rather than active health-data I/O;
+treating either as active creates a false persistent syncing state. The set
+is still recomputed on every change because WorkManager can hold multiple
+tagged requests concurrently (the periodic job plus a momentarily-enqueued
+manual one, exactly the 5.1 race). That boolean feeds a new
+`SyncViewModel.setBackgroundSyncActive(Boolean)`.
 
 `SyncUiState.isSyncing` is now a **computed property**:
 

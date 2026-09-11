@@ -1,8 +1,24 @@
 # BitLut — Session Handoff
 
-Current handoff date: 2026-09-03.
+Current handoff date: 2026-09-11.
 
 Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus a successful `assembleDebug` + `lintDebug` is authoritative if historical notes conflict.
+
+## 2026-09-11 current source-of-truth update
+
+The 2026-09-11 Repomix snapshot supersedes older handoff wording. The previously fixed corporate-reader interoperability path is still preserved, but a new intermittent downstream import symptom appeared after late-August/early-September Google Health updates. Current evidence does **not** show a new Health Connect record schema requirement. Google Health 5.05 had a confirmed Health Connect permission/connection regression; Google Health 5.07 began rolling out on 2026-08-28 with a fix. Android's workout guidance updated 2026-09-08 also explicitly calls out overlapping sessions as a write-failure cause.
+
+Current hardening in source:
+
+- Health Connect Jetpack is stable `1.1.0`, not `1.1.0-alpha12`.
+- `writeActivitySessionsBatch()` preserves the interoperability-critical single bundle and stable IDs, but now normalizes overlapping source sessions by keeping the richer real source record rather than fabricating clipped timestamps.
+- Huawei -> Health Connect export is gated by write permissions; dashboard reads are gated by read permissions. Revoking an unrelated read permission no longer blocks valid background export.
+- WorkManager UI activity means `RUNNING` only. `ENQUEUED` is the normal idle state of periodic work and must never drive the Syncing indicator.
+- Today header keeps a stable metadata row: source/freshness at rest; Tangerine spinner + high-contrast semantic text while syncing.
+- Do not force clientRecordVersion churn, split the workout bundle into separate writes, spoof another app's DataOrigin, or change the load-bearing steps-before-activitySessions ordering.
+
+If the corporate reader misses a newly synced workout on a device that has Google Health 5.07+, first verify the reader/Google Health Health Connect connection and Activity data-source priority, then inspect BitLut diagnostic logs for `Dropped overlapping workout` or `Workout bundle write failed`. Do not rewrite old workouts blindly.
+
 
 ## Product
 
@@ -60,13 +76,13 @@ Never show `0` as a substitute for a missing workout metric; omit the slot or sh
 
 **2026-08-31 note:** if a walking/running activity's Steps slot is missing despite the workout clearly having steps, this is very likely the still-open Huawei `dataSummary` steps issue noted above under "Workout import and Health Connect" -- not a display-layer bug. Check the diagnostic log line `Huawei activity summary steps diagnostic` for that activity's `stepsTotalPointsMatched` before assuming the display logic is at fault.
 
-### Corporate wellness app investigation — resolved 2026-08-31/09-01
+### Previous corporate wellness app issue — resolved 2026-08-31/09-01
 
 Real-device evidence now confirms the corporate app reliably imports and accepts BitLut-synced workouts. The fix was the 2026-08-31 session-scoped Health Connect sub-metric write (`writeActivitySessionsBatch()` now bundles `DistanceRecord`/`StepsRecord`/`ElevationGainedRecord` into the workout's own time window instead of leaving the reader to fall back on the separate, coarser background daily aggregate). Full technical detail lives in `sync.md` section 4.6.
 
 The original leading explanation (source-origin allowlisting/trust on the reader side) is still believed to be part of why earlier metadata-only attempts didn't work, but is no longer an open question requiring further code changes: recording method, calorie attachment, device manufacturer, Health Connect data-source settings deep link, accurate session distance, corrected exercise types, and stable record version were all tried and individually insufficient; the session-scoped sub-metrics were the piece that closed the gap.
 
-No further work is planned here unless a new, different reader-compatibility issue surfaces.
+That specific failure mode remains fixed. The newer 2026-09-11 intermittent downstream symptom is tracked separately in the current-source update above.
 
 ### Dashboard cache and midnight rollover
 

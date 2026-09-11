@@ -324,4 +324,8 @@
     <string name="exercise_type_weightlifting">Тяжёлая атлетика</string>
     <string name="exercise_type_wheelchair">Инвалидная коляска</string>
     <string name="exercise_type_yoga">Йога</string>
+    <string name="diagnostic_log_title">Журнал диагностики</string>
+    <string name="diagnostic_log_copy">Копировать</string>
+    <string name="diagnostic_log_close">Закрыть</string>
+    <string name="diagnostic_log_empty">Записей пока нет.</string>
 </resources>

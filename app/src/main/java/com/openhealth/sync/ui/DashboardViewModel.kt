@@ -282,7 +282,7 @@ class DashboardViewModel(
         if (force) loadJob?.cancel()
         loadJob = viewModelScope.launch {
             val hasPerms = try {
-                googleManager.hasAllPermissions()
+                googleManager.hasDashboardReadPermissions()
             } catch (e: CancellationException) {
                 // Sprint (2026-07-10): load() cancels its own previous job
                 // (loadJob?.cancel()) whenever it's called again before the

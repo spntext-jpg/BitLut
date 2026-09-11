@@ -340,8 +340,9 @@ class MainActivity : ComponentActivity() {
      * HuaweiConfig.SYNC_ACTIVITY_TAG (applied only to SyncWorker's two
      * enqueue sites, not the unrelated EveningReminderWorker) reflects
      * whether any SyncWorker instance -- periodic or manual, whichever one
-     * -- is actually RUNNING/ENQUEUED/BLOCKED right now, independent of
-     * which path triggered it.
+     * -- is actually RUNNING right now, independent of which path triggered
+     * it. Periodic work remains ENQUEUED while merely waiting for its next run,
+     * so treating ENQUEUED/BLOCKED as active would make the UI lie indefinitely.
      *
      * getWorkInfosByTagLiveData(), not a one-shot query: WorkManager can
      * hold multiple tagged requests concurrently (the periodic job plus a
@@ -357,14 +358,7 @@ class MainActivity : ComponentActivity() {
             .getWorkInfosByTagLiveData(HuaweiConfig.SYNC_ACTIVITY_TAG)
             .observe(this) { infos ->
                 val active = infos.orEmpty().any { info ->
-                    when (info.state) {
-                        WorkInfo.State.RUNNING,
-                        WorkInfo.State.ENQUEUED,
-                        WorkInfo.State.BLOCKED -> true
-                        WorkInfo.State.SUCCEEDED,
-                        WorkInfo.State.FAILED,
-                        WorkInfo.State.CANCELLED -> false
-                    }
+                    info.state == WorkInfo.State.RUNNING
                 }
                 syncViewModel.setBackgroundSyncActive(active)
             }

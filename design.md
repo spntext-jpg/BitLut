@@ -15,6 +15,7 @@ BitLut keeps the August v3 palette but moves to a quieter 2026 content-first int
 - Canvas `#F7F8FC`: light background. Surface `#FFFFFF`: white card fill.
 - Lime `#DFFF6A`: primary action and hero progress.
 - Tangerine `#F28500`: sync action / active toggle signal (Settings toggle "on" track and the bottom nav Refresh fill only; Purple keeps every other focus/selection role).
+- Tangerine is an active-state shape/indicator, not small foreground copy on Canvas. Pair it with Ink/Surface semantic text when a label is required; this preserves the palette while meeting readable light/dark contrast.
 - Purple `#6E5CF6`: focus and secondary interaction detail.
 - Inter Variable remains the app font.
 
@@ -23,6 +24,7 @@ Do not add new colors when an existing semantic role works.
 ## Surface rules
 
 - Normal cards: flat fill + one subtle outline, 22 dp radius, no routine shadow.
+- Dark root canvas stays Navy; DarkPanel/NavyRaised are surfaces above it. Do not gradient the root into a card surface, which erases layer separation at the bottom of the screen.
 - Hero card: 30 dp radius, restrained shadow only where hierarchy needs it.
 - Do not tint every card boundary with an accent.
 - Non-clickable cards never scale/lift on touch.
@@ -35,6 +37,7 @@ Do not add new colors when an existing semantic role works.
 - One clear primary action per action group. In Settings that is `Sync now`.
 - Connect Google, Connect Huawei, Refresh status, Import archive and Health Connect settings are secondary actions in the same grouped card.
 - Icon-only controls need a clear content description and a practical touch target.
+- Focus styling must observe the same `MutableInteractionSource` used by the actual Material control; a decorative wrapper source does not receive focus events.
 - Goal +/- controls use quiet round/pill containers; steps is the only editable goal.
 
 ## Motion
@@ -42,6 +45,7 @@ Do not add new colors when an existing semantic role works.
 - 140–200 ms tween for press/color state.
 - No bounce/elastic overshoot in standard navigation/buttons.
 - Sync icon may use a small rotational press cue, but no exaggerated lift.
+- Status transitions that share one semantic slot should crossfade inside a reserved-height container instead of adding/removing layout rows.
 - Motion communicates state; it is not decoration.
 
 ## Navigation

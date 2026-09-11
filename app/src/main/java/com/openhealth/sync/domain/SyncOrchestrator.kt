@@ -47,9 +47,9 @@ class SyncOrchestrator(
         onStarted()
 
         try {
-            val missing = googleManager.missingRequiredPermissions()
+            val missing = googleManager.missingSyncPermissions()
             if (missing.isNotEmpty()) {
-                AppLogger.w(TAG, "Manual sync blocked by missing Health Connect permissions: $missing")
+                AppLogger.w(TAG, "Manual sync blocked by missing selected-source Health Connect permissions: $missing")
                 onCompleted(false)
                 onMissingPermissions(missing)
                 return
