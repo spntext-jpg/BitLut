@@ -23,10 +23,17 @@ import com.openhealth.sync.ui.SyncViewModel
 import com.openhealth.sync.ui.theme.BitLutExpressiveTheme
 import com.openhealth.sync.util.AppLogger
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
+
+    // Prevent duplicate UI-triggered sync requests before WorkManager/StateFlow has
+    // enough time to publish RUNNING. The visible press animation lives in Compose
+    // and still runs; this guard only suppresses duplicate sync process creation.
+    // BITLUT_MANUAL_SYNC_GUARD_2026_09_11
+    private val manualSyncTriggerInFlight = AtomicBoolean(false)
 
     private val onboardingPrefs by lazy { com.openhealth.sync.config.OnboardingPrefs(applicationContext) }
 
@@ -412,21 +419,38 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun triggerImmediateSync() {
+        // Do not enqueue another manual WorkRequest while any sync is already
+        // running. This is intentionally checked before launching the coroutine so
+        // repeated taps cannot queue extra work during the UI/WorkManager state gap.
+        // The navbar still receives the tap and plays its press/release animation.
+        if (syncViewModel.uiState.value.isSyncing) {
+            AppLogger.i("MainActivity", "Manual sync tap ignored: sync already in progress")
+            return
+        }
+        if (!manualSyncTriggerInFlight.compareAndSet(false, true)) {
+            AppLogger.i("MainActivity", "Manual sync tap ignored: sync trigger already in flight")
+            return
+        }
+
         lifecycleScope.launch {
-            syncOrchestrator.triggerImmediateSync(
-                lifecycleOwner = this@MainActivity,
-                onStarted = { syncViewModel.markSyncStarted() },
-                onMissingPermissions = {
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(R.string.toast_hc_permissions),
-                        Toast.LENGTH_LONG
-                    ).show()
-                    requestGoogleHealthPermissions()
-                },
-                onCompleted = { success -> syncViewModel.markSyncCompleted(success) },
-                onDashboardRefresh = { dashboardViewModel.refreshFromCache() }
-            )
+            try {
+                syncOrchestrator.triggerImmediateSync(
+                    lifecycleOwner = this@MainActivity,
+                    onStarted = { syncViewModel.markSyncStarted() },
+                    onMissingPermissions = {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.toast_hc_permissions),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        requestGoogleHealthPermissions()
+                    },
+                    onCompleted = { success -> syncViewModel.markSyncCompleted(success) },
+                    onDashboardRefresh = { dashboardViewModel.refreshFromCache() }
+                )
+            } finally {
+                manualSyncTriggerInFlight.set(false)
+            }
         }
     }
 }
