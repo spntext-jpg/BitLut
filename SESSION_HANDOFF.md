@@ -2,7 +2,15 @@
 
 Current handoff date: 2026-09-11.
 
-Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus successful `assembleDebug` + `lintDebug` + `lintRelease` + `assembleRelease` is authoritative if historical notes conflict.
+Read `CLAUDE.md`, `CONTEXT.md`, `design.md`, and this file before changing code. Current source plus a successful GitHub Actions release workflow is authoritative if historical notes conflict. Codespaces is static-check only; do not run local Gradle tasks.
+
+## 2026-09-11 final UI sprint
+
+- Bottom navigation keeps the established 64dp shared control height and 84dp Refresh width, but all three controls now have restrained tactile spring feedback: press depth, a very small tilt, compression, and one short release tremor. Motion tokens live in `AugustMotion`; static cards/content remain non-bouncy.
+- The Today sync indicator no longer fades in from alpha 0. While syncing it renders immediately as a high-contrast August capsule (Tangerine spinner, semantic foreground, outlined Surface/NavySoft container) in both themes.
+- `SyncViewModel` keeps UI-triggered sync state visible for at least 1.1s using elapsed realtime. This closes the fast-sync/lease-collision race where start/completion could be coalesced between Compose frames and the indicator never became perceptible.
+- Sync wording is now `Sync in progress…` / `Идёт синхронизация…`.
+- Codespaces verification policy changed after repeated memory pressure/terminal termination: no local Gradle, lint, dependency-resolution, or build tasks. Use patch structural checks + `git diff --check`; GitHub Actions is the compile/lint/release authority.
 
 ## 2026-09-11 current source-of-truth update
 
@@ -17,7 +25,7 @@ Current hardening in source:
 
 The sprint intentionally stops at the newest stable classic Android Gradle/Kotlin lane: AGP `8.13.2` explicitly supports API 36.1 and Kotlin 2.3, while Kotlin `2.3.21` is the current bug-fix release for that compiler line. Do not move to AGP 9/Kotlin 2.4 as an incidental dependency bump: AGP 9 changes Android projects to built-in Kotlin and Huawei's current AGConnect Android guide does not establish compatibility with that migration. Treat a future AGP 9 move as a Huawei compatibility task, not routine maintenance.
 
-The release workflow installs API 36 explicitly and runs `lintRelease` before packaging. Local/Codespaces verification is `assembleDebug + lintDebug + lintRelease + assembleRelease`; any failure must stop before commit/push.
+The release workflow installs API 36 explicitly and runs `lintRelease` before packaging. Codespaces does not run Gradle at all; only lightweight structural/static checks run before commit. GitHub Actions owns compile, lint, release packaging, signing, and final verification.
 
 Huawei's current Android Health Service documentation still warns that device-side `DataController` calls may fail while the app is backgrounded or the screen is off. This is not treated as an Android 16 migration regression and this sprint does not convert the proven WorkManager pipeline into a foreground service without device evidence. The post-upgrade Huawei gate must explicitly cover foreground sync, screen-off/background behavior, periodic catch-up, and recovery after HMS/Huawei Health restarts.
 
@@ -110,8 +118,8 @@ That specific failure mode remains fixed. The newer 2026-09-11 intermittent down
 - Settings keeps the minimal data-source card and one merged action card. `Sync now` is the primary action; connect/import/refresh/Health Connect settings are secondary.
 - Dashboard-card visibility/order is handled only by `DashboardCardLayoutPrefs` from the pencil editor.
 - Settings exposes only the steps goal.
-- Bottom navbar: all controls (Today, Refresh, Settings) share one common height (64dp, was 46/72dp mismatched). Refresh reads as the primary action via width (84dp pill) instead of height -- the 2026-08-29 (b) height-based resize clipped the Today/Settings labels (confirmed real-device report) because a `Row.weight(1f)` child's height doesn't control its relative visual prominence, only width does. Both destination buttons remain identical to each other; do not resize one without the other. Do not resize navbar controls by height again for visual hierarchy -- use width.
-- Today header shows an animated "Syncing..." / "Синхронизация..." status line under the last-sync trailing text while `SyncUiState.isSyncing` is true. The line's container is always present at a fixed reserved height; only its alpha animates (`graphicsLayer`), never `AnimatedVisibility`'s presence/layout toggle -- the latter collapsed the line's height to zero on exit and yanked the subtitle text upward (confirmed real-device report). `isSyncing` itself is now a computed property (`isUiTriggeredSyncing || isBackgroundSyncActive`), not a single stored flag -- see "Sync activity signal" below for why.
+- Bottom navbar: all controls (Today, Refresh, Settings) share one common height (64dp); Refresh reads as primary via width (84dp), never height. Since the final 2026-09-11 UI sprint, controls also use shared August spring tokens for subtle compression, 2dp press depth, tiny asymmetric tilt, and one short under-damped release tremor. Keep the amplitude restrained and never apply this bounce to static cards/content.
+- Today header shows `Sync in progress…` / `Идёт синхронизация…` while `SyncUiState.isSyncing` is true. Keep the fixed metadata-row height, but do not reintroduce the old alpha-from-zero transition: the active state renders immediately as a high-contrast August capsule. UI-triggered syncs have a 1.1s minimum visual dwell in `SyncViewModel`, while `isSyncing` remains the computed OR of UI-triggered and actually-RUNNING background work.
 - **2026-08-31: "Syncing..." indicator visibility now also depends on real background sync activity, not just UI-triggered sync state.** `SyncViewModel.markSyncStarted()`/`markSyncCompleted()` alone were insufficient: they only fire from `MainActivity`'s two UI-triggered sync call sites, so a periodic background `SyncWorker` run that wins the sync-run lease race (confirmed on a real device log: the UI-triggered attempt's own started->completed pair collapsed to under a second while the periodic worker did the real ~10-second sync) never showed the indicator at all. `HuaweiConfig.SYNC_ACTIVITY_TAG` is now applied only to `SyncWorker`'s two enqueue sites (not `EveningReminderWorker`, which shares the older, broader `SYNC_WORKER_TAG` and is unrelated to health-data syncing) and observed via `WorkManager.getWorkInfosByTagLiveData()` in `MainActivity`, feeding `SyncViewModel.setBackgroundSyncActive()`.
 - Settings screen ends with a small wood-carved-style signature (`EngravedSignature()`), built from Inter Black + letter-spacing + a two-layer engraved-shadow effect -- no new font asset was added (see the GMS-free/Downloadable-Fonts constraint above).
 
@@ -152,13 +160,15 @@ That specific failure mode remains fixed. The newer 2026-09-11 intermittent down
 - When touching `values/strings.xml`, keep `values-ru/strings.xml` key parity in the same patch. Run XML parsing plus locale-key parity checks before Gradle.
 - XML comments must never contain literal `--`.
 - Patch scripts must be idempotent/fail-closed and use small symptom-based anchors, not one huge fragile multiline anchor.
-- Verification gate: `:app:assembleDebug` AND `:app:lintDebug` AND `:app:lintRelease` AND `:app:assembleRelease`. A compile-only pass is not enough.
+- Codespaces gate: patch structural verification + XML/resource parity + `git diff --check` only. Do not run Gradle locally. GitHub Actions must pass compile + lint + release packaging/signing before release.
 - Do not suppress lint, create a lint baseline, or weaken checks merely to get green output.
 - If verification fails, do not commit/push. Show only compact compiler/lint errors, not full Gradle stack traces.
 - Do not include `git diff -- ...` in delivery commands. It creates console noise and is explicitly unwanted.
 - Preserve working sync/data behavior during UI work; UI refactors must not touch workout serialization unless required by evidence.
 - Repo root is kept clean between sessions: delivered/verified patch scripts and `.bitlut_patch_backup/` are deleted once their changes are committed. A patch script or backup file sitting in the repo root is stale debris, not a sign of pending work -- check `git log`/`CHANGELOG.md` for what has actually landed.
 
-## Final verification command used by delivery scripts
+'## Verification split
 
-Resource-constrained Codespaces settings remain intentional: one Gradle worker, no daemon, no file watcher, 1 GB heap, Kotlin compiler in-process.
+Codespaces: no Gradle. Run only the patch's built-in static verification, `git diff --check`, and `git status --short`.
+
+GitHub Actions: clean dependency resolution, compile, lint, release APK packaging, signing, and artifact verification. This is the authoritative build gate.

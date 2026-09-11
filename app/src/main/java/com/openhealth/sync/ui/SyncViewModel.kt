@@ -6,11 +6,13 @@ import com.openhealth.sync.data.HuaweiAuthFailureReason
 import com.openhealth.sync.data.HealthConnectManager
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.openhealth.sync.data.HealthConnectStatus
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -74,6 +76,8 @@ class SyncViewModel(
 
     private var statusJob: Job? = null
     private var lastStatusRefreshAtMs: Long = 0L
+    private var uiSyncStartedAtElapsedMs: Long = 0L
+    private var syncIndicatorHideJob: Job? = null
 
     init { refreshStatuses(force = true) }
 
@@ -119,6 +123,8 @@ class SyncViewModel(
     }
 
     fun markSyncStarted() {
+        syncIndicatorHideJob?.cancel()
+        uiSyncStartedAtElapsedMs = SystemClock.elapsedRealtime()
         _uiState.update { it.copy(isUiTriggeredSyncing = true, syncStatus = "sync_status_syncing") }
     }
 
@@ -126,7 +132,21 @@ class SyncViewModel(
         val statusMsg = if (success) "sync_status_success" else "sync_status_error"
         val time = if (success) SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()) else _uiState.value.lastSyncTime
         if (success) prefs.edit().putString("last_sync_time", time).apply()
-        _uiState.update { it.copy(isUiTriggeredSyncing = false, syncStatus = statusMsg, lastSyncTime = time) }
+
+        // Keep the UI signal alive long enough for Compose to render it even when a
+        // lease collision or fast preflight completes inside a few frames. Previously
+        // the header also faded in from alpha=0, so short syncs were effectively
+        // invisible on the light canvas. Outcome/time can update immediately; only the
+        // visual in-progress flag gets a minimum dwell time.
+        // BITLUT_FINAL_UI_SPRINT_2026_09_11
+        _uiState.update { it.copy(syncStatus = statusMsg, lastSyncTime = time) }
+        val elapsed = (SystemClock.elapsedRealtime() - uiSyncStartedAtElapsedMs).coerceAtLeast(0L)
+        val remaining = (MIN_UI_SYNC_INDICATOR_VISIBLE_MS - elapsed).coerceAtLeast(0L)
+        syncIndicatorHideJob?.cancel()
+        syncIndicatorHideJob = viewModelScope.launch {
+            if (remaining > 0L) delay(remaining)
+            _uiState.update { it.copy(isUiTriggeredSyncing = false) }
+        }
         // Do not re-query Health Connect permissions here. A completed sync
         // already proved the provider path; repeating the permission snapshot
         // was one contributor to the quota storm.
@@ -146,6 +166,7 @@ class SyncViewModel(
 
     companion object {
         private const val STATUS_REFRESH_MIN_INTERVAL_MS = 10_000L
+        private const val MIN_UI_SYNC_INDICATOR_VISIBLE_MS = 1_100L
 
         fun provideFactory(
             googleManager: HealthConnectManager,

@@ -145,12 +145,27 @@ internal object AugustSpace {
     val s72 = 72.dp
 }
 
-/** August v3 motion: 140-200 ms standard, navigation up to 280 ms, no bounce. */
+/**
+ * August v3 motion: restrained by default, tactile only where the person acts.
+ * Static content never bounces. Navigation controls may use a short, low-amplitude
+ * spring so press/release feels physical without turning the interface playful.
+ * // BITLUT_FINAL_UI_SPRINT_2026_09_11
+ */
 internal object AugustMotion {
     const val FastMs = 140
     const val DefaultMs = 180
     const val MediumMs = 240
     const val NavigationMs = 280
+
+    const val PressSpringDampingRatio = 0.52f
+    const val PressSpringStiffness = 680f
+    const val DestinationPressScale = 0.955f
+    const val PrimaryPressScale = 0.94f
+    const val PressTranslationDp = 2.0f
+    const val DestinationPressTiltDegrees = 1.35f
+    const val SyncPressTiltDegrees = -1.15f
+    const val SyncIconPressRotationDegrees = -15f
+
     val StandardEasing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 }
 

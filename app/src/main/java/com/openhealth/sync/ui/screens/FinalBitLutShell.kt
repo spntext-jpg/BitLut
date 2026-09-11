@@ -2019,10 +2019,12 @@ private fun SecondaryButton(
 }
 
 // Summary metadata gets one stable row: source/freshness at rest, sync state
-// while work is actually running. Keeping the row height fixed prevents the
-// real-device layout jump fixed in 2026-08-30, while moving Tangerine from
-// small text to a progress indicator restores contrast in the light theme.
-private val HEADER_META_LINE_HEIGHT = 22.dp
+// while work is actually running. The sync state is rendered immediately as a
+// high-contrast August capsule instead of fading from alpha=0; SyncViewModel
+// guarantees a short minimum dwell time so fast runs cannot disappear between
+// Compose frames. Fixed height still prevents the 2026-08-30 layout jump.
+// BITLUT_FINAL_UI_SPRINT_2026_09_11
+private val HEADER_META_LINE_HEIGHT = 28.dp
 
 @Composable
 private fun MinimalHeader(
@@ -2064,11 +2066,6 @@ private fun MinimalHeader(
         }
 
         if (trailing != null || isSyncing) {
-            val syncStatusAlpha by animateFloatAsState(
-                targetValue = if (isSyncing) 1f else 0f,
-                animationSpec = tween(AugustMotion.MediumMs, easing = AugustMotion.StandardEasing),
-                label = "syncStatusAlpha"
-            )
             Spacer(Modifier.height(3.dp))
             Box(
                 modifier = Modifier
@@ -2076,31 +2073,36 @@ private fun MinimalHeader(
                     .height(HEADER_META_LINE_HEIGHT),
                 contentAlignment = Alignment.CenterStart
             ) {
-                if (trailing != null) {
+                if (isSyncing) {
+                    val statusShape = RoundedCornerShape(50)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(statusShape)
+                            .background(if (palette.dark) AugustColor.NavySoft else AugustColor.Surface)
+                            .border(1.dp, palette.stroke, statusShape)
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            color = AugustColor.Tangerine,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.sync_status_updating),
+                            color = palette.text,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            maxLines = 1
+                        )
+                    }
+                } else if (trailing != null) {
                     Text(
                         text = trailing,
                         color = palette.secondaryText,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        maxLines = 1,
-                        modifier = Modifier.graphicsLayer { alpha = 1f - syncStatusAlpha }
-                    )
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.graphicsLayer { alpha = syncStatusAlpha }
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(13.dp),
-                        color = AugustColor.Tangerine,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = stringResource(R.string.sync_status_updating),
-                        color = palette.text,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
                         maxLines = 1
                     )
                 }

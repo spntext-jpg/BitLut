@@ -30,22 +30,16 @@ The corporate wellness app now reliably imports and accepts BitLut-synced workou
 
 ## Interface
 
-Keeps the August palette: Navy, Lime, Tangerine, Purple, Inter Variable, and system light/dark themes. Current UI direction is calm and content-first: flat outlined cards, restrained hero depth, pill controls, comfortable touch targets, and minimal animation.
+Keeps the August palette: Navy, Lime, Tangerine, Purple, Inter Variable, and system light/dark themes. Current UI direction is calm and content-first: flat outlined cards, restrained hero depth, pill controls, comfortable touch targets, and tactile spring micro-interactions only on controls that are actually pressed. The bottom dock uses a subtle press-depth/tilt/release tremor; static cards do not bounce.
 
 Settings is deliberately minimal: data source, one grouped connection/sync actions card, a Health Connect settings deep link, and the steps goal. Workout-filter UI has been removed, but `WorkoutFilterPrefs` still applies in the sync path.
 
-## Verification before commit
+'## Verification before commit
 
-Both checks are mandatory:
+Codespaces is intentionally **static-check only**. Do not run Gradle, lint, or APK builds locally: even configuration-only AGP tasks can exhaust the project Codespace. Before committing, run the patch's built-in verification plus `git diff --check` and inspect `git status --short`.
 
-```bash
-./gradlew :app:assembleDebug :app:lintDebug \
-  --no-daemon \
-  --max-workers=1 \
-  --no-watch-fs \
-  --console=plain \
-  -Dorg.gradle.jvmargs="-Xmx1024m -XX:MaxMetaspaceSize=384m -Dfile.encoding=UTF-8" \
-  -Pkotlin.compiler.execution.strategy=in-process
-```
+The authoritative compile/lint/release gate runs in GitHub Actions on a clean runner. A release workflow must pass before a release is considered verified.
 
 Before making changes, read `CLAUDE.md`, `CONTEXT.md`, `SESSION_HANDOFF.md`, `design.md`, and `sync.md`.
+
+<!-- BITLUT_FINAL_UI_SPRINT_2026_09_11 -->

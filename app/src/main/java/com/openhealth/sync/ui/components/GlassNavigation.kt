@@ -3,6 +3,7 @@ package com.openhealth.sync
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -158,10 +159,36 @@ private fun AugustDestination(
         animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
         label = "destinationIconTile"
     )
+    // A small press depth + asymmetric tilt gives the dock a tactile glass feel.
+    // The under-damped return is intentional: it creates one restrained release tremor,
+    // while the low amplitude keeps August calm rather than cartoon-like.
+    // BITLUT_FINAL_UI_SPRINT_2026_09_11
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.98f else 1f,
-        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
+        targetValue = if (pressed) AugustMotion.DestinationPressScale else 1f,
+        animationSpec = spring(
+            dampingRatio = AugustMotion.PressSpringDampingRatio,
+            stiffness = AugustMotion.PressSpringStiffness
+        ),
         label = "destinationPressScale"
+    )
+    val pressDepth by animateDpAsState(
+        targetValue = if (pressed) AugustMotion.PressTranslationDp.dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = AugustMotion.PressSpringDampingRatio,
+            stiffness = AugustMotion.PressSpringStiffness
+        ),
+        label = "destinationPressDepth"
+    )
+    val pressTilt by animateFloatAsState(
+        targetValue = if (pressed) {
+            if (tab == MainTab.Today) -AugustMotion.DestinationPressTiltDegrees
+            else AugustMotion.DestinationPressTiltDegrees
+        } else 0f,
+        animationSpec = spring(
+            dampingRatio = AugustMotion.PressSpringDampingRatio,
+            stiffness = AugustMotion.PressSpringStiffness
+        ),
+        label = "destinationPressTilt"
     )
     val iconSize by animateDpAsState(
         targetValue = if (selected) 18.dp else 17.dp,
@@ -175,6 +202,8 @@ private fun AugustDestination(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                translationY = pressDepth.toPx()
+                rotationZ = pressTilt
             }
             .clip(shape)
             .background(container)
@@ -226,13 +255,35 @@ private fun AugustSyncAction(onClick: () -> Unit) {
     val focused by interactionSource.collectIsFocusedAsState()
     val shape = remember { RoundedCornerShape(24.dp) }
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
+        targetValue = if (pressed) AugustMotion.PrimaryPressScale else 1f,
+        animationSpec = spring(
+            dampingRatio = AugustMotion.PressSpringDampingRatio,
+            stiffness = AugustMotion.PressSpringStiffness
+        ),
         label = "syncPressScale"
     )
+    val pressDepth by animateDpAsState(
+        targetValue = if (pressed) AugustMotion.PressTranslationDp.dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = AugustMotion.PressSpringDampingRatio,
+            stiffness = AugustMotion.PressSpringStiffness
+        ),
+        label = "syncPressDepth"
+    )
+    val pressTilt by animateFloatAsState(
+        targetValue = if (pressed) AugustMotion.SyncPressTiltDegrees else 0f,
+        animationSpec = spring(
+            dampingRatio = AugustMotion.PressSpringDampingRatio,
+            stiffness = AugustMotion.PressSpringStiffness
+        ),
+        label = "syncPressTilt"
+    )
     val rotation by animateFloatAsState(
-        targetValue = if (pressed) -12f else 0f,
-        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
+        targetValue = if (pressed) AugustMotion.SyncIconPressRotationDegrees else 0f,
+        animationSpec = spring(
+            dampingRatio = AugustMotion.PressSpringDampingRatio,
+            stiffness = AugustMotion.PressSpringStiffness
+        ),
         label = "syncPressRotation"
     )
     val fill by animateColorAsState(
@@ -252,6 +303,8 @@ private fun AugustSyncAction(onClick: () -> Unit) {
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                translationY = pressDepth.toPx()
+                rotationZ = pressTilt
             }
             .clip(shape)
             .background(fill)
