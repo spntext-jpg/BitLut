@@ -74,6 +74,7 @@ The release workflow should keep an early `checkReleaseAarMetadata` gate before 
 - Workout writes preserve deterministic IDs and coherent exercise-session bundles.
 - Overlapping Huawei sessions are normalized by retaining the richer real session; do not fabricate clipped sessions.
 - Session-scoped workout metrics remain the interoperability-critical contract for downstream readers.
+- 2026-09-10: workout bundle no longer includes elevation/total-calories (`ElevationGainedRecord`/`TotalCaloriesBurnedRecord`) -- only session, Distance, Steps -- reducing per-workout Health Connect payload after a corporate reader reported "binder died"/rate-limit sync failures. Targeted reduction, not a confirmed fix; see `docs/BACKLOG.md`.
 - Dashboard cache consumers must preserve the midnight stale-cache guard; never reapply yesterday's daily totals as today's data.
 
 ### August UI polish
@@ -140,5 +141,7 @@ Any future platform migration must regression-test at least:
 ## Next-session starting point
 
 There is no known migration blocker left from this session. Start from the current `main` branch and the latest successful GitHub Actions run.
+
+If the corporate wellness app's sync failures recur after the 2026-09-10 payload reduction, capture the exact error time and a BitLut diagnostic log for the same window before making any further write-path change.
 
 If the next task is UI-only, do not touch sync serialization. If it is sync-related, preserve the established Huawei-first permissions, stable IDs, overlap normalization, session-scoped metrics, and cache guards unless device evidence requires a change.

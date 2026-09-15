@@ -705,7 +705,7 @@ class GoogleHealthManager(
      * same groupings for what gets written instead of only what gets shown.
      */
     // BITLUT_SESSION_SUB_METRICS_2026_08_30
-    private enum class SessionSubMetric { DISTANCE, STEPS, ELEVATION }
+    private enum class SessionSubMetric { DISTANCE, STEPS }
 
     private fun sessionSubMetricsFor(exerciseType: Int): Set<SessionSubMetric> = when (exerciseType) {
         ExerciseSessionRecord.EXERCISE_TYPE_WALKING,
@@ -714,10 +714,10 @@ class GoogleHealthManager(
             setOf(SessionSubMetric.DISTANCE, SessionSubMetric.STEPS)
 
         ExerciseSessionRecord.EXERCISE_TYPE_HIKING ->
-            setOf(SessionSubMetric.DISTANCE, SessionSubMetric.ELEVATION, SessionSubMetric.STEPS)
+            setOf(SessionSubMetric.DISTANCE, SessionSubMetric.STEPS)
 
         ExerciseSessionRecord.EXERCISE_TYPE_BIKING ->
-            setOf(SessionSubMetric.DISTANCE, SessionSubMetric.ELEVATION)
+            setOf(SessionSubMetric.DISTANCE)
 
         ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY ->
             setOf(SessionSubMetric.DISTANCE)
@@ -734,7 +734,7 @@ class GoogleHealthManager(
             emptySet()
 
         else ->
-            setOf(SessionSubMetric.DISTANCE, SessionSubMetric.STEPS, SessionSubMetric.ELEVATION)
+            setOf(SessionSubMetric.DISTANCE, SessionSubMetric.STEPS)
     }
 
 
@@ -848,57 +848,60 @@ class GoogleHealthManager(
             )
 
             // Health Connect models workout summaries as records sharing the
-            // exercise interval. Insert the session and its calorie summary in
-            // one request so readers never observe a newly-written bare session
-            // before the associated summary arrives.
+            // exercise interval.
+            //
+            // 2026-09-10: this bundle previously also included a
+            // TotalCaloriesBurnedRecord (a real Huawei value when available,
+            // else WorkoutCalorieEstimator's MET-formula fallback) and, for
+            // hiking/biking, an ElevationGainedRecord. Both removed -- per
+            // Paulo's explicit request -- to shrink the per-workout Health
+            // Connect payload after a corporate wellness-app reader started
+            // failing to sync ("binder died" / rate-limit errors after
+            // roughly two minutes) starting in the same window this bundle
+            // was introduced. This is a targeted volume reduction, not a
+            // confirmed fix: no corporate-app-side timestamped log has yet
+            // confirmed the correlation (see sync.md section 4.7 and
+            // docs/BACKLOG.md's open investigation item). Neither removal
+            // affects BitLut's own dashboard: hiking/biking elevation and
+            // workout calories are displayed there from the live Huawei
+            // snapshot each sync (FinalBitLutShell.kt's workoutMetricDisplays()
+            // and WorkoutCalorieEstimator), never read back from what was
+            // previously written to Health Connect.
             val bundle = mutableListOf<Record>(exercise)
-            val kcal = session.totalCaloriesKcal?.takeIf { it > 0.0 }
-                ?: estimatedTotalCaloriesKcal(session.exerciseType, session.startTimeMs, session.endTimeMs)
-            if (kcal != null && kcal > 0.0) {
-                bundle += TotalCaloriesBurnedRecord(
-                    startTime = start,
-                    endTime = end,
-                    startZoneOffset = offset(start),
-                    endZoneOffset = offset(end),
-                    energy = Energy.kilocalories(kcal),
-                    // Keep the historical ID so old estimated calorie records
-                    // are upgraded in place instead of duplicated.
-                    metadata = bitlutWorkoutMetadata(
-                        "exercise_calories_estimate",
-                        start.toEpochMilli(),
-                        end.toEpochMilli(),
-                        version = version
-                    )
-                )
-            }
 
-            // 2026-08-30: session.distanceMeters/steps/elevationMeters were
-            // computed correctly (from Huawei's own ActivityRecord summary,
-            // see readActivityRecordSummary()'s per-record fallback) but
-            // never actually written to Health Connect as records scoped to
-            // this exercise session's own time window -- only used for
-            // BitLut's own dashboard display. Per Health Connect's own
-            // documented pattern (a session's distance/steps/elevation are
-            // read back by querying those record types over the *same time
-            // range* as the exercise session -- there is no explicit
-            // foreign-key link), any third-party reader -- Google Fit,
-            // Health Connect's own UI, or another app -- had nothing
-            // trustworthy to find for this workout's own metrics: the only
-            // DistanceRecord/StepsRecord/ElevationGainedRecord in Health
-            // Connect for that time span was the coarse background
-            // aggregate written by writeDistanceBatch/writeStepsBatch/
-            // writeElevationBatch, whose sample windows are already
-            // documented (see readDistance()'s doc comment) as not lining
-            // up cleanly with an exact workout interval. Writing these
-            // session-scoped records in the same insertRecords bundle as
-            // the exercise itself fixes that for every workout, from every
-            // import source (live sync and archive import both produce the
-            // same ActivitySessionData through this one write path).
+            // 2026-08-30: session.distanceMeters/steps were computed
+            // correctly (from Huawei's own ActivityRecord summary, see
+            // readActivityRecordSummary()'s per-record fallback) but never
+            // actually written to Health Connect as records scoped to this
+            // exercise session's own time window -- only used for BitLut's
+            // own dashboard display. Per Health Connect's own documented
+            // pattern (a session's distance/steps are read back by querying
+            // those record types over the *same time range* as the exercise
+            // session -- there is no explicit foreign-key link), any
+            // third-party reader -- Google Fit, Health Connect's own UI, or
+            // another app -- had nothing trustworthy to find for this
+            // workout's own metrics: the only DistanceRecord/StepsRecord in
+            // Health Connect for that time span was the coarse background
+            // aggregate written by writeDistanceBatch/writeStepsBatch,
+            // whose sample windows are already documented (see
+            // readDistance()'s doc comment) as not lining up cleanly with
+            // an exact workout interval. Writing these session-scoped
+            // records in the same insertRecords bundle as the exercise
+            // itself fixes that for every workout, from every import
+            // source (live sync and archive import both produce the same
+            // ActivitySessionData through this one write path).
             //
             // Only include a metric a given exercise type can plausibly
-            // have -- sessionSubMetricsFor() mirrors workoutMetricDisplays()
-            // exactly, so a strength/yoga/HIIT/pilates session is never
-            // given a fabricated distance or step count it couldn't have
+            // have and that this bundle still writes -- sessionSubMetricsFor()
+            // previously mirrored workoutMetricDisplays() (BitLut's own
+            // dashboard metric selection) exactly, but no longer does after
+            // 2026-09-10's elevation removal: workoutMetricDisplays() still
+            // shows elevation for hiking/biking cards, sourced from the live
+            // Huawei snapshot each sync, independent of what this bundle
+            // writes to Health Connect. sessionSubMetricsFor() now only
+            // decides what's written for third-party readers, not what
+            // BitLut itself displays. Strength/yoga/HIIT/pilates still never
+            // get a fabricated distance or step count they couldn't have
             // produced on this device, which would itself be untrustworthy
             // data.
             val allowedSubMetrics = sessionSubMetricsFor(session.exerciseType)
@@ -928,22 +931,6 @@ class GoogleHealthManager(
                     count = sessionSteps,
                     metadata = bitlutWorkoutMetadata(
                         "exercise_steps",
-                        start.toEpochMilli(),
-                        end.toEpochMilli(),
-                        version = version
-                    )
-                )
-            }
-            val sessionElevationMeters = session.elevationMeters?.takeIf { it > 0.0 }
-            if (SessionSubMetric.ELEVATION in allowedSubMetrics && sessionElevationMeters != null) {
-                bundle += ElevationGainedRecord(
-                    startTime = start,
-                    endTime = end,
-                    startZoneOffset = offset(start),
-                    endZoneOffset = offset(end),
-                    elevation = Length.meters(sessionElevationMeters),
-                    metadata = bitlutWorkoutMetadata(
-                        "exercise_elevation",
                         start.toEpochMilli(),
                         end.toEpochMilli(),
                         version = version
@@ -992,20 +979,6 @@ class GoogleHealthManager(
         AppLogger.i(TAG, "Workout bundles written: $written/${validSessions.size}")
         return allSucceeded
     }
-
-
-    /**
-     * MET-formula estimate of total calories burned for a workout, used only
-     * to give third-party Health Connect readers something non-zero to
-     * import (see the call site in [writeActivitySessionsBatch] for why).
-     * Delegates to [com.openhealth.sync.util.WorkoutCalorieEstimator] (sprint
-     * 2026-08-26 extraction) so this exact formula and MET table also back
-     * the workout card's own calorie display -- see that object's own doc
-     * comment for the full rationale, the formula, and why it is not
-     * measured data.
-     */
-    private fun estimatedTotalCaloriesKcal(exerciseType: Int, startTimeMs: Long, endTimeMs: Long): Double? =
-        com.openhealth.sync.util.WorkoutCalorieEstimator.estimateTotalCaloriesKcal(exerciseType, startTimeMs, endTimeMs)
 
     private suspend fun replaceRecords(
         label: String,

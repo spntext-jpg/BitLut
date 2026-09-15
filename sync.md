@@ -561,33 +561,53 @@ querying that workout's own metrics by time-range overlap had nothing
 trustworthy to find: either nothing at all, or a value smeared across the
 wrong time window.
 
-**The fix.** `writeActivitySessionsBatch()` now bundles
+**The fix (2026-08-30/31).** `writeActivitySessionsBatch()` started bundling
 `DistanceRecord`/`StepsRecord`/`ElevationGainedRecord`/
-`ActiveCaloriesBurnedRecord` into the **same `insertRecords` call** as the
-`ExerciseSessionRecord`, scoped to the session's **exact** `startTime`/
-`endTime` — so a time-range-overlap query from any reader now finds real,
-accurately-scoped data for that specific workout, not a coarse background
-guess.
+`ActiveCaloriesBurnedRecord`, plus a `TotalCaloriesBurnedRecord` (4.11),
+into the **same `insertRecords` call** as the `ExerciseSessionRecord`,
+scoped to the session's **exact** `startTime`/`endTime` — so a
+time-range-overlap query from any reader now finds real, accurately-scoped
+data for that specific workout, not a coarse background guess.
+
+**Reduced scope (2026-09-10).** `ElevationGainedRecord` and
+`TotalCaloriesBurnedRecord` were removed from this bundle — Distance and
+Steps are the only sub-metrics still written. Trigger: the corporate
+wellness app started failing to sync from Health Connect ("binder died" /
+rate-limit errors after roughly two minutes) in the same late-August/
+early-September window this bundle was introduced. Paulo asked to shrink
+the per-workout payload as a direct response; distance, duration (from the
+session's own `startTime`/`endTime`), and steps were kept as the minimum
+the corporate app actually needs, elevation and calories were judged
+non-essential for that reader and cut. **This is a targeted reduction, not
+a confirmed fix** — no corporate-app-side timestamped log has yet
+confirmed correlation with BitLut's own sync times; see `docs/BACKLOG.md`'s
+open investigation item. If a future correlated log rules this out, both
+records can be reintroduced from this same section's pre-2026-09-10
+history without re-deriving the design. Neither removal affects BitLut's
+own dashboard: `workoutMetricDisplays()` in `FinalBitLutShell.kt` still
+shows hiking/biking elevation and workout calories, computed from the live
+Huawei snapshot each sync — never read back from what was previously
+written to Health Connect.
 
 **Per-exercise-type gating (`sessionSubMetricsFor`).** Not every exercise
 type can plausibly produce every metric — writing a fabricated `DistanceRecord`
 for a strength-training or yoga session would itself be untrustworthy data,
-in the opposite direction from the original bug. `sessionSubMetricsFor()`
-mirrors, metric-for-metric, the exact per-type contract already established
-by the dashboard's own `workoutMetricDisplays()` in `FinalBitLutShell.kt`
-(so there is exactly one place that decides "what metrics make sense for
-this exercise type," reused for both what gets *shown* and what gets
-*written*):
+in the opposite direction from the original bug. As of 2026-09-10,
+`sessionSubMetricsFor()` no longer mirrors `workoutMetricDisplays()`
+exactly (that dashboard function still selects elevation for hiking/biking
+cards; this write-path function no longer has an elevation case at all) —
+it now only decides what's written to Health Connect for third-party
+readers, independent of what BitLut itself displays:
 
-| Exercise type(s) | Distance | Steps | Elevation |
-|---|---|---|---|
-| Walking, Running, Running (treadmill) | ✓ | ✓ | |
-| Hiking | ✓ | ✓ | ✓ |
-| Biking (outdoor) | ✓ | | ✓ |
-| Biking (stationary) | ✓ | | |
-| Swimming (open water, pool) | ✓ | | |
-| Strength training, Weightlifting, HIIT, Yoga, Pilates | | | |
-| Everything else (fallback) | ✓ | ✓ | ✓ |
+| Exercise type(s) | Distance | Steps |
+|---|---|---|
+| Walking, Running, Running (treadmill) | ✓ | ✓ |
+| Hiking | ✓ | ✓ |
+| Biking (outdoor) | ✓ | |
+| Biking (stationary) | ✓ | |
+| Swimming (open water, pool) | ✓ | |
+| Strength training, Weightlifting, HIIT, Yoga, Pilates | | |
+| Everything else (fallback) | ✓ | ✓ |
 
 `ActiveCaloriesBurnedRecord` is written whenever
 `session.activeCaloriesKcal` is non-null and positive, with no per-type
@@ -596,7 +616,9 @@ gate — it is currently always `null` in practice, since neither
 today (Huawei's activeCalories category is itself scope-gated behind 50005
 for this individual-developer account, per `WorkoutCalorieEstimator`'s own
 doc comment). The write path handles it correctly regardless, so a future
-data source populating it needs no further plumbing change here.
+data source populating it needs no further plumbing change here. This
+record was left in place (unlike the calorie *estimate*, 4.11) because it
+already contributes nothing to the payload today.
 
 **Applies to every workout, from every import source.** Live sync
 (`HuaweiHealthManager.readActivitySessions`) and archive/CSV import
@@ -605,8 +627,8 @@ flow through this one `writeActivitySessionsBatch()` write path — the fix
 covers both without any source-specific code.
 
 **No new Health Connect permissions required.** BitLut already held write
-permission for all four record types (`HealthPermissionPolicy`, 4.13),
-since they were already being written as background aggregates.
+permission for all record types discussed here (`HealthPermissionPolicy`,
+4.13), since they were already being written as background aggregates.
 
 ### 4.8 Metadata: `autoRecorded` vs `activelyRecorded`, and device attribution
 
@@ -617,8 +639,8 @@ Two metadata factory functions exist, both building on a shared
   background streams (steps, distance, floors, elevation, active calories)
   — data Huawei's sensors produce continuously without explicit user action.
 - **`bitlutWorkoutMetadata(...)`** → `Metadata.activelyRecorded(...)`. Used
-  for exercise sessions and their calorie/distance/steps/elevation
-  sub-records — Huawei documents this data as produced only after the user
+  for exercise sessions and their bundled Distance/Steps sub-records
+  — Huawei documents this data as produced only after the user
   explicitly starts a workout, and Health Connect's own metadata semantics
   distinguish the two cases. Preserving this distinction (rather than
   describing everything as however BitLut itself happened to relay the
@@ -697,7 +719,7 @@ BitLut is the selected data source, falling back to Health Connect
 aggregation (`enrichDisplayedWorkoutMetrics`, 4.12) only for the two most
 recently displayed workouts, and only when the sidecar has nothing.
 
-### 4.11 Calorie estimation (`WorkoutCalorieEstimator`) — the one explicit exception to "never fabricate data"
+### 4.11 Calorie estimation (`WorkoutCalorieEstimator`) — dashboard-only since 2026-09-10
 
 Real per-workout active-calorie data from Huawei requires the
 `HEALTHKIT_CALORIES_READ` scope, which BitLut has never requested (its
@@ -708,9 +730,8 @@ one. It is **not** part of the permanently-closed Advanced tier (3.2
 correctly lists active calories as part of the individual-developer-
 reachable activity tier) and is understood, per Huawei's own developer
 documentation, to be unrestricted, quickly-approved Basic-tier data — see
-`docs/SCALING_ROADMAP.md` for the request plan. Until that scope is
-requested and approved, to give third-party readers *something* non-zero
-to import for a workout's total calories,
+`docs/SCALING_ROADMAP.md` for the request plan.
+
 `WorkoutCalorieEstimator.estimateTotalCaloriesKcal(exerciseType,
 startTimeMs, endTimeMs)` computes a standard MET-formula estimate:
 
@@ -727,18 +748,24 @@ used across MET calculators when no real body weight is available; BitLut
 has no access to the user's actual weight, and adding that would introduce
 a new data category, which this feature is explicitly scoped to avoid.
 
-This is documented, in the code itself and in
+**Until 2026-09-10, this estimate was also written to Health Connect** as
+a `TotalCaloriesBurnedRecord` bundled with every workout
+(`writeActivitySessionsBatch`, 4.7) — documented, in the code itself and in
 `docs/HEALTH_DATA_PERMISSION_MATRIX.md`, as the **one explicit, deliberate
 exception** to this project's otherwise-absolute "never synthesize fake
-health data" rule — made only because a plausible-but-labeled estimate
-serves interoperability better than a hard zero, and only for total
-calories specifically, never for distance, steps, or elevation, which are
-always either real Huawei data or omitted. The same formula and MET table
-back both the Health Connect write (`estimatedTotalCaloriesKcal`, called
-from `writeActivitySessionsBatch`) and the workout card's own calorie
-display fallback (`workoutMetricDisplays` in `FinalBitLutShell.kt`) — a
-single shared implementation (extracted 2026-08-26) so the two call sites
-can never silently drift apart.
+health data" rule, made only because a plausible-but-labeled estimate
+served interoperability better than a hard zero. **That Health Connect
+write was removed in 4.7's 2026-09-10 payload-reduction change** — the
+estimate is no longer sent to third-party readers at all, calorie data or
+none. The exception itself, and the formula, are unchanged: `
+WorkoutCalorieEstimator` is still the single shared implementation
+(extracted 2026-08-26) behind BitLut's own workout card calorie display
+fallback (`workoutMetricDisplays` in `FinalBitLutShell.kt`), which is
+unaffected by the Health Connect write's removal since it always read the
+live Huawei snapshot directly, never Health Connect's stored record. If
+`HEALTHKIT_CALORIES_READ` is ever approved (`docs/SCALING_ROADMAP.md`),
+this estimate stops mattering for real Huawei-provided workouts either
+way, via the existing `?:` fallback pattern in both call sites.
 
 ### 4.12 Dashboard reads: quota-bounded, aggregate-then-recover
 

@@ -16,13 +16,13 @@ Real-data rule: never fabricate missing metrics. The only approved exception is 
 
 Current top-priority goal: lift the Huawei Health Kit 100-user test-phase cap, and add `HEALTHKIT_CALORIES_READ` if it can be done without an Enterprise account. See `docs/SCALING_ROADMAP.md` for the plan; do not add any Advanced-tier scope (sleep/heart rate/SpO2/stress) regardless -- that remains permanently closed to individual developers.
 
-## Current baseline — 2026-08-31
+## Current baseline — 2026-09-10
 
 - Huawei Health Kit authorization and real activity reads work.
 - `HuaweiWorkoutTypeMapper` is the single Huawei workout-ID mapping source.
 - Per-session Huawei workout distance has priority over aggregate reconstruction.
-- Health Connect workouts are `ACTIVELY_RECORDED`, use Huawei device manufacturer metadata, deterministic client record IDs and stable versions, and write session + related calories as one bundle.
-- Workout distance/steps/elevation are also written as their own Health Connect records scoped to the exact session interval (gated per exercise type), so third-party readers see real per-workout metrics instead of only a coarser background aggregate. See `sync.md` section 4.6-4.7 for the full mechanism.
+- Health Connect workouts are `ACTIVELY_RECORDED`, use Huawei device manufacturer metadata, deterministic client record IDs and stable versions, and write session + Distance/Steps as one bundle (elevation and total-calories removed 2026-09-10).
+- Workout distance/steps are also written as their own Health Connect records scoped to the exact session interval (gated per exercise type), so third-party readers see real per-workout metrics instead of only a coarser background aggregate. Elevation and total-calories were removed from this bundle on 2026-09-10 to shrink the payload after a corporate reader started failing to sync -- targeted reduction, not a confirmed fix (see `docs/BACKLOG.md`). See `sync.md` section 4.7.
 - Dashboard workout metrics are type-aware and omit unavailable values.
 - `DashboardCardLayoutPrefs` is the sole dashboard card order/visibility layer.
 - `GoalPrefs` stores the steps goal only.
@@ -42,7 +42,7 @@ Do not rebuild workout distance from daily Health Connect overlap aggregates. Us
 
 `GoogleHealthManager` owns read/write behavior. Keep deterministic identities/upsert semantics. Do not change workout recording method back to automatic/unknown. Do not attempt to spoof `DataOrigin`; Health Connect attributes records to the actual writer package (`com.openhealth.sync`).
 
-The corporate wellness app now reliably imports BitLut-origin workouts, confirmed on a real device after the 2026-08-31 session-scoped Distance/Steps/Elevation sub-metric write (see `sync.md` section 4.6). Do not mutate workout write metadata further on this front without new evidence of a different problem.
+The corporate wellness app started reliably importing BitLut-origin workouts after the 2026-08-31 session-scoped Distance/Steps/Elevation sub-metric write, but sync failures ("binder died" / rate-limit errors) were reported again in late August/early September 2026. Elevation and total-calories were removed from the workout bundle 2026-09-10 as a targeted payload-reduction response -- not a confirmed fix. Do not mutate workout write metadata further without new evidence (a corporate-app-side timestamped log correlated with BitLut's own sync times).
 
 ### Sync and resilience
 

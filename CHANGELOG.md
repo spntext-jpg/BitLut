@@ -1,5 +1,103 @@
 # Changelog
 
+## 2026-09-10 (b) -- workout Health Connect payload reduced (elevation, calories removed)
+
+- **Corporate wellness app sync failures reported** (late August/early
+  September 2026): "binder died" and rate-limit errors after roughly two
+  minutes when the corporate app tries to sync from Health Connect. No
+  corporate-app-side timestamped log exists yet to confirm correlation
+  with BitLut's own sync activity -- tracked as an open investigation in
+  `docs/BACKLOG.md`.
+- **As a direct, requested response, reduced the per-workout Health
+  Connect payload.** `writeActivitySessionsBatch()` (`GoogleHealthManager.kt`)
+  no longer bundles `ElevationGainedRecord` or `TotalCaloriesBurnedRecord`
+  with a workout -- only `ExerciseSessionRecord` (which carries duration
+  via its own start/end time), `DistanceRecord`, and `StepsRecord` remain.
+  `sessionSubMetricsFor()`'s per-exercise-type table and the
+  `SessionSubMetric` enum were updated to match (ELEVATION case removed
+  entirely). The now-orphaned `estimatedTotalCaloriesKcal()` wrapper in
+  `GoogleHealthManager.kt` was removed (verified zero remaining callers);
+  the underlying `WorkoutCalorieEstimator` utility is untouched and still
+  backs BitLut's own dashboard calorie display directly.
+- **This is a targeted volume reduction, not a confirmed fix** for the
+  corporate app's errors -- documented as such in `sync.md` sections 4.7
+  and 4.11, and `docs/HEALTH_DATA_PERMISSION_MATRIX.md`. Both database
+  investigation avenues were checked before landing on this change:
+  `replaceRecords()` already uses `insertRecords` as a stable-ID upsert,
+  not Google's documented delete-and-reinsert anti-pattern, and both the
+  session-scoped and continuous-metric write paths already use
+  fingerprint/version-stable `clientRecordVersion`s that shouldn't
+  generate Health Connect changelog noise on unchanged data -- so the
+  payload-size angle (large `insertRecords` transactions, consistent with
+  a "binder died" `TransactionTooLargeException`-style failure) was judged
+  the more actionable lever pending real correlated evidence.
+- **Neither BitLut's own dashboard is affected.** Hiking/biking elevation
+  and workout calories are still shown on BitLut's workout cards
+  (`workoutMetricDisplays()` in `FinalBitLutShell.kt`), computed from the
+  live Huawei snapshot each sync -- this was already independent of what
+  gets written to Health Connect, confirmed before making this change.
+  Only third-party readers (the corporate app, or any other Health
+  Connect client) lose access to these two fields per workout going
+  forward.
+- `docs/HEALTH_DATA_PERMISSION_MATRIX.md` corrected to reflect the
+  Health-Connect-write removal for the calorie estimate; `sync.md`
+  sections 4.7 and 4.11 rewritten with the full before/after and the
+  explicit "not a confirmed fix" caveat; `docs/BACKLOG.md` updated with
+  the open investigation item.
+
+## 2026-09-10 -- Android 12+ battery-optimization hint, periodic-sync reliability, DRY/YAGNI pass
+
+- **Root-caused a "sync got worse" report as NOT a code regression.**
+  Diffed two repomix exports taken before and after Paulo's own manual
+  code changes: `app/` source was byte-identical across both, and the
+  2026-09-02/03 documentation patches that predated this report only ever
+  touched `.md` files (confirmed against their own file lists) -- neither
+  could have caused a behavior change. Real cause, from a real-device
+  diagnostic log (Xiaomi M2102K1G, Android 13/MIUI): a ~5.2 hour gap where
+  the 30-minute periodic background sync never ran, only catching up once
+  the app was opened manually -- MIUI/HyperOS force-stopping the app
+  process, the same class of issue as Huawei EMUI's "Protected Apps"
+  behavior.
+- **`SyncApplication.onCreate()` now schedules the periodic sync and
+  evening reminder**, moved from `MainActivity.onCreate()`, so
+  BitLut's own idempotent scheduling call (`ExistingPeriodicWorkPolicy.KEEP`
+  plus a one-time migration flag, both already idempotent) runs on every
+  process start, not only when a person opens the app. Deliberately does
+  **not** add a custom `BOOT_COMPLETED` receiver -- verified WorkManager's
+  own `RescheduleReceiver`/`ForceStopRunnable` already handle reboot and
+  force-stop recovery internally; a custom receiver would be redundant
+  (YAGNI).
+- **New Android 12+ (API 31) `BatteryOptimizationCard` in Settings**
+  (`BatteryOptimizationHelper.kt`), shown when the OS reports BitLut is
+  not exempt from battery optimization. Opens the general "ignore battery
+  optimizations" settings list (`ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`)
+  rather than the direct one-tap exemption dialog, which needs an extra
+  manifest permission meant for apps whose core function requires it
+  (VPNs, alarm clocks) -- not best-effort background sync like BitLut's.
+  No new manifest permission added. Re-evaluated on every `onResume()` so
+  the card disappears immediately once the person grants the exemption.
+- **Code-quality pass (DRY/SOLID/KISS/YAGNI), requested in the same
+  sprint.** Consolidated `GoogleHealthManager`'s four near-identical
+  `write*Batch` functions into a single `writeContinuousMetricBatch()`
+  helper. Consolidated `FinalBitLutShell.kt`'s `PrimaryButton`/
+  `SecondaryButton` around a shared `PillActionButton` core (both keep
+  their existing call signatures). Removed `WorkoutFilterPrefs`'
+  `setMinDurationMinutes()`/`setExcludedExerciseTypes()`/
+  `MIN_DURATION_PRESETS_MINUTES` -- zero callers anywhere in the codebase
+  (verified by exact-name grep, not a heuristic), leftover from a Settings
+  UI that was removed; Paulo's explicit call to delete rather than keep
+  for later. `FinalBitLutShell.kt`'s size (~2500 lines, 41 composables)
+  was noted as a Single-Responsibility observation but deliberately not
+  acted on -- a real refactor without a real compiler available to verify
+  it was judged not worth the regression risk. A first-pass automated
+  unused-import regex sweep was run and discarded as unreliable (it
+  flagged obviously-used symbols like `ComponentActivity`); none of its
+  findings were acted on.
+- Delivered as `patch_battery_sync_reliability_2026_09_10_v1.py`. This
+  changelog entry was added retroactively (2026-09-10, same day, later
+  patch) -- the original patch was code/strings-only and didn't touch any
+  `.md` doc.
+
 ## 2026-09-11 -- lint/compiler cleanup after Android 16 migration
 
 - Fixed all five release-lint blockers reported after the API 36.1 migration. Compose-facing locale reads now come from observable `LocalConfiguration` rather than `Locale.getDefault()`, including UI number/date formatters.

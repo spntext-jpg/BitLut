@@ -8,7 +8,7 @@ BitLut is a local-first Kotlin/Jetpack Compose Android bridge from HUAWEI Health
 
 ## Current product scope
 
-Activity/workout data only. No backend/account. Real data first. The only approved estimate is workout `TotalCaloriesBurnedRecord` fallback documented in project docs.
+Activity/workout data only. No backend/account. Real data first. The only approved estimate is a workout total-calories fallback used for BitLut's own dashboard display only (not written to Health Connect since 2026-09-10), documented in project docs.
 
 ## Current architecture
 
@@ -36,10 +36,10 @@ Activity/workout data only. No backend/account. Real data first. The only approv
 - Non-workout activity states filtered.
 - Per-session Huawei distance has priority; steps/calories/elevation summary metrics are summed across all matching Huawei sample points, not just the first. Steps can still be missing for some activities (Huawei-side `dataSummary` gap under investigation; diagnostic logging in place, no fix yet -- see `SESSION_HANDOFF.md`).
 - Workouts written `ACTIVELY_RECORDED` with Huawei device manufacturer.
-- Session + related calories written as a bundle; distance/steps/elevation (when the exercise type plausibly has them) are also written as their own Health Connect records scoped to the exact session interval, so third-party readers see real per-workout metrics rather than only a bare session plus an unrelated background aggregate.
+- Distance/Steps (when the exercise type plausibly has them) are written as their own Health Connect records scoped to the exact session interval, so third-party readers see real per-workout metrics rather than only a bare session plus an unrelated background aggregate. Elevation and total-calories were removed from this bundle 2026-09-10.
 - Stable deterministic client record identity/version for unchanged workouts.
 - Type-aware dashboard metrics.
-- The 2026-08-31 corporate-reader failure mode remains fixed by session-scoped workout sub-metrics. A separate intermittent downstream import symptom appeared after the late-August/early-September Google Health update cycle; 2026-09-11 hardening keeps the bundle/IDs intact, rejects overlapping source sessions deterministically, uses stable Health Connect `1.1.0` on the Android 16 production toolchain, and documents connection/data-source-priority checks before changing serialization again.
+- The 2026-08-31 corporate-reader failure mode remains fixed by session-scoped workout sub-metrics. A separate intermittent downstream import symptom ("binder died"/rate-limit errors) appeared after the late-August/early-September Google Health update cycle; 2026-09-11 hardening keeps the bundle/IDs intact, rejects overlapping source sessions deterministically, uses stable Health Connect `1.1.0` on the Android 16 production toolchain, and documents connection/data-source-priority checks before changing serialization again. As a further, direct response, the 2026-09-10 workout bundle was also reduced (elevation/total-calories removed, Distance/Steps retained) to shrink payload size -- targeted, not a confirmed fix; see `docs/BACKLOG.md`.
 
 ## UI baseline
 

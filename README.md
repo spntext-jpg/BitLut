@@ -84,13 +84,13 @@ The sync path is intentionally conservative:
 
 BitLut prefers Huawei's session-scoped workout metrics. It does **not** reconstruct workout distance from coarse daily Health Connect aggregates.
 
-The only approved derived metric is a documented fallback for total workout calories when Huawei does not provide calories for a real workout. The fallback does not extend to distance, steps, elevation, or other metrics.
+The only approved derived metric is a documented fallback for total workout calories when Huawei does not provide calories for a real workout, used only for BitLut's own dashboard display and not written to Health Connect. The fallback does not extend to distance, steps, elevation, or other metrics.
 
 ## Corporate wellness compatibility
 
-The current interoperability path has been validated with a downstream corporate wellness application reading BitLut-synced workouts through Health Connect.
+The current interoperability path has been validated with a downstream corporate wellness application reading BitLut-synced workouts through Health Connect. Sync failures were reported again in late August/early September 2026; as a targeted response the per-workout payload was reduced on 2026-09-10 (elevation and total-calories removed) -- not yet a confirmed fix.
 
-The important compatibility contract is that real per-workout distance, steps, elevation, and calories are written inside the workout's actual time window rather than exposed only as daily aggregates. See [`sync.md`](sync.md) for the full data contract and reliability notes.
+The important compatibility contract is that real per-workout distance and steps are written inside the workout's actual time window rather than exposed only as daily aggregates. See [`sync.md`](sync.md) for the full data contract and reliability notes.
 
 ## Interface
 

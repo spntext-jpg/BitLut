@@ -22,7 +22,7 @@ BitLut does not sell user data.
 
 ## Derived workout calorie estimate
 
-BitLut does not create mock steps, distance, workout sessions, elevation, or placeholder health records. If Huawei Health does not provide calories for a real workout, BitLut may calculate an estimated total calorie value from the real workout type/duration and local profile inputs and write it to Health Connect as `TotalCaloriesBurnedRecord`. This estimate is local, bounded to the real workout, and is never used to invent another health metric.
+BitLut does not create mock steps, distance, workout sessions, elevation, or placeholder health records. If Huawei Health does not provide calories for a real workout, BitLut may calculate an estimated total calorie value from the real workout type and duration for its own app display only. This estimate is local, bounded to the real workout, is not written to Android Health Connect, and is never used to invent another health metric.
 
 ## Local processing
 

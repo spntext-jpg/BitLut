@@ -28,29 +28,51 @@ This document is the sprint contract for Huawei Health -> BitLut -> Android Heal
   Kit test phase; lifting this is tracked in `docs/SCALING_ROADMAP.md`.
 - The app must never synthesize fake health data to satisfy a visual KPI.
 
-## Documented exception: estimated workout calories (2026-08-25)
+## Documented exception: estimated workout calories (2026-08-25) — dashboard display only since 2026-09-10
 
 When Huawei does not provide workout calories for a session, BitLut may use the
-existing user-approved MET-formula **estimate** as a `TotalCaloriesBurnedRecord`.
+existing user-approved MET-formula **estimate** for the workout card's own
+calorie display (`workoutMetricDisplays` in `FinalBitLutShell.kt`).
 Measured Huawei workout calories always win when present. This exception is
 scoped narrowly:
 
-- Only `TotalCaloriesBurnedRecord` is estimated. No other record type in
-  this matrix is or should be synthesized.
+- Only the workout card's own calorie display is estimated. No record type
+  in this matrix is or should be synthesized and written to Health Connect.
 - Dashboard strength calories may use the same documented estimator only as a clearly bounded fallback when a measured workout calorie value is absent. Other workout metrics are never synthesized.
-- `TotalCaloriesBurnedRecord` is used specifically because it is a distinct
-  Health Connect data type from `ActiveCaloriesBurnedRecord` (Huawei's
-  active-calorie category, currently returning 50005 because BitLut has
-  never requested the `HEALTHKIT_CALORIES_READ` scope for it -- see
-  `docs/SCALING_ROADMAP.md` -- not because it is permanently blocked) --
-  this avoids conflating
-  an estimate with the exact record type users and other apps already
-  expect to mean "measured by a real sensor."
+- **Until 2026-09-10, this estimate was also written to Health Connect** as
+  a `TotalCaloriesBurnedRecord` bundled with every workout. That write was
+  removed to shrink the per-workout Health Connect payload after a
+  corporate wellness-app reader started failing to sync ("binder died" /
+  rate-limit errors) — see `sync.md` sections 4.7 and 4.11 for the full
+  detail, and `docs/BACKLOG.md` for the open question of whether this
+  actually explains the reader's failure. The MET estimate itself, and its
+  use for BitLut's own dashboard, are unchanged.
+- `ActiveCaloriesBurnedRecord` (Huawei's active-calorie category, currently
+  returning 50005 because BitLut has never requested the
+  `HEALTHKIT_CALORIES_READ` scope for it -- see `docs/SCALING_ROADMAP.md`
+  -- not because it is permanently blocked) is a separate, distinct record
+  type from the estimate discussed here and was never itself estimated;
+  it is only ever written with a real Huawei-provided value, which is
+  currently always absent.
 - Requires `android.permission.health.READ_TOTAL_CALORIES_BURNED` /
   `WRITE_TOTAL_CALORIES_BURNED`, declared in `AndroidManifest.xml` and
   requested via `HealthPermissionPolicy` -- itself a deliberate, one-off
   exception to this project's general "no new Health Connect/Huawei
-  permissions" rule.
+  permissions" rule. This permission is left in place even though the
+  write no longer happens, since the underlying Health Connect record
+  type may be written again if a correlated log rules out this cause.
+
+## Session-scoped workout sub-records (2026-08-30, reduced 2026-09-10)
+
+`writeActivitySessionsBatch()` bundles Distance and Steps records scoped to
+each workout's own exact time window, for exercise types where that metric
+is plausible (`sessionSubMetricsFor()` in `GoogleHealthManager.kt`; see
+`sync.md` section 4.7 for the full per-type table). Elevation and total
+calories were removed from this bundle on 2026-09-10 -- both metrics
+remain unaffected in the **continuous, non-workout-scoped** background
+elevation/calorie streams covered by the main scope table above, and in
+BitLut's own dashboard display, which reads the live Huawei snapshot
+directly rather than what was written to Health Connect.
 
 ## Health Connect Activity Intensity
 
