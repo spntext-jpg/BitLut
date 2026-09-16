@@ -4,7 +4,7 @@
 
 The current code review supersedes older "pending Huawei approval" assumptions. Workout mapping is centralized, workout session distance is activity-scoped, and Health Connect write metadata/upsert behavior is hardened. Final UI cleanup removed proven dead CSV export plumbing, legacy dashboard widget-visibility state, unused non-step goal state, and orphan achievement-summary state.
 
-Cleanup rule learned from this sprint: do not classify code as dead by lexical/private-name inspection alone. Verify call sites/callbacks, then run structural checks, XML locale parity, `assembleDebug`, and `lintDebug` before commit. Lint must be fixed rather than suppressed.
+Cleanup rule learned from this sprint: do not classify code as dead by lexical/private-name inspection alone. Verify call sites/callbacks, then run structural checks, XML locale parity, and local `:app:compileDebugKotlin` before commit. Full assemble/lint stays in GitHub Actions, and lint must be fixed rather than suppressed.
 
 The only approved synthetic health value remains the bounded workout total-calorie fallback documented in `HEALTH_DATA_PERMISSION_MATRIX.md`; the older blanket "never synthetic calories" wording below should be read with that exception.
 

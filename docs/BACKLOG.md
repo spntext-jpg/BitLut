@@ -1,10 +1,10 @@
 # BitLut Backlog
 
-Updated: 2026-09-10
+Updated: 2026-09-16
 
 ## Highest priority
 
-- **Open investigation: corporate wellness app sync failures ("binder died" / rate-limit errors after ~2 minutes), reported late August/early September 2026.** No corporate-app-side timestamped log exists yet to correlate against BitLut's own sync times. As a direct response, the per-workout Health Connect payload was reduced on 2026-09-10 (elevation and total-calories removed from the session bundle, see `sync.md` section 4.7) -- this is a targeted volume reduction, not a confirmed fix. Next step: capture the exact time of the next corporate-app error alongside a BitLut diagnostic log for the same window, to confirm or rule out correlation with BitLut's own sync activity.
+- **Open investigation: corporate wellness app sync failures ("binder died" / rate-limit errors after ~2 minutes), reported late August/early September 2026.** Google Health 5.05 also had a confirmed Health Connect connection/permission regression, fixed in 5.07. BitLut's 2026-09-16 recovery removes the obsolete TotalCalories write grant that could block all Huawei export, hardens permission-cache recovery, logs the exact missing grants, and stops dashboard-only calories/elevation from churning workout versions. If the reader still fails after Google Health 5.07+ and a manual downstream Health Connect reconnect, capture the exact error time alongside BitLut's diagnostic log before changing serialization again.
 - **Scaling: submit Huawei Health Kit Verification** to lift the 100-user test-phase cap -- the top current scaling goal. See `docs/SCALING_ROADMAP.md` section 2 for the concrete action items (~15 working day review, no code changes required).
 - **Scaling: request `HEALTHKIT_CALORIES_READ`** scope for real per-workout active-calorie data -- Basic-tier, individual-developer-reachable, no Enterprise account needed. See `docs/SCALING_ROADMAP.md` section 3.
 - Add focused unit tests for `HuaweiWorkoutTypeMapper` and workout metric selection.
@@ -21,7 +21,7 @@ Updated: 2026-09-10
 - Correct Huawei workout ID mapping and non-workout filtering.
 - Per-session Huawei workout distance.
 - Type-aware dashboard metrics.
-- Health Connect actively-recorded workout metadata, Huawei device manufacturer, stable record version and bundled session/calorie writes.
+- Health Connect actively-recorded workout metadata, Huawei device manufacturer, stable record version, and bundled session/Distance/Steps writes.
 - Minimal Settings and Health Connect settings deep link.
 - Removed dead CSV, widget-visibility, unused goal and achievement-summary layers.
 - Modernized cards/buttons/navigation while preserving the August palette.

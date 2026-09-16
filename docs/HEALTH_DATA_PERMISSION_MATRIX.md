@@ -54,13 +54,12 @@ scoped narrowly:
   type from the estimate discussed here and was never itself estimated;
   it is only ever written with a real Huawei-provided value, which is
   currently always absent.
-- Requires `android.permission.health.READ_TOTAL_CALORIES_BURNED` /
-  `WRITE_TOTAL_CALORIES_BURNED`, declared in `AndroidManifest.xml` and
-  requested via `HealthPermissionPolicy` -- itself a deliberate, one-off
-  exception to this project's general "no new Health Connect/Huawei
-  permissions" rule. This permission is left in place even though the
-  write no longer happens, since the underlying Health Connect record
-  type may be written again if a correlated log rules out this cause.
+- `READ_TOTAL_CALORIES_BURNED` remains available for the Google Fit
+  dashboard source, which may contain real total-calorie records written by
+  another app. `WRITE_TOTAL_CALORIES_BURNED` was removed on 2026-09-16 because
+  BitLut has had no TotalCalories writer since 2026-09-10; keeping an unused
+  write permission in the Huawei export preflight could unnecessarily block
+  every export when that grant is lost or stranded.
 
 ## Session-scoped workout sub-records (2026-08-30, reduced 2026-09-10)
 

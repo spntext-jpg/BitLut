@@ -5,18 +5,12 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
 /**
  * MET-formula calorie ESTIMATE for a workout -- not measured data.
  *
- * Extracted (sprint 2026-08-26) from GoogleHealthManager so the exact same
- * formula and MET table back both:
- * - the TotalCaloriesBurnedRecord GoogleHealthManager writes to Health
- *   Connect so third-party readers have something to import (see
- *   GoogleHealthManager.writeActivitySessionsBatch), and
- * - the workout card's own calorie display when Huawei's real
- *   activeCaloriesKcal is unavailable (see workoutMetricDisplays in
- *   FinalBitLutShell.kt).
+ * Extracted (sprint 2026-08-26) from GoogleHealthManager and retained for
+ * the workout card's own calorie display when Huawei's real calorie value is
+ * unavailable (see workoutMetricDisplays in FinalBitLutShell.kt).
  *
- * Keeping one shared implementation means a future correction to the MET
- * table or the formula only has to be made once, and the two call sites can
- * never silently drift apart.
+ * The estimate is dashboard-only since 2026-09-10. It is not written to
+ * Health Connect and must not be used to synthesize another health record.
  *
  * This is NOT measured data: Huawei's real per-workout calorie figure is
  * gated behind the activeCalories scope that returns error 50005 for this

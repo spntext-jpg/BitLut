@@ -1,8 +1,8 @@
 # BitLut — Session Handoff
 
-**Current handoff:** 2026-09-11
+**Current handoff:** 2026-09-16
 
-**Repository state:** modernization + AndroidX compatibility + August UI polish + Android 16 lint cleanup completed and verified in GitHub Actions.
+**Repository state:** 2026-09-11 modernization baseline plus the 2026-09-16 Health Connect permission/cache recovery; local verification uses `:app:compileDebugKotlin`, full assemble/lint remains in GitHub Actions.
 
 ## Source of truth
 
@@ -34,15 +34,16 @@ This is intentional. Compose 1.12 / Core 1.19 / Lifecycle 2.11 crossed into the 
 
 ## Verified workflow — keep this
 
-**Codespaces is static-check only. Do not run Gradle there.** Repeated local Gradle/AGP invocations exhausted Codespace memory and terminated the terminal even for seemingly small tasks.
+**Codespaces runs structural checks plus one Kotlin compile gate only.** Do not run local `assembleDebug` or `lintDebug`; the accepted local Gradle task is `:app:compileDebugKotlin` with the constrained options in `CLAUDE.md`.
 
 The working engineering flow is:
 
 ```text
 Codespaces
   patch script
-  -> built-in structural checks
+  -> built-in structural/XML/locale checks
   -> git diff --check
+  -> :app:compileDebugKotlin
   -> git status --short
   -> commit / push
 
@@ -54,7 +55,7 @@ GitHub Actions
   -> artifact / release
 ```
 
-This sequence is now proven. Keep release compilation and lint in GitHub Actions rather than moving them back into Codespaces.
+This sequence is now the engineering contract. Keep full assembly and lint in GitHub Actions rather than moving them back into Codespaces.
 
 The release workflow should keep an early `checkReleaseAarMetadata` gate before lint/build so SDK/AGP incompatibility fails quickly. Lint reports should remain uploaded with `if: always()` so CI failures expose the full blocker set.
 
@@ -74,7 +75,8 @@ The release workflow should keep an early `checkReleaseAarMetadata` gate before 
 - Workout writes preserve deterministic IDs and coherent exercise-session bundles.
 - Overlapping Huawei sessions are normalized by retaining the richer real session; do not fabricate clipped sessions.
 - Session-scoped workout metrics remain the interoperability-critical contract for downstream readers.
-- 2026-09-10: workout bundle no longer includes elevation/total-calories (`ElevationGainedRecord`/`TotalCaloriesBurnedRecord`) -- only session, Distance, Steps -- reducing per-workout Health Connect payload after a corporate reader reported "binder died"/rate-limit sync failures. Targeted reduction, not a confirmed fix; see `docs/BACKLOG.md`.
+- 2026-09-10: workout bundle no longer includes elevation/total-calories (`ElevationGainedRecord`/`TotalCaloriesBurnedRecord`) -- session, Distance, Steps, plus optional real ActiveCalories only -- reducing per-workout Health Connect payload after a corporate reader reported "binder died"/rate-limit sync failures. Targeted reduction, not a confirmed fix; see `docs/BACKLOG.md`.
+- 2026-09-16 Health Connect recovery: removed obsolete `WRITE_TOTAL_CALORIES_BURNED` from the Huawei export gate/manifest, stopped transient/stale permission snapshots from refreshing the 30-second permission cache, persisted exact missing-permission diagnostics, and stopped dashboard-only calories/elevation from bumping workout `clientRecordVersion`.
 - Dashboard cache consumers must preserve the midnight stale-cache guard; never reapply yesterday's daily totals as today's data.
 
 ### August UI polish
@@ -131,8 +133,8 @@ Any future platform migration must regression-test at least:
 - Keep `values/strings.xml` and `values-ru/strings.xml` key parity in the same patch.
 - XML comments must not contain literal `--`.
 - Patch scripts must be idempotent, fail-closed, and use small symptom-based anchors.
-- Codespaces verification: patch checks + `git diff --check` + `git status --short` only.
-- GitHub Actions is the only compile/lint/release authority.
+- Codespaces verification: patch checks + `git diff --check` + `:app:compileDebugKotlin` + `git status --short`; never local `assembleDebug`/`lintDebug`.
+- GitHub Actions is the full assemble/lint/release authority.
 - If CI fails, fix the underlying issue; do not weaken lint, metadata checks, signing checks, or release verification.
 - Do not include noisy `git diff -- ...` commands in delivery instructions.
 - Remove one-shot patch scripts after successful application.
@@ -140,8 +142,8 @@ Any future platform migration must regression-test at least:
 
 ## Next-session starting point
 
-There is no known migration blocker left from this session. Start from the current `main` branch and the latest successful GitHub Actions run.
+Start from the current `main` branch and the latest successful GitHub Actions run. The 2026-09-16 recovery patch targets a concrete obsolete Health Connect write-permission gate plus permission-cache/version-churn bugs found while investigating the downstream reader regression.
 
-If the corporate wellness app's sync failures recur after the 2026-09-10 payload reduction, capture the exact error time and a BitLut diagnostic log for the same window before making any further write-path change.
+If the corporate wellness app still cannot import after this patch, first verify Google Health is on 5.07+ and manually reconnect the downstream app to Health Connect if its connection was stranded by the 5.05 incident. Then capture the exact error time and a BitLut diagnostic log for the same window before changing workout serialization again.
 
 If the next task is UI-only, do not touch sync serialization. If it is sync-related, preserve the established Huawei-first permissions, stable IDs, overlap normalization, session-scoped metrics, and cache guards unless device evidence requires a change.

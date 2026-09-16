@@ -28,7 +28,6 @@ object HealthPermissionPolicy {
         HealthPermission.getWritePermission(ElevationGainedRecord::class),
         HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
-        HealthPermission.getWritePermission(TotalCaloriesBurnedRecord::class),
     )
 
     val syncPermissions: Set<String> = huaweiImportReadPermissions + importWritePermissions

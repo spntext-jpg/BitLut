@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-09-16 -- Health Connect permission recovery and downstream churn reduction
+
+- Removed obsolete `WRITE_TOTAL_CALORIES_BURNED` from the manifest and Huawei export preflight. BitLut stopped writing `TotalCaloriesBurnedRecord` on 2026-09-10, so keeping that unused write grant could turn a lost/stranded permission into a full export no-op. `READ_TOTAL_CALORIES_BURNED` remains for the Google Fit dashboard source.
+- Fixed Health Connect permission-cache recovery: `SecurityException`/empty and stale-fallback snapshots are no longer stamped as fresh for 30 seconds. Only a successful provider permission read refreshes the cache.
+- Persist exact missing selected-source Health Connect permissions in `SyncDiagnosticLog` instead of logging only a generic no-op.
+- Reduced unnecessary downstream change churn: workout `clientRecordVersion` no longer changes when dashboard-only total-calorie/elevation values change after those record types were removed from the workout bundle.
+- Updated stale Codespaces guidance: local patch verification is structural/XML/locale checks plus `:app:compileDebugKotlin` only; full assemble/lint remains in GitHub Actions.
+
 ## 2026-09-10 (b) -- workout Health Connect payload reduced (elevation, calories removed)
 
 - **Corporate wellness app sync failures reported** (late August/early

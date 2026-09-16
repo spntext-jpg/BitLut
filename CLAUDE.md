@@ -12,17 +12,18 @@ HUAWEI Health -> BitLut -> Android Health Connect -> compatible readers
 
 No BitLut backend/account. Production scope is activity/workout data only: steps, distance, floors/elevation, calories when available, and exercise sessions. Do not add sleep, heart rate, SpO2, HRV, stress, or other biometric categories without an explicit product/scope review.
 
-Real-data rule: never fabricate missing metrics. The only approved exception is the existing workout total-calorie estimate used when Huawei supplies no workout calories; keep that exception isolated to `TotalCaloriesBurnedRecord`.
+Real-data rule: never fabricate missing metrics. The only approved exception is the existing workout total-calorie estimate used when Huawei supplies no workout calories; it is dashboard-display-only and must not be written to Health Connect.
 
 Current top-priority goal: lift the Huawei Health Kit 100-user test-phase cap, and add `HEALTHKIT_CALORIES_READ` if it can be done without an Enterprise account. See `docs/SCALING_ROADMAP.md` for the plan; do not add any Advanced-tier scope (sleep/heart rate/SpO2/stress) regardless -- that remains permanently closed to individual developers.
 
-## Current baseline — 2026-09-10
+## Current baseline — 2026-09-16
 
 - Huawei Health Kit authorization and real activity reads work.
 - `HuaweiWorkoutTypeMapper` is the single Huawei workout-ID mapping source.
 - Per-session Huawei workout distance has priority over aggregate reconstruction.
 - Health Connect workouts are `ACTIVELY_RECORDED`, use Huawei device manufacturer metadata, deterministic client record IDs and stable versions, and write session + Distance/Steps as one bundle (elevation and total-calories removed 2026-09-10).
 - Workout distance/steps are also written as their own Health Connect records scoped to the exact session interval (gated per exercise type), so third-party readers see real per-workout metrics instead of only a coarser background aggregate. Elevation and total-calories were removed from this bundle on 2026-09-10 to shrink the payload after a corporate reader started failing to sync -- targeted reduction, not a confirmed fix (see `docs/BACKLOG.md`). See `sync.md` section 4.7.
+- Since 2026-09-16, Huawei export no longer requires the obsolete `WRITE_TOTAL_CALORIES_BURNED` grant; only successful Health Connect permission snapshots refresh the local permission cache, and missing selected-source grants are persisted in diagnostics.
 - Dashboard workout metrics are type-aware and omit unavailable values.
 - `DashboardCardLayoutPrefs` is the sole dashboard card order/visibility layer.
 - `GoalPrefs` stores the steps goal only.

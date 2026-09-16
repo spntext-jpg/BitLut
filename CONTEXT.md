@@ -1,6 +1,6 @@
 # BitLut — Current Context
 
-Updated: 2026-09-11
+Updated: 2026-09-16
 
 BitLut is a local-first Kotlin/Jetpack Compose Android bridge from HUAWEI Health to Android Health Connect.
 
@@ -39,7 +39,7 @@ Activity/workout data only. No backend/account. Real data first. The only approv
 - Distance/Steps (when the exercise type plausibly has them) are written as their own Health Connect records scoped to the exact session interval, so third-party readers see real per-workout metrics rather than only a bare session plus an unrelated background aggregate. Elevation and total-calories were removed from this bundle 2026-09-10.
 - Stable deterministic client record identity/version for unchanged workouts.
 - Type-aware dashboard metrics.
-- The 2026-08-31 corporate-reader failure mode remains fixed by session-scoped workout sub-metrics. A separate intermittent downstream import symptom ("binder died"/rate-limit errors) appeared after the late-August/early-September Google Health update cycle; 2026-09-11 hardening keeps the bundle/IDs intact, rejects overlapping source sessions deterministically, uses stable Health Connect `1.1.0` on the Android 16 production toolchain, and documents connection/data-source-priority checks before changing serialization again. As a further, direct response, the 2026-09-10 workout bundle was also reduced (elevation/total-calories removed, Distance/Steps retained) to shrink payload size -- targeted, not a confirmed fix; see `docs/BACKLOG.md`.
+- The 2026-08-31 corporate-reader failure mode was fixed by session-scoped workout sub-metrics. A separate intermittent downstream import symptom ("binder died"/rate-limit errors) appeared around the Google Health 5.05/5.07 update cycle. The 2026-09-10 bundle reduction removed elevation/total-calories; the 2026-09-16 recovery also removes the now-obsolete TotalCalories write permission from the Huawei export gate, avoids caching transient permission failures as fresh state, records exact missing grants, and prevents dashboard-only calories/elevation from churning Health Connect workout versions. Stable Health Connect remains `1.1.0`; do not change serialization metadata without correlated device evidence.
 
 ## UI baseline
 

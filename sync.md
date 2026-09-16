@@ -1,10 +1,10 @@
 # BitLut Sync Architecture
 
-Status: current as of 2026-08-31. This document is the complete technical
+Status: current as of 2026-09-16. This document is the complete technical
 record of how BitLut moves activity data from Huawei Health Kit into Google
 Health Connect, and of every architectural decision that got the pipeline to
 a state where a real third-party corporate wellness app now reliably
-imports and accepts BitLut-synced workouts. It complements, and in a few
+has successfully imported and accepted BitLut-synced workouts. It complements, and in a few
 places supersedes, the narrower running notes in `CLAUDE.md`, `CONTEXT.md`,
 `SESSION_HANDOFF.md`, and `CHANGELOG.md` — those remain the token-efficient
 session-to-session continuity bridge; this file is the durable reference for
@@ -56,9 +56,9 @@ GoogleHealthManager.writeSnapshot(snapshot)
       │  writes six independent categories to Health Connect:
       │  StepsRecord, DistanceRecord, FloorsClimbedRecord,
       │  ElevationGainedRecord, ActiveCaloriesBurnedRecord,
-      │  and (ExerciseSessionRecord + TotalCaloriesBurnedRecord +
-      │        session-scoped DistanceRecord/StepsRecord/
-      │        ElevationGainedRecord/ActiveCaloriesBurnedRecord)
+      │  and (ExerciseSessionRecord + session-scoped
+      │        DistanceRecord/StepsRecord + optional real
+      │        ActiveCaloriesBurnedRecord when available)
       ▼
 Android Health Connect (system-level data store)
       │
@@ -333,9 +333,9 @@ requested detail types rather than replacing the first — inferred from
 Google Fit's near-identical, explicitly documented
 `SessionReadRequest.Builder.read(DataType)` behavior, and from this file's
 own pre-existing treatment of `.read(...)` as additive. This is exactly the
-class of real HMS-SDK behavior a sandbox cannot verify directly; Paulo's
-real `assembleDebug` build is the actual compile/behavior gate for it, and
-it has since been confirmed working on-device.
+class of real HMS-SDK behavior a sandbox cannot verify directly; the
+repository's local `:app:compileDebugKotlin` gate verifies Kotlin/API usage,
+and the HMS runtime behavior has since been confirmed working on-device.
 
 Distance from this path is summed per-record from real Huawei sample data
 scoped to that exact activity — never prorated or estimated. A record with
@@ -502,26 +502,19 @@ sorted by start time.
    (see 4.8), not `autoRecorded`, because Huawei documents exercise
    ActivityRecords as data produced only after the user explicitly starts a
    workout.
-4. Resolve total calories: `session.totalCaloriesKcal` if Huawei provided a
-   real summary value, otherwise a MET-formula estimate
-   (`WorkoutCalorieEstimator`, 4.11) — **only** so that a third-party reader
-   sees a non-zero, plausible calorie figure for workouts on Huawei
-   device/firmware combinations that never populate this field via the
-   summary API at all. If a value is available either way, it is bundled as
-   a `TotalCaloriesBurnedRecord`, keyed under the stable
-   `"exercise_calories_estimate"` client-ID type so a later real Huawei
-   value naturally upgrades an earlier estimate in place rather than
-   duplicating it.
-5. **(Since 2026-08-30/31)** Resolve and bundle session-scoped
-   `DistanceRecord`, `StepsRecord`, `ElevationGainedRecord`, and — forward-
-   compatible, currently always null in practice —
-   `ActiveCaloriesBurnedRecord`, gated per exercise type by
-   `sessionSubMetricsFor()` (4.7). This is the interoperability fix; see
-   4.7 for the full rationale.
-6. All of the above (`ExerciseSessionRecord` + `TotalCaloriesBurnedRecord` +
-   any applicable session-scoped sub-records) are inserted in **one single
-   `client.insertRecords(bundle)` call**, so a reader never observes a
-   bare, newly-written session before its associated summary data arrives.
+4. Persist the real Huawei workout summary locally for BitLut's own
+   dashboard and compute a stable `clientRecordVersion` from only the fields
+   that are currently written to Health Connect. Dashboard-only total calories
+   and elevation do not churn Health Connect versions after their 2026-09-10
+   bundle removal.
+5. Resolve and bundle session-scoped `DistanceRecord` and `StepsRecord`, gated
+   per exercise type by `sessionSubMetricsFor()` (4.7). A real
+   `ActiveCaloriesBurnedRecord` is also bundled if Huawei ever provides a
+   positive value; BitLut never estimates it.
+6. The `ExerciseSessionRecord` and any applicable session-scoped sub-records
+   are inserted in **one single `client.insertRecords(bundle)` call**, so a
+   reader never observes a bare, newly-written session before its associated
+   written summary data arrives.
 
 **Per-session failure isolation.** Each session's insert is wrapped in its
 own `try`/`catch`; one malformed or overlapping Huawei session failing to
@@ -562,12 +555,12 @@ trustworthy to find: either nothing at all, or a value smeared across the
 wrong time window.
 
 **The fix (2026-08-30/31).** `writeActivitySessionsBatch()` started bundling
-`DistanceRecord`/`StepsRecord`/`ElevationGainedRecord`/
-`ActiveCaloriesBurnedRecord`, plus a `TotalCaloriesBurnedRecord` (4.11),
-into the **same `insertRecords` call** as the `ExerciseSessionRecord`,
-scoped to the session's **exact** `startTime`/`endTime` — so a
-time-range-overlap query from any reader now finds real, accurately-scoped
-data for that specific workout, not a coarse background guess.
+session-scoped Distance/Steps/Elevation and real ActiveCalories when available,
+plus the then-enabled total-calorie record, into the **same `insertRecords`
+call** as the `ExerciseSessionRecord`, scoped to the session's **exact**
+`startTime`/`endTime` — so a time-range-overlap query from any reader finds
+real, accurately-scoped data for that specific workout, not a coarse
+background guess. The current reduced bundle is documented immediately below.
 
 **Reduced scope (2026-09-10).** `ElevationGainedRecord` and
 `TotalCaloriesBurnedRecord` were removed from this bundle — Distance and
@@ -808,13 +801,21 @@ Activity-only, matching the Huawei individual-developer ceiling (3.2)
 exactly:
 
 ```kotlin
-Read + Write: StepsRecord, DistanceRecord, FloorsClimbedRecord,
-              ElevationGainedRecord, ActiveCaloriesBurnedRecord,
-              ExerciseSessionRecord, TotalCaloriesBurnedRecord
+Read:  StepsRecord, DistanceRecord, FloorsClimbedRecord,
+       ElevationGainedRecord, ActiveCaloriesBurnedRecord,
+       ExerciseSessionRecord, TotalCaloriesBurnedRecord
+Write: StepsRecord, DistanceRecord, FloorsClimbedRecord,
+       ElevationGainedRecord, ActiveCaloriesBurnedRecord,
+       ExerciseSessionRecord
 ```
 
-No sleep, heart rate, SpO2, or stress permission is requested anywhere in
-this codebase, matching the hard constraint in 3.2.
+`WRITE_TOTAL_CALORIES_BURNED` was removed on 2026-09-16 because BitLut has
+had no TotalCalories writer since the 2026-09-10 workout-payload reduction.
+Keeping the obsolete write grant in `importWritePermissions` could turn a
+lost/stranded permission into an all-export preflight failure. The read grant
+remains for the Google Fit dashboard source. No sleep, heart rate, SpO2, or
+stress permission is requested anywhere in this codebase, matching the hard
+constraint in 3.2.
 
 ---
 
@@ -823,7 +824,7 @@ this codebase, matching the hard constraint in 3.2.
 
 The production dependency is `androidx.health.connect:connect-client:1.1.0` stable. The earlier same-day Health Connect AAR failure was resolved by moving the complete Huawei/AppGallery production toolchain to Android 16 (`compileSdk 36.1`, `targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin `2.3.21`, AGConnect `1.9.6.300`) rather than upgrading Health Connect in isolation. A later GitHub Actions AAR gate showed that Compose 1.12 / Core 1.19 / Lifecycle 2.11 cross into API 37 / AGP 9.1 requirements; production therefore stays on the newest stable pre-API-37 AndroidX lane. Huawei device-side Health Kit stays on the repository-proven `com.huawei.hms:health:6.11.0.303`. This toolchain migration does not change workout serialization, permission roles, source attribution, or orchestration behavior.
 
-`writeActivitySessionsBatch()` still writes each workout as the same single interoperability-critical bundle (ExerciseSession + calories + type-appropriate session-scoped sub-records) with stable deterministic IDs/versions. Before writing, it now removes invalid intervals, resolves exact duplicates in favor of the richer session, then prevents non-identical overlaps by retaining the richer source session. It never clips or invents timestamps. This follows current Health Connect workout guidance, which identifies overlapping same-app sessions as a write-failure/conflict cause.
+`writeActivitySessionsBatch()` still writes each workout as one interoperability-critical bundle (ExerciseSession + Distance/Steps when applicable + optional real ActiveCalories) with stable deterministic IDs/versions. Before writing, it now removes invalid intervals, resolves exact duplicates in favor of the richer session, then prevents non-identical overlaps by retaining the richer source session. It never clips or invents timestamps. This follows current Health Connect workout guidance, which identifies overlapping same-app sessions as a write-failure/conflict cause.
 
 Permission gates are now role-specific. Huawei import/export requires the Health Connect write permissions it actually consumes. The Google Fit-selected refresh and dashboard live reads require the read permissions they consume. Full connection/onboarding state still checks the complete request set, so the UI can still tell the user when the installation is not fully connected without unnecessarily blocking a valid write pipeline.
 
@@ -1144,25 +1145,26 @@ with no source-specific code.
 
 ### 7.3 Health Connect records written per workout (since 2026-08-30/31)
 
-For a single workout, up to six records now share the exact same
+For a single workout, up to four records share the exact same
 `startTime`/`endTime` and are inserted together in one `insertRecords`
 call:
 
 1. `ExerciseSessionRecord` — always written (the workout itself).
-2. `TotalCaloriesBurnedRecord` — written if a real or estimated total is
-   available (4.6, 4.11).
-3. `DistanceRecord` — written if the exercise type plausibly has distance
+2. `DistanceRecord` — written if the exercise type plausibly has distance
    (4.7 table) and a value is available.
-4. `StepsRecord` — written if the exercise type plausibly has steps (4.7
+3. `StepsRecord` — written if the exercise type plausibly has steps (4.7
    table) and a value is available.
-5. `ElevationGainedRecord` — written if the exercise type plausibly has
-   elevation (4.7 table) and a value is available.
-6. `ActiveCaloriesBurnedRecord` — written if a value is available (currently
-   never, in practice — 4.7).
+4. `ActiveCaloriesBurnedRecord` — written only if a real value is available
+   (currently never in practice; BitLut does not estimate it).
+
+`TotalCaloriesBurnedRecord` and workout-scoped `ElevationGainedRecord` were
+removed from this bundle on 2026-09-10. Continuous elevation remains a
+separate Health Connect category; estimated workout calories remain local to
+BitLut's dashboard.
 
 ---
 
-## 8. Known open issues (as of 2026-08-31)
+## 8. Known open issues (as of 2026-09-16)
 
 - **Steps can still be missing for some walking/running workouts.** Root
   cause is Huawei-side: `ActivitySummary.dataSummary` appears to sometimes

@@ -300,6 +300,7 @@ class GoogleHealthManager(
             }
 
             val client = resolveClient() ?: return@withLock emptySet()
+            var cachePermissionSnapshot = true
             val granted = try {
                 client.permissionController.getGrantedPermissions()
             } catch (e: CancellationException) {
@@ -311,6 +312,7 @@ class GoogleHealthManager(
                 // repeating the same failure forever.
                 AppLogger.e(TAG, "Permission snapshot denied; invalidating client cache: ${e.message}", e)
                 invalidateClientCache()
+                cachePermissionSnapshot = false
                 emptySet()
             } catch (e: Exception) {
                 // Sprint 2026-07-08: a single transient IPC hiccup here must not
@@ -323,12 +325,18 @@ class GoogleHealthManager(
                     client.permissionController.getGrantedPermissions()
                 } catch (e2: CancellationException) {
                     throw e2
+                } catch (e2: SecurityException) {
+                    AppLogger.e(TAG, "Permission snapshot retry denied; invalidating client cache: ${e2.message}", e2)
+                    invalidateClientCache()
+                    cachePermissionSnapshot = false
+                    emptySet()
                 } catch (e2: Exception) {
                     if (stalePermissions != null) {
                         AppLogger.w(
                             TAG,
                             "Permission snapshot temporarily unavailable; preserving last-known permissions instead of treating a rate limit as denial: ${e2.message}"
                         )
+                        cachePermissionSnapshot = false
                         stalePermissions
                     } else {
                         AppLogger.e(TAG, "Permission snapshot failed with no last-known state: ${e2.message}", e2)
@@ -336,7 +344,9 @@ class GoogleHealthManager(
                     }
                 }
             }
-            cachedPermissions.set(granted to System.currentTimeMillis())
+            if (cachePermissionSnapshot) {
+                cachedPermissions.set(granted to System.currentTimeMillis())
+            }
             granted
         }
     }
@@ -650,17 +660,12 @@ class GoogleHealthManager(
             session.exerciseType.toString(),
             session.title.trim(),
             session.distanceMeters?.toString() ?: "x",
-            session.totalCaloriesKcal?.toString() ?: "x",
-            session.elevationMeters?.toString() ?: "x",
             session.steps?.toString() ?: "x",
-            // 2026-08-30: added alongside the new session-scoped
-            // ActiveCaloriesBurnedRecord write below. Currently always "x"
-            // in practice (neither HuaweiHealthManager nor
-            // HuaweiExportParser populates ActivitySessionData.
-            // activeCaloriesKcal today), included for correctness the same
-            // way the other four summary fields already are, so a future
-            // source of this value automatically triggers a version bump
-            // and re-upsert instead of silently going stale.
+            // Active calories are still a real, optional record in the
+            // workout bundle if Huawei starts providing them. Total calories
+            // and elevation are dashboard-only since 2026-09-10, so they must
+            // not churn Health Connect clientRecordVersion when the records
+            // actually written to Health Connect are unchanged.
             session.activeCaloriesKcal?.toString() ?: "x"
         ).joinToString("|")
         val digest = java.security.MessageDigest.getInstance("SHA-256")

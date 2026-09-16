@@ -164,12 +164,15 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
     private suspend fun runSingleAttempt(): SyncAttemptOutcome {
         val googleManager = appContainer.googleHealthManager
         val selectedSource = appContainer.dataSourcePrefs.selected()
-        val syncPermissionsOk = googleManager.hasSyncPermissions()
+        val missingSyncPermissions = googleManager.missingSyncPermissions()
+        val syncPermissionsOk = missingSyncPermissions.isEmpty()
 
         if (selectedSource == HealthDataSource.GOOGLE_FIT) {
             AppLogger.i(TAG, "Sync preflight: source=GOOGLE_FIT syncPermissions=$syncPermissionsOk")
             if (!syncPermissionsOk) {
-                AppLogger.e(TAG, "Health Connect read permissions missing; Google Fit refresh degraded to no-op")
+                val missing = missingSyncPermissions.sorted().joinToString()
+                AppLogger.e(TAG, "Health Connect read permissions missing; Google Fit refresh degraded to no-op: $missing")
+                SyncDiagnosticLog.record(prefs, "google_permissions_missing", "source=GOOGLE_FIT missing=$missing")
                 return SyncAttemptOutcome.GracefulNoop
             }
 
@@ -203,7 +206,9 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
         )
 
         if (!syncPermissionsOk) {
-            AppLogger.e(TAG, "Health Connect write permissions missing; Huawei export degraded to no-op")
+            val missing = missingSyncPermissions.sorted().joinToString()
+            AppLogger.e(TAG, "Health Connect write permissions missing; Huawei export degraded to no-op: $missing")
+            SyncDiagnosticLog.record(prefs, "google_permissions_missing", "source=HUAWEI_HEALTH missing=$missing")
             return SyncAttemptOutcome.GracefulNoop
         }
 

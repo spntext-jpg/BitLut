@@ -618,8 +618,8 @@ class HuaweiHealthManager(
      * this file's own existing comment already treats Huawei's `.read(...)`
      * as an additive detail-type request, so the pattern is used here on
      * that basis -- but this is exactly the kind of real Kotlin/HMS-SDK API
-     * behavior the project's own rules say a sandbox cannot verify.
-     * Paulo's real `assembleDebug` is the actual compile gate for this.
+     * behavior that still needs the repository's real Kotlin compile gate and
+     * on-device verification for HMS runtime behavior.
      *
      * Distance is summed per-record from real Huawei sample data scoped to
      * that exact activity, not prorated or estimated. A record with no

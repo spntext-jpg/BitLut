@@ -130,7 +130,7 @@ This is the newest stable production lane currently used by BitLut without cross
 ## Build & verification
 
 > [!IMPORTANT]
-> **Do not run Gradle in Codespaces for this project.** Even configuration-only Android tasks have exhausted the available Codespace memory. GitHub Actions is the authoritative build environment.
+> **Codespaces local gate:** run structural checks plus `:app:compileDebugKotlin` only. Do not run `assembleDebug` or `lintDebug` locally; full build/lint remains authoritative in GitHub Actions.
 
 ### Codespaces
 
