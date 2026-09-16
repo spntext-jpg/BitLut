@@ -427,33 +427,31 @@ summation" branch (4.4) can delete-then-reinsert an entire day's
 Since 2026-08-31, `writeActivitySessionsBatch` also writes a
 workout-scoped `StepsRecord` for some exercise types (4.7). Because these
 are sequential `suspend` calls inside one list literal — not launched
-concurrently — `writeStepsBatch`'s delete-then-reinsert always fully
-completes before `writeActivitySessionsBatch` runs, so the daily
-reconciliation never wipes out a workout's freshly-written step record. If
-this list is ever parallelized, `activitySessions` must be kept strictly
-after `steps`, or that ordering guarantee breaks silently.
+Writes remain sequential to keep Health Connect provider pressure bounded.
+The old ordering dependency between daily Steps and workout Steps no longer
+exists because the daily path no longer performs a destructive range delete.
 
-### 4.4 Steps: two write modes
+### 4.4 Steps: stable daily upserts, never recurring range deletion
 
-`writeStepsBatch()` branches on whether every incoming `StepData` record
-carries a `sourceId` (only `readDailyStepTotals()`'s daily-summation output
-sets this; nothing else does):
+`writeStepsBatch()` still distinguishes Huawei's authoritative daily totals
+by their non-null `sourceId` (calendar date string), but both daily and
+non-daily inputs now use the ordinary stable-ID `insertRecords` upsert path.
 
-- **Complete daily summation** (all records have a `sourceId`, i.e. a
-  calendar date string): this is Huawei's own authoritative per-day total.
-  The write does an explicit `client.deleteRecords(StepsRecord::class,
-  TimeRangeFilter.between(deleteStart, deleteEnd))` across the full affected
-  date range **before** inserting the new totals. Health Connect
-  automatically restricts a time-range delete to records owned by the
-  calling app, so this cannot touch another app's step data — only BitLut's
-  own previously-written (now-superseded) step records for those days. This
-  prevents old, now-stale raw-delta-derived records from double-counting
-  alongside the new authoritative daily total. The delete uses a synchronous
-  path (see 4.9 for the general upsert pattern) and only proceeds if the
-  delete succeeds.
-- **Partial/non-daily records** (any record lacks a `sourceId`): falls
-  through to the ordinary `replaceRecords()` upsert path (4.9) with no
-  delete step.
+For daily totals, `dailyStepRecordVersion()` persists one monotonic version
+per calendar date. Its fingerprint uses the day's start plus Huawei's
+authoritative count, deliberately excluding today's moving `endTimeMs`. If
+the count did not change, the same version is reused and Health Connect
+ignores the repeated upsert; if Huawei corrects the count, the version
+increases and the record updates normally.
+
+The previous implementation deleted **every BitLut `StepsRecord` across the
+full seven-day daily-summation range on every ~30-minute sync** before
+reinserting daily totals. Once session-scoped workout Steps were introduced
+on 2026-08-30, that delete also removed those valid workout records;
+`writeActivitySessionsBatch()` then recreated them later in the same sync.
+For a Changes-API reader this produced repeated `DeletionChange` +
+`UpsertionChange` traffic even when source data was unchanged. That behavior
+was removed on 2026-09-16 v2 and must not be restored.
 
 ### 4.5 Distance, floors, elevation, active calories: plain upsert
 
@@ -839,6 +837,15 @@ incremental approval model — not because the core read/write logic itself
 needed help.
 
 ### 5.1 Two independent trigger paths, one shared lease
+
+Health Connect transport failures (`RemoteException`, including binder-death
+style IPC failures) are treated specially: the current write sequence aborts
+immediately instead of continuing calls against a dead provider, the cached
+client is invalidated, and the retry is handed to WorkManager's existing
+10-minute exponential backoff. Google-side failures therefore do not replay
+the full Huawei -> Health Connect pipeline three times within a few seconds.
+Huawei-side connection-race retries retain their existing bounded behavior.
+
 
 Sync can be triggered two structurally different ways:
 

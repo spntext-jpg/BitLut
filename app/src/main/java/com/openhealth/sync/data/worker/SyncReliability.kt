@@ -209,7 +209,10 @@ sealed class SyncAttemptOutcome {
     data object GracefulNoop : SyncAttemptOutcome()
     /** [dependency] identifies which side caused the failure, so the caller can
      *  charge it to the correct per-dependency circuit breaker. */
-    data class RetryableFailure(val dependency: SyncDependency) : SyncAttemptOutcome()
+    data class RetryableFailure(
+        val dependency: SyncDependency,
+        val allowInlineRetry: Boolean = true
+    ) : SyncAttemptOutcome()
     data object NonRetryableFailure : SyncAttemptOutcome()
 }
 

@@ -8,6 +8,7 @@ import com.openhealth.sync.SyncApplication
 import com.openhealth.sync.config.HealthDataSource
 import com.openhealth.sync.data.GoogleDashboardSnapshot
 import com.openhealth.sync.data.HealthConnectManager
+import com.openhealth.sync.data.HealthConnectTransportException
 import com.openhealth.sync.data.remote.HuaweiConfig
 import com.openhealth.sync.platform.HmsCoreHelper
 import com.openhealth.sync.util.AppLogger
@@ -149,6 +150,13 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 SyncAttemptOutcome.NonRetryableFailure -> return lastOutcome
 
                 is SyncAttemptOutcome.RetryableFailure -> {
+                    if (!lastOutcome.allowInlineRetry) {
+                        AppLogger.w(
+                            TAG,
+                            "Retryable ${lastOutcome.dependency} failure deferred to WorkManager backoff; skipping rapid inline retry"
+                        )
+                        return lastOutcome
+                    }
                     if (attempt < SyncRetryPolicy.MAX_ATTEMPTS - 1) {
                         val delayMs = SyncRetryPolicy.nextDelayMs(attempt)
                         AppLogger.w(TAG, "Retryable sync failure; retrying in ${delayMs}ms attempt=${attempt + 2}/${SyncRetryPolicy.MAX_ATTEMPTS}")
@@ -177,7 +185,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
             }
 
             val freshSnapshot = refreshDashboardCacheAfterWrite(googleManager)
-                ?: return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE)
+                ?: return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE, allowInlineRetry = false)
             updateAchievements(freshSnapshot)
             AppLogger.i(
                 TAG,
@@ -289,7 +297,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 // or the next periodic run) gets a fresh client instead of
                 // repeating the same failure forever.
                 googleManager.invalidateClientCache()
-                return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE)
+                return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE, allowInlineRetry = false)
             }
 
             val failedWithData = writeResult.failedCategories.filterTo(mutableSetOf()) { category ->
@@ -321,7 +329,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 googleManager.invalidateClientCache()
                 val freshSnapshot = refreshDashboardCacheAfterWrite(googleManager)
                 updateAchievements(freshSnapshot)
-                return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE)
+                return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE, allowInlineRetry = false)
             }
 
             if (!writeResult.allSucceeded) {
@@ -347,6 +355,15 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
             updateAchievements(freshSnapshot)
 
             SyncAttemptOutcome.Success
+        } catch (e: HealthConnectTransportException) {
+            googleManager.invalidateClientCache()
+            AppLogger.e(
+                TAG,
+                "Health Connect transport failed; deferring retry to WorkManager backoff instead of replaying the write storm inline.",
+                e
+            )
+            SyncDiagnosticLog.record(prefs, "google_transport_failure", e.message ?: "Health Connect transport failure")
+            SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE, allowInlineRetry = false)
         } catch (e: SecurityException) {
             if (e.message?.contains(HUAWEI_SCOPE_UNAUTHORIZED.toString()) == true) {
                 huaweiManager.markAppGalleryVerificationRequired()

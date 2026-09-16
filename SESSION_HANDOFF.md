@@ -77,6 +77,7 @@ The release workflow should keep an early `checkReleaseAarMetadata` gate before 
 - Session-scoped workout metrics remain the interoperability-critical contract for downstream readers.
 - 2026-09-10: workout bundle no longer includes elevation/total-calories (`ElevationGainedRecord`/`TotalCaloriesBurnedRecord`) -- session, Distance, Steps, plus optional real ActiveCalories only -- reducing per-workout Health Connect payload after a corporate reader reported "binder died"/rate-limit sync failures. Targeted reduction, not a confirmed fix; see `docs/BACKLOG.md`.
 - 2026-09-16 Health Connect recovery: removed obsolete `WRITE_TOTAL_CALORIES_BURNED` from the Huawei export gate/manifest, stopped transient/stale permission snapshots from refreshing the 30-second permission cache, persisted exact missing-permission diagnostics, and stopped dashboard-only calories/elevation from bumping workout `clientRecordVersion`.
+- 2026-09-16 downstream-churn follow-up: removed the recurring 7-day `StepsRecord` time-range delete that was deleting/recreating workout-scoped Steps every 30 minutes; daily Huawei totals now keep stable per-day versions, and Health Connect binder/IPC failures abort remaining writes and wait for WorkManager backoff instead of three rapid full-pipeline retries. Workout session serialization/metadata is unchanged.
 - Dashboard cache consumers must preserve the midnight stale-cache guard; never reapply yesterday's daily totals as today's data.
 
 ### August UI polish

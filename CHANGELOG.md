@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-16 -- Health Connect downstream change-churn hardening
+
+- Removed the recurring seven-day `StepsRecord` time-range delete. After workout-scoped Steps were added on 2026-08-30, that reconcile deleted and recreated valid workout Steps every ~30 minutes, producing avoidable downstream deletion/upsertion traffic.
+- Added stable per-day `clientRecordVersion` state for Huawei daily step totals. Unchanged historical totals no longer appear as fresh Health Connect changes; a real Huawei count correction still advances the version and upserts.
+- Health Connect `RemoteException`/binder write failures now abort the remaining provider calls, invalidate the cached client, and defer retry to WorkManager backoff instead of rapidly replaying the full pipeline.
+- Workout session bundle contents, IDs, recording method, and metadata were intentionally left unchanged.
+
 ## 2026-09-16 -- Health Connect permission recovery and downstream churn reduction
 
 - Removed obsolete `WRITE_TOTAL_CALORIES_BURNED` from the manifest and Huawei export preflight. BitLut stopped writing `TotalCaloriesBurnedRecord` on 2026-09-10, so keeping that unused write grant could turn a lost/stranded permission into a full export no-op. `READ_TOTAL_CALORIES_BURNED` remains for the Google Fit dashboard source.

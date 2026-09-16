@@ -3,6 +3,7 @@ package com.openhealth.sync.data
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.RemoteException
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.DistanceRecord
@@ -38,6 +39,9 @@ import kotlin.reflect.KClass
 
 private const val TAG = "GoogleHealthManager"
 private const val WRITE_BATCH_SIZE = 400
+
+internal class HealthConnectTransportException(operation: String, cause: RemoteException) :
+    Exception("Health Connect transport failure during $operation: ${cause.message}", cause)
 private const val DASHBOARD_HISTORY_DAYS = 30
 private const val WORKOUT_DISTANCE_QUERY_PADDING_SECONDS = 2L * 60L * 60L
 private const val MAX_WORKOUT_DISTANCE_SOURCE_RECORD_MS = 3L * 60L * 60L * 1000L
@@ -141,6 +145,16 @@ class GoogleHealthManager(
     // source; Google Fit sessions continue to resolve from Health Connect.
     private val workoutSummaryPrefs = context.getSharedPreferences(
         "bitlut_workout_summary_v1",
+        Context.MODE_PRIVATE
+    )
+
+    // Daily Huawei totals use one stable clientRecordId per calendar date.
+    // Persist the source value -> monotonically increasing Health Connect
+    // version mapping so an unchanged historical day stays a true no-op for
+    // downstream Changes consumers instead of becoming a fresh upsertion on
+    // every 30-minute sync.
+    private val dailyStepVersionPrefs = context.getSharedPreferences(
+        "bitlut_daily_step_version_v1",
         Context.MODE_PRIVATE
     )
 
@@ -406,19 +420,12 @@ class GoogleHealthManager(
      * other category forever, retry after retry.
      */
     override suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): WriteSnapshotResult {
-        // Ordering is load-bearing (2026-08-30): writeStepsBatch's "complete
-        // daily summation" branch does a StepsRecord time-range delete across
-        // the whole affected date range before reinserting Huawei's daily
-        // total (see that function's own comment). writeActivitySessionsBatch
-        // now also writes a workout-scoped StepsRecord for walk/run/hike
-        // sessions (same BitLut-owned record type, same day). Because these
-        // are sequential suspend calls in one list literal -- not launched
-        // concurrently -- writeStepsBatch's delete-then-insert always fully
-        // completes before writeActivitySessionsBatch runs, so the workout
-        // StepsRecord is never deleted by that day's steps reconciliation.
-        // If this list is ever parallelized, activitySessions MUST still run
-        // strictly after steps, or the daily reconciliation delete will wipe
-        // out that sync's freshly-written workout step records.
+        // Keep writes sequential to bound Health Connect IPC pressure. Since
+        // 2026-09-16 v2, daily steps are stable-ID/version upserts and NEVER
+        // perform a time-range delete: that old reconcile deleted the
+        // workout-scoped StepsRecord values introduced on 2026-08-30 and then
+        // recreated them on every sync, producing avoidable downstream
+        // DeletionChange/UpsertionChange churn.
         // BITLUT_SESSION_METRICS_WRITE_ORDER_2026_08_30
         val results = listOf(
             "steps" to writeStepsBatch(snapshot.steps),
@@ -439,13 +446,40 @@ class GoogleHealthManager(
         return WriteSnapshotResult(succeededCategories = succeeded, failedCategories = failed)
     }
 
+    private fun dailyStepRecordVersion(record: StepData): Long {
+        val sourceId = requireNotNull(record.sourceId) { "daily step version requires sourceId" }
+        val safeSourceId = sourceId
+            .replace(Regex("[^A-Za-z0-9_-]"), "_")
+            .take(64)
+        val key = "record_version:$safeSourceId"
+        // endTimeMs for today's running daily total naturally advances on
+        // every sync even when Huawei's authoritative count did not change.
+        // Excluding it keeps an unchanged count invisible to downstream
+        // Changes consumers. startTimeMs remains part of the fingerprint so a
+        // timezone/day-boundary correction still produces a real update.
+        val fingerprint = "${record.startTimeMs}|${record.count}"
+        val stored = dailyStepVersionPrefs.getString(key, null)
+        val separator = stored?.indexOf('|') ?: -1
+        val previousVersion = if (separator > 0) stored?.substring(0, separator)?.toLongOrNull() else null
+        val previousFingerprint = if (separator > 0) stored?.substring(separator + 1) else null
+
+        if (previousVersion != null && previousFingerprint == fingerprint) {
+            return previousVersion
+        }
+
+        val version = maxOf(System.currentTimeMillis(), (previousVersion ?: 0L) + 1L)
+        dailyStepVersionPrefs.edit().putString(key, "$version|$fingerprint").apply()
+        return version
+    }
+
     suspend fun writeStepsBatch(records: List<StepData>): Boolean {
         val validSourceRecords = records
             .filter { it.count > 0 && it.startTimeMs < it.endTimeMs }
-        val version = System.currentTimeMillis()
+        val rawImportVersion = System.currentTimeMillis()
         val valid = validSourceRecords.map {
             val start = Instant.ofEpochMilli(it.startTimeMs)
             val end = Instant.ofEpochMilli(it.endTimeMs)
+            val version = if (it.sourceId != null) dailyStepRecordVersion(it) else rawImportVersion
             StepsRecord(
                 count = it.count,
                 startTime = start,
@@ -465,43 +499,21 @@ class GoogleHealthManager(
             return true
         }
 
-        val isCompleteDailySummation = validSourceRecords.all { it.sourceId != null }
-        if (!isCompleteDailySummation) {
-            return replaceRecords("steps", valid, StepsRecord::class)
-        }
-
-        val client = resolveClient() ?: run {
-            AppLogger.e(TAG, "write steps: no Health Connect client")
-            return false
-        }
-        val deleteStart = valid.minOf { it.startTime }
-        val deleteEnd = valid.maxOf { it.endTime }
-
-        return try {
-            // Time-range deletion is automatically restricted by Health
-            // Connect to records owned by BitLut. This removes legacy raw
-            // delta records before writing one authoritative Huawei daily
-            // total per date, preventing old+new double counting.
-            client.deleteRecords(
-                StepsRecord::class,
-                TimeRangeFilter.between(deleteStart, deleteEnd)
-            )
-            valid.chunked(WRITE_BATCH_SIZE).forEach { client.insertRecords(it) }
+        // Do not range-delete BitLut Steps before this upsert. Once workout-
+        // scoped StepsRecord values were added on 2026-08-30, the old 7-day
+        // reconciliation deleted those valid workout records every 30 minutes
+        // and writeActivitySessionsBatch recreated them immediately afterward.
+        // That generated a deletion + upsertion stream for downstream Changes
+        // consumers even when Huawei data was unchanged. Stable client IDs and
+        // versions are sufficient for authoritative daily totals now.
+        val success = replaceRecords("steps", valid, StepsRecord::class)
+        if (success && validSourceRecords.all { it.sourceId != null }) {
             AppLogger.i(
                 TAG,
-                "Reconciled Huawei daily steps in Health Connect: days=${valid.size} today=${valid.last().count} range=$deleteStart..$deleteEnd"
+                "Upserted Huawei daily steps without range delete: days=${valid.size} today=${valid.last().count}"
             )
-            true
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: SecurityException) {
-            AppLogger.e(TAG, "write steps denied by Health Connect permission policy: ${e.message}", e)
-            invalidateClientCache()
-            throw e
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "daily steps reconciliation failed: ${e.message}", e)
-            false
         }
+        return success
     }
 
     /**
@@ -964,6 +976,10 @@ class GoogleHealthManager(
                 written += 1
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: RemoteException) {
+                AppLogger.e(TAG, "Health Connect binder failed while writing activitySessions: ${e.message}", e)
+                invalidateClientCache()
+                throw HealthConnectTransportException("write activitySessions", e)
             } catch (e: SecurityException) {
                 AppLogger.e(TAG, "write activitySessions denied by Health Connect: ${e.message}", e)
                 invalidateClientCache()
@@ -1011,6 +1027,10 @@ class GoogleHealthManager(
             true
         } catch (e: CancellationException) {
             throw e
+        } catch (e: RemoteException) {
+            AppLogger.e(TAG, "Health Connect binder failed while writing $label: ${e.message}", e)
+            invalidateClientCache()
+            throw HealthConnectTransportException("write $label", e)
         } catch (e: SecurityException) {
             AppLogger.e(TAG, "write $label denied by Health Connect permission policy: ${e.message}", e)
             // A SecurityException here can also indicate a stale client reference
