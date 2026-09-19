@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-16 (b) -- experiment: English-only fallback workout titles
+
+- **New candidate cause for the open corporate-reader "binder died" investigation** (`docs/BACKLOG.md`): fallback workout titles written to Health Connect -- used only when Huawei supplies no name of its own -- previously came from `HuaweiWorkoutTypeMapper.localizedDisplayName()`, which resolves via the app's active device locale (Russian on a Russian-locale device, English otherwise). Paulo observed the corporate reader's import failures coincide with BitLut's own fallback titles switching from English to Russian text.
+- **Added `HuaweiWorkoutTypeMapper.exportDisplayName()`**, which resolves the same `displayNameRes` string table pinned to `Locale.ENGLISH` via `createConfigurationContext`, regardless of device locale. `HuaweiHealthManager.kt` and `HuaweiExportParser.kt` (live sync and archive import, the two Health-Connect-write call sites) now call this instead of `localizedDisplayName()`.
+- **`localizedDisplayName()` itself is unchanged** and is not called anywhere in the UI layer -- BitLut's own dashboard display is unaffected by this change either way.
+- **This is an experiment, not a confirmed fix.** No corporate-app-side log yet confirms non-Latin `ExerciseSessionRecord.title` text as the actual cause. If a real-device retest with the corporate reader does not resolve the failures, revert by pointing both call sites back at `localizedDisplayName()`.
+
 ## 2026-09-16 -- Health Connect downstream change-churn hardening
 
 - Removed the recurring seven-day `StepsRecord` time-range delete. After workout-scoped Steps were added on 2026-08-30, that reconcile deleted and recreated valid workout Steps every ~30 minutes, producing avoidable downstream deletion/upsertion traffic.

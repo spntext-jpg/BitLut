@@ -684,7 +684,7 @@ class HuaweiHealthManager(
             val title = rawName
                 ?.trim()
                 ?.takeIf { it.isNotBlank() && !isSyntheticHuaweiActivityName(it, recordId) }
-                ?: HuaweiWorkoutTypeMapper.localizedDisplayName(context, exerciseType)
+                ?: HuaweiWorkoutTypeMapper.exportDisplayName(context, exerciseType)
             val summary = readActivityRecordSummary(record)
             val recordDistanceMeters = summary.distanceMeters
                 ?: readActivityRecordDistance(reply, record, distanceDetailFields)

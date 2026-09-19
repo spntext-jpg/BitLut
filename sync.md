@@ -495,7 +495,8 @@ sorted by start time.
    duplicate.
 3. Build the `ExerciseSessionRecord` itself: `startTime`/`endTime` with
    correct `ZoneOffset`s (via `zoneRules.getOffset(instant)`), the mapped
-   `exerciseType`, the (possibly localized) `title`, and
+   `exerciseType`, the `title` (Huawei's own name when present, else an
+   **English-only** fallback since 2026-09-16 — see 4.8), and
    `bitlutWorkoutMetadata("exercise", ...)` — `Metadata.activelyRecorded`
    (see 4.8), not `autoRecorded`, because Huawei documents exercise
    ActivityRecords as data produced only after the user explicitly starts a

@@ -1,6 +1,7 @@
 package com.openhealth.sync.data
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import com.openhealth.sync.R
 import java.util.Locale
@@ -379,5 +380,46 @@ internal object HuaweiWorkoutTypeMapper {
     fun localizedDisplayName(context: Context, exerciseType: Int): String {
         val resId = displayNameRes[exerciseType] ?: R.string.exercise_type_other_workout
         return context.getString(resId)
+    }
+
+    /**
+     * English-only fallback title for a workout, used for the Health Connect
+     * write path instead of [localizedDisplayName] since 2026-09-16.
+     *
+     * Background: the fallback title written to `ExerciseSessionRecord.title`
+     * (used only when Huawei did not provide its own workout name) previously
+     * came from [localizedDisplayName], which resolves via the app's active
+     * device locale -- Russian on a Russian-locale device, English otherwise.
+     * A downstream corporate wellness-app reader started failing to import
+     * BitLut-synced workouts ("binder died") in a window that coincided with
+     * BitLut's workout titles switching from English to Cyrillic text on
+     * Paulo's own device. This is being tested as one candidate explanation
+     * (a reader with non-Unicode-safe title handling) alongside the other
+     * open investigation in docs/BACKLOG.md; it has not been confirmed by a
+     * corporate-app-side log. Explicit Huawei-provided names (`rawName`/
+     * `explicitName` at both call sites) are untouched by this change --
+     * they were never run through either display-name function and are
+     * already whatever text Huawei itself supplied.
+     *
+     * Resolves the same `displayNameRes` string table used by
+     * [localizedDisplayName], pinned to [Locale.ENGLISH] via
+     * `createConfigurationContext` regardless of the device's actual locale,
+     * so it can never drift out of sync with `values/strings.xml` by using a
+     * second hardcoded name table. [localizedDisplayName] itself is
+     * unchanged and still used for BitLut's own dashboard display, which
+     * has no bearing on this investigation and should keep following the
+     * user's language preference.
+     *
+     * To revert this experiment: change the two Health-Connect-write call
+     * sites (`HuaweiHealthManager.kt`, `HuaweiExportParser.kt`) back to
+     * calling [localizedDisplayName] instead of this function. Nothing else
+     * needs to change.
+     */
+    fun exportDisplayName(context: Context, exerciseType: Int): String {
+        val resId = displayNameRes[exerciseType] ?: R.string.exercise_type_other_workout
+        val englishConfig = Configuration(context.resources.configuration).apply {
+            setLocale(Locale.ENGLISH)
+        }
+        return context.createConfigurationContext(englishConfig).resources.getString(resId)
     }
 }
