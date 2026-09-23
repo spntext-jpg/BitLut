@@ -119,8 +119,24 @@ class AchievementsStore(
                 }
             }
 
+            // Bound the persisted ledger. Every successful sync (background,
+            // every ~30 minutes, plus every manual refresh) merges a fresh
+            // DASHBOARD_HISTORY_DAYS-day window (GoogleHealthManager.kt) into
+            // this map, but merges only ever ADD dates -- nothing previously
+            // trimmed the map, so it silently grew by one entry per unique
+            // calendar date for the lifetime of the install, re-parsing and
+            // re-serializing the whole growing JSON blob on every sync.
+            // Personal records (bestStepsDay() etc.) live in their own
+            // separate SharedPreferences keys and are unaffected by this
+            // trim; readHistory()/history is only ever used here, as a
+            // same-day idempotency merge target, so anything older than the
+            // retention window is safe to drop.
+            val trimmedHistory = history.filterKeys {
+                it.isAfter(LocalDate.now().minusDays(DAILY_HISTORY_RETENTION_DAYS))
+            }
+
             editor
-                .putString(sourceKey(KEY_DAILY_HISTORY), historyToJson(history).toString())
+                .putString(sourceKey(KEY_DAILY_HISTORY), historyToJson(trimmedHistory).toString())
                 .apply()
             newRecords
         } catch (e: Exception) {
@@ -317,6 +333,11 @@ class AchievementsStore(
         private const val KEY_BEST_WORKOUT_VALUE = "achv_best_workout_value"
         private const val KEY_BEST_WORKOUT_DATE = "achv_best_workout_date"
         private const val KEY_DAILY_HISTORY = "achv_daily_activity_history"
+        /** Retention window for the merge ledger (not personal records, which
+         *  are separate and unbounded by design). Comfortably wider than
+         *  GoogleHealthManager's DASHBOARD_HISTORY_DAYS (30) so no in-window
+         *  merge target is ever evicted right before it would have been used. */
+        private const val DAILY_HISTORY_RETENTION_DAYS = 90L
 
         private const val KEY_STREAK_CURRENT = "achv_streak_current"
         private const val KEY_STREAK_LONGEST = "achv_streak_longest"
