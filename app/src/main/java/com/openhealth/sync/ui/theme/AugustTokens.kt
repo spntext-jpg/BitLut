@@ -108,15 +108,17 @@ internal object AugustColor {
     val DarkErrorContainerFg = Color(0xFFFFC9C9)
 }
 
-/** August v3 radius scale: controls 10-14, cards 14-18, work surfaces 20-24. */
+/** August v3 radius scale: controls 10-14, cards 14-18, work surfaces 20-24.
+ *  2026 minimalist pass: Card/Hero opened up slightly (Apple Health-style
+ *  more generous rounding) -- Control/Compact/Pill/WorkSurface untouched. */
 internal object AugustRadius {
     val Compact = 14.dp
     val Control = 16.dp
     val Pill = 999.dp
     val Button = Pill
-    val Card = 22.dp
+    val Card = 24.dp
     val WorkSurface = 26.dp
-    val Hero = 30.dp
+    val Hero = 32.dp
 }
 
 /** Section 5 spacing scale, verbatim: 0,2,4,6,8,10,12,14,16,18,20,22,24,28,
@@ -171,9 +173,13 @@ internal object AugustMotion {
 
 /** August v3 restrained neutral depth + weak Lime primary-action glow. */
 internal object AugustElevation {
+    // 2026 minimalist pass: normal cards move from a hard 1dp stroke to a
+    // soft ambient shadow (Apple Health / iOS card convention -- separation
+    // by shadow + background contrast, not an outline). Alpha stays very
+    // low (0.05) so cards read as "gently lifted", not boxed.
     val CardShadowColor = Color(0xFF151728)
-    const val CardShadowAlpha = 0.0f
-    val CardShadowElevation = 0.dp
+    const val CardShadowAlpha = 0.05f
+    val CardShadowElevation = 3.dp
 
     val HeroShadowColor = Color(0xFF151728)
     const val HeroShadowAlpha = 0.10f
