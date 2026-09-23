@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
@@ -100,9 +101,26 @@ internal fun AugustBottomNav(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .shadow(
+                    elevation = 12.dp,
+                    shape = shellShape,
+                    ambientColor = AugustColor.Navy.copy(alpha = 0.35f),
+                    spotColor = AugustColor.Navy.copy(alpha = 0.35f)
+                )
                 .clip(shellShape)
-                .background(AugustColor.Navy)
-                .border(1.dp, AugustColor.BorderDark, shellShape)
+                // 2026 minimalist pass: translucent instead of solid Navy,
+                // closer to iOS's translucent (pre-backdrop-blur) tab bar
+                // treatment. NOTE: true backdrop blur (blurring whatever
+                // scrolls underneath the bar) is not implemented here --
+                // Modifier.blur blurs a composable's OWN children, not the
+                // content behind it in z-order, so applying it to this Row
+                // would blur the nav icons/labels themselves, not the
+                // content behind them. Real backdrop blur needs either a
+                // captured-layer technique or a library (e.g. Haze, not a
+                // current dependency of this project) -- out of scope for
+                // this pass. Translucency + a stronger shadow is the
+                // honest, dependency-free approximation.
+                .background(AugustColor.Navy.copy(alpha = 0.86f))
                 .padding(horizontal = 8.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
