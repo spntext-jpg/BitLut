@@ -2271,23 +2271,21 @@ private fun MinimalMetricCard(
 }
 
 /**
- * Two-metric Steps Hero card (2026-08-22): Steps and Distance are each
- * rendered as their own big-number + small-unit pair, side by side, instead
- * of Distance being folded into Steps' small unit string
- * ("steps · 0.1 km") the way MinimalMetricCard's generic hero mode did
- * before this. Distance now gets equal visual weight to Steps rather than
- * reading as an afterthought.
+ * Steps Hero card. A large progress ring (2026 minimalist pass,
+ * Apple Health-influenced layout) is the dominant visual element, with the
+ * steps count as the primary number beside it and distance as a smaller
+ * secondary line underneath.
  *
- * The steps-goal progress ring moves below both numbers instead of sitting
- * beside them in the same row (confirmed layout decision, 2026-08-22) --
- * two big-number blocks plus a ring all competing for one row was too tight
- * once Distance became a first-class value instead of trailing text.
+ * Distance was previously rendered as its own equal-weight big-number
+ * block beside Steps (2026-08-22); the 2026 minimalist pass demoted it to
+ * a smaller secondary line so the ring + steps count reads as a single,
+ * unambiguous focal point, matching the convention set by Apple Health /
+ * Oura, where one ring is the hero and everything else is supporting text.
  *
  * MinimalMetricCard itself is untouched and stays in use for every other
  * single-value card (the Connect Google lock screen, the Distance card at
- * DashboardOrderedCard, etc.) -- this is a dedicated Hero-only composable,
- * not a generalization of the existing one, since no other card needs two
- * equal-weight big numbers side by side.
+ * DashboardOrderedCard, etc.) -- this remains a dedicated Hero-only
+ * composable.
  */
 @Composable
 private fun StepsHeroCard(
@@ -2306,45 +2304,59 @@ private fun StepsHeroCard(
         hero = true
     ) {
         Text(
-            text = title.uppercase(currentUiLocale()),
+            text = title,
             color = AugustColor.DarkSecondaryText,
-            fontWeight = FontWeight.Black,
-            fontSize = 12.sp
+            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            HeroMetricBlock(
-                value = stepsValue,
-                unit = stepsUnit,
-                modifier = Modifier.weight(1f)
-            )
-            HeroMetricBlock(
-                value = distanceValue,
-                unit = distanceUnit,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        if (progress != null || progressText != null) {
-            Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (progress != null) {
-                    ProgressRingChip(progress = progress, accent = AugustColor.Lime, size = 40.dp)
-                    Spacer(Modifier.width(12.dp))
-                }
-                if (progressText != null) {
+            if (progress != null) {
+                ProgressRingChip(
+                    progress = progress,
+                    accent = AugustColor.Lime,
+                    size = 108.dp,
+                    strokeWidth = 9.dp,
+                    centerText = null
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                HeroMetricBlock(value = stepsValue, unit = stepsUnit)
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        text = progressText,
-                        color = AugustColor.DarkSecondaryText,
+                        text = distanceValue,
+                        color = AugustColor.Surface,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp,
+                        fontSize = 18.sp,
+                        maxLines = 1
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = distanceUnit,
+                        color = AugustColor.DarkSecondaryText,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        modifier = Modifier.padding(bottom = 2.dp)
                     )
                 }
             }
+        }
+        if (progressText != null) {
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = progressText,
+                color = AugustColor.DarkSecondaryText,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -2363,9 +2375,9 @@ private fun HeroMetricBlock(
     modifier: Modifier = Modifier
 ) {
     val valueFontSize = when {
-        value.length > 7 -> 28.sp
-        value.length > 5 -> 34.sp
-        else -> 40.sp
+        value.length > 7 -> 32.sp
+        value.length > 5 -> 40.sp
+        else -> 48.sp
     }
     Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.Bottom) {
@@ -2427,23 +2439,25 @@ private fun DashboardLoadingCard(palette: BitPalette) {
 }
 
 /**
- * Compact progress ring used as the icon-chip replacement on Summary tiles that
- * have a real goal to show (currently just Steps vs the daily goal).
- * [progress] is expected pre-clamped to 0f..1f by the caller (see [coerceProgress]).
+ * Compact progress ring used as the icon-chip replacement on Summary tiles
+ * that have a real goal to show (currently just Steps vs the daily goal).
+ * [progress] is expected pre-clamped to 0f..1f by the caller (see
+ * [coerceProgress]).
+ *
+ * Carries real visual weight rather than functioning as pure decoration: a
+ * thicker stroke, a soft glow behind the ring, and the actual percentage by
+ * default instead of a plain "•" -- matching the convention set by Apple
+ * Health / Oura rings, where the ring itself communicates progress. [size]
+ * and [strokeWidth] are both caller-controlled so the same composable can
+ * serve as a small icon-chip (Settings/tile contexts) or, at a larger size,
+ * as a hero card's dominant visual element.
  */
 @Composable
-/**
- * Redesigned (v1.9.11) to carry more visual weight against the 56sp hero
- * number it sits beside on the steps card: a thicker stroke, a soft glow
- * behind the ring (instead of just the bare arc), and the actual percentage
- * by default instead of a plain "•" -- matching the convention set by
- * Apple Health / Oura rings, where the ring itself communicates real
- * progress information rather than functioning as pure decoration.
- */
 private fun ProgressRingChip(
     progress: Float,
     accent: Color,
     size: androidx.compose.ui.unit.Dp,
+    strokeWidth: androidx.compose.ui.unit.Dp = 4.5.dp,
     centerText: String? = null
 ) {
     val resolvedCenterText = centerText ?: "${(progress.coerceIn(0f, 1f) * 100).toInt()}%"
@@ -2455,7 +2469,7 @@ private fun ProgressRingChip(
                 brush = Brush.radialGradient(colors = glowColors, radius = this.size.maxDimension * 0.62f),
                 radius = this.size.maxDimension * 0.55f
             )
-            val stroke = Stroke(width = 4.5.dp.toPx(), cap = StrokeCap.Round)
+            val stroke = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round)
             drawArc(
                 color = accent.copy(alpha = 0.20f),
                 startAngle = -90f,
@@ -2474,8 +2488,8 @@ private fun ProgressRingChip(
         Text(
             resolvedCenterText,
             color = accent,
-            fontSize = if (resolvedCenterText.length > 2) 11.sp else 13.sp,
-            fontWeight = FontWeight.Black,
+            fontSize = if (resolvedCenterText.length > 2) (size.value * 0.20f).sp else (size.value * 0.24f).sp,
+            fontWeight = FontWeight.Bold,
             maxLines = 1
         )
     }
