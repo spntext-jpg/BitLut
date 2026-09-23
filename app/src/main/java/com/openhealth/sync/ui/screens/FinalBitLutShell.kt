@@ -1082,10 +1082,10 @@ private fun WorkoutStat(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = label.uppercase(currentUiLocale()),
+            text = label,
             color = palette.secondaryText,
-            fontWeight = FontWeight.Black,
-            fontSize = 9.sp,
+            fontWeight = FontWeight.Medium,
+            fontSize = 10.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1093,7 +1093,7 @@ private fun WorkoutStat(
         Text(
             text = value,
             color = valueColor,
-            fontWeight = FontWeight.ExtraBold,
+            fontWeight = FontWeight.SemiBold,
             fontSize = 14.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -2201,10 +2201,10 @@ private fun MinimalMetricCard(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = title.uppercase(currentUiLocale()),
+                    text = title,
                     color = titleColor,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 12.sp
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp
                 )
                 Spacer(Modifier.height(4.dp))
                 // Sprint (2026-07-09): fixed 56.sp overflowed once steps
