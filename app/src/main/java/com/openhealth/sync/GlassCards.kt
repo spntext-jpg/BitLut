@@ -1,7 +1,6 @@
 package com.openhealth.sync
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,7 +11,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.unit.dp
 import com.openhealth.sync.ui.theme.AugustColor
 import com.openhealth.sync.ui.theme.AugustElevation
 import com.openhealth.sync.ui.theme.AugustRadius
@@ -21,11 +19,11 @@ import com.openhealth.sync.ui.theme.AugustSpace
 /**
  * Canonical BitLut card surface.
  *
- * Cards are deliberately quiet: neutral fill, one subtle outline and no
- * interaction animation unless the caller itself is clickable. Hero cards keep
- * a restrained shadow to preserve hierarchy. This prevents non-actionable
- * dashboard cards from behaving like buttons and keeps the surface model close
- * to modern, content-first mobile UI.
+ * 2026 minimalist pass: cards are borderless, separated from the
+ * background by a soft ambient shadow instead of a 1dp stroke (Apple
+ * Health / iOS card convention). No interaction animation unless the
+ * caller itself is clickable. Hero cards keep their own, stronger shadow
+ * to preserve hierarchy.
  */
 @Composable
 internal fun SoftCard(
@@ -38,25 +36,21 @@ internal fun SoftCard(
         RoundedCornerShape(if (hero) AugustRadius.Hero else AugustRadius.Card)
     }
     val background = if (hero) AugustColor.NavyRaised else palette.card
-    val borderColor = if (hero) AugustColor.BorderDark else palette.stroke
-    val shadowModifier = if (hero) {
-        Modifier.shadow(
-            elevation = AugustElevation.HeroShadowElevation,
-            shape = shape,
-            ambientColor = AugustElevation.HeroShadowColor.copy(alpha = AugustElevation.HeroShadowAlpha),
-            spotColor = AugustElevation.HeroShadowColor.copy(alpha = AugustElevation.HeroShadowAlpha)
-        )
-    } else {
-        Modifier
-    }
+    val shadowElevation = if (hero) AugustElevation.HeroShadowElevation else AugustElevation.CardShadowElevation
+    val shadowColor = if (hero) AugustElevation.HeroShadowColor else AugustElevation.CardShadowColor
+    val shadowAlpha = if (hero) AugustElevation.HeroShadowAlpha else AugustElevation.CardShadowAlpha
 
     Column(
         modifier = modifier
-            .then(shadowModifier)
+            .shadow(
+                elevation = shadowElevation,
+                shape = shape,
+                ambientColor = shadowColor.copy(alpha = shadowAlpha),
+                spotColor = shadowColor.copy(alpha = shadowAlpha)
+            )
             .clip(shape)
             .background(background)
-            .border(width = 1.dp, color = borderColor, shape = shape)
-            .padding(if (hero) AugustSpace.s24 else AugustSpace.s18),
+            .padding(if (hero) AugustSpace.s28 else AugustSpace.s20),
         content = content
     )
 }
