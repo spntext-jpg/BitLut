@@ -164,26 +164,25 @@ private fun AugustDestination(
     val pressed by interactionSource.collectIsPressedAsState()
     val focused by interactionSource.collectIsFocusedAsState()
     val shape = remember { RoundedCornerShape(22.dp) }
-    val iconShape = remember { RoundedCornerShape(10.dp) }
     val label = when (tab) {
         MainTab.Today -> stringResource(R.string.tab_today)
         MainTab.Settings -> stringResource(R.string.tab_settings)
     }
 
-    val container by animateColorAsState(
-        targetValue = if (selected) AugustColor.Surface else Color.Transparent,
-        animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
-        label = "destinationContainer"
-    )
+    // 2026 GUI pass 2 (B3, opt-in per user's choice): iOS's native tab bar
+    // has no background pill at all -- only a tint/weight change on
+    // selection. Previously this button got a white rounded "container"
+    // pill behind the whole control PLUS a separate lime tile behind just
+    // the icon when selected; both are removed here. Selected state is now
+    // carried entirely by content tint (icon + label switch to
+    // AugustColor.Lime) and the label's existing bold weight. Lime
+    // (luminance ~0.88) against the bar's near-black Navy background
+    // (luminance ~0) is extremely high contrast, so this reads clearly
+    // without needing a fill behind it.
     val contentColor by animateColorAsState(
-        targetValue = if (selected) AugustColor.Ink else AugustColor.DarkSecondaryText,
+        targetValue = if (selected) AugustColor.Lime else AugustColor.DarkSecondaryText,
         animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
         label = "destinationContent"
-    )
-    val iconTile by animateColorAsState(
-        targetValue = if (selected) AugustColor.Lime else AugustColor.NavySoft,
-        animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
-        label = "destinationIconTile"
     )
     // A small press depth + asymmetric tilt gives the dock a tactile glass feel.
     // The under-damped return is intentional: it creates one restrained release tremor,
@@ -232,7 +231,6 @@ private fun AugustDestination(
                 rotationZ = pressTilt
             }
             .clip(shape)
-            .background(container)
             .border(
                 width = if (focused) 2.dp else 0.dp,
                 color = if (focused) AugustColor.Purple else Color.Transparent,
@@ -250,10 +248,7 @@ private fun AugustDestination(
         verticalArrangement = Arrangement.Center
     ) {
         Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(iconShape)
-                .background(iconTile),
+            modifier = Modifier.size(24.dp),
             contentAlignment = Alignment.Center
         ) {
             Icon(

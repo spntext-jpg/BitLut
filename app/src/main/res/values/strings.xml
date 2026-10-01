@@ -217,6 +217,8 @@
     <string name="distance_short_title">Distance</string>
     <string name="insights_week_comparison_title">This week vs last week</string>
     <string name="insights_first_week">First tracked week</string>
+    <string name="dashboard_section_activity">Activity</string>
+    <string name="dashboard_section_workouts">Workouts</string>
     <string name="dashboard_latest_workout">Latest workout</string>
     <string name="dashboard_previous_workout">Previous workout</string>
     <string name="dashboard_workout_empty_latest">Your latest imported workout will appear here.</string>

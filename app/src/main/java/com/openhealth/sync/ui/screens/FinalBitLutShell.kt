@@ -3,7 +3,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +34,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -417,6 +424,7 @@ private fun OnboardingScopeRow(palette: BitPalette, icon: ImageVector, text: Str
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun SummaryScreen(
     palette: BitPalette,
     state: DashboardUiState,
@@ -431,6 +439,15 @@ private fun SummaryScreen(
     val orderedCards = remember(cardLayoutVersion) {
         com.openhealth.sync.config.DashboardCardLayoutPrefs(context).orderedVisibleCards()
     }
+    // 2026 GUI pass 2 (B5): additive pull-to-refresh, not a replacement for
+    // the nav bar's own dedicated sync button (AugustSyncAction) -- both
+    // trigger the same onRefresh callback. isSyncing already exists as a
+    // param and doubles as PullToRefreshBox's isRefreshing.
+    PullToRefreshBox(
+        isRefreshing = isSyncing,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize()
+    ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 28.dp),
@@ -486,13 +503,36 @@ private fun SummaryScreen(
                     )
                 }
 
+                // 2026 GUI pass 2 (B1): light, unboxed section labels above
+                // runs of same-group cards, Apple Health style. Cards stay
+                // in the person's own custom order (orderedCards) -- this
+                // never re-sorts them by group, it only labels *consecutive*
+                // same-group runs as they already appear. If someone
+                // interleaves a workout card between two non-workout cards,
+                // each run gets its own (repeated) label rather than
+                // silently reordering their layout.
+                var previousGroup: DashboardCardGroup? = null
                 orderedCards.forEach { cardType ->
+                    val group = cardType.dashboardGroup()
+                    if (group != previousGroup) {
+                        item {
+                            Text(
+                                text = stringResource(group.labelRes),
+                                color = palette.secondaryText,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                            )
+                        }
+                        previousGroup = group
+                    }
                     item {
                         DashboardOrderedCard(palette = palette, state = state, cardType = cardType)
                     }
                 }
             }
         }
+    }
     }
 }
 
@@ -695,6 +735,25 @@ private fun dashboardCardLabel(type: com.openhealth.sync.config.DashboardCardTyp
     com.openhealth.sync.config.DashboardCardType.LAST_7_DAYS -> stringResource(R.string.dashboard_last_7_days_title)
     com.openhealth.sync.config.DashboardCardType.PERSONAL_RECORDS -> stringResource(R.string.insights_personal_records_title)
     com.openhealth.sync.config.DashboardCardType.STREAK -> stringResource(R.string.dashboard_card_streak_label)
+}
+
+/**
+ * 2026 GUI pass 2 (B1): which light-weight section a dashboard card falls
+ * under, purely a UI grouping choice -- deliberately not a field on
+ * DashboardCardType itself (config/ layer), since it's presentation-only
+ * and has no bearing on ordering, visibility, or persistence.
+ */
+private enum class DashboardCardGroup(val labelRes: Int) {
+    ACTIVITY(R.string.dashboard_section_activity),
+    WORKOUTS(R.string.dashboard_section_workouts)
+}
+
+private fun com.openhealth.sync.config.DashboardCardType.dashboardGroup(): DashboardCardGroup = when (this) {
+    com.openhealth.sync.config.DashboardCardType.WORKOUT_LATEST,
+    com.openhealth.sync.config.DashboardCardType.WORKOUT_PREVIOUS -> DashboardCardGroup.WORKOUTS
+    com.openhealth.sync.config.DashboardCardType.LAST_7_DAYS,
+    com.openhealth.sync.config.DashboardCardType.PERSONAL_RECORDS,
+    com.openhealth.sync.config.DashboardCardType.STREAK -> DashboardCardGroup.ACTIVITY
 }
 
 @Composable
@@ -984,9 +1043,9 @@ private fun WorkoutRecencyCard(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = label.uppercase(currentUiLocale()),
+                        text = label,
                         color = palette.secondaryText,
-                        fontWeight = FontWeight.Black,
+                        fontWeight = FontWeight.Medium,
                         fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -2178,6 +2237,24 @@ private fun MinimalMetricCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 2026 GUI pass 2 (B2): the icon (not the progress ring, which
+            // keeps its original trailing 52dp treatment) now renders as a
+            // leading badge before the title/value column -- Apple Health's
+            // list-row convention -- rather than a trailing decoration.
+            // Sized smaller (32dp/16dp vs the old 52dp/24dp) to read as a
+            // badge alongside text, not an equal-weight visual counterpart.
+            if (progress == null && icon != null) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(resolvedAccent.copy(alpha = if (hero) 1f else 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = if (hero) AugustColor.LimeInk else resolvedAccent, modifier = Modifier.size(16.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     text = title,
@@ -2219,16 +2296,6 @@ private fun MinimalMetricCard(
             }
             if (progress != null) {
                 ProgressRingChip(progress = progress, accent = resolvedAccent, size = 52.dp)
-            } else if (icon != null) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(resolvedAccent.copy(alpha = if (hero) 1f else 0.16f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = if (hero) AugustColor.LimeInk else resolvedAccent, modifier = Modifier.size(24.dp))
-                }
             }
         }
         if (progressText != null) {
@@ -2390,29 +2457,58 @@ private fun HeroMetricBlock(
  * Distinct from the "Connect Google Health" lock screen on purpose: we don't
  * yet know whether permissions are granted or not, so showing the lock
  * screen here would be actively misleading on every cold start.
+ *
+ * 2026 GUI pass 2 (B4): replaced the spinner + "Syncing..." text row with a
+ * shimmering placeholder shaped like the layout that's about to appear
+ * (StepsHeroCard, then a couple of metric-card rows) -- closer to Apple
+ * Health's own loading pattern. The status_syncing string is preserved as
+ * an accessible label on the container (announced by screen readers)
+ * rather than shown as visible text, since the whole point of a shape
+ * placeholder is not to show text where content will be.
  */
 @Composable
+private fun ShimmerBlock(modifier: Modifier = Modifier, onDark: Boolean, palette: BitPalette) {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val alpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmerAlpha"
+    )
+    // onDark picks whether this block sits on the hero card's always-dark
+    // NavyRaised background or a regular (theme-dependent) Surface/card
+    // background -- these are two different things: the hero card is dark
+    // regardless of the app's light/dark theme (per August's design), while
+    // a regular card follows palette.dark. Conflating the two would put a
+    // near-white shimmer block on the dark hero card in light theme.
+    val base = if (onDark) AugustColor.NavySoft else (if (palette.dark) AugustColor.NavySoft else AugustColor.Soft)
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(AugustRadius.Compact))
+            .background(base.copy(alpha = alpha))
+    )
+}
+
+@Composable
 private fun DashboardLoadingCard(palette: BitPalette) {
-    SoftCard(palette = palette) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 96.dp),
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            CircularProgressIndicator(
-                color = HealthAccent.mind(),
-                strokeWidth = 3.dp,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(Modifier.width(14.dp))
-            Text(
-                text = stringResource(R.string.status_syncing),
-                color = palette.secondaryText,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp
-            )
+    val loadingDescription = stringResource(R.string.status_syncing)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = loadingDescription },
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SoftCard(palette = palette, hero = true) {
+            ShimmerBlock(onDark = true, palette = palette, modifier = Modifier.fillMaxWidth().height(140.dp))
+        }
+        SoftCard(palette = palette) {
+            ShimmerBlock(onDark = false, palette = palette, modifier = Modifier.fillMaxWidth().height(96.dp))
+        }
+        SoftCard(palette = palette) {
+            ShimmerBlock(onDark = false, palette = palette, modifier = Modifier.fillMaxWidth().height(96.dp))
         }
     }
 }
