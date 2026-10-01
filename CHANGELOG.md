@@ -1,5 +1,80 @@
 # Changelog
 
+## 2026-09-25 -- GUI pass 2 (Apple Health alignment, CJM polish) + dead-code audit
+
+Three-script delivery covering all of `tasks.md`'s Part A (explicit asks),
+Part B (opinionated proposals, all six approved and built), and a follow-up
+GUI-layer dead-code audit. No Health Connect/Huawei permission, sync-window,
+or advanced-category changes anywhere in this pass; `SyncOrchestrator`/
+`SyncWorker`/`GoogleHealthManager`/`HuaweiHealthManager`/`AchievementsStore`'s
+streak calculation were not touched.
+
+**Part A:**
+- Bottom nav bar slimmed 64dp -> 56dp (icon tile, padding, and spacer
+  reduced together to avoid repeating the 2026-08-30 clipping regression;
+  tap targets verified >=48dp).
+- Dropped the redundant "Summary" title on the Today tab (`MinimalHeader`'s
+  `title` is now nullable); Settings' own header is unaffected.
+- Replaced the "engraved wood plaque" developer signature with a plain
+  `palette.secondaryText`-at-40%-alpha line paired with the app version
+  (`BuildConfig.VERSION_NAME`) -- also fixed a real bug in the process: the
+  old effect used fixed hex values with no light/dark theme variation.
+- `STREAK` dropped from `DashboardCardType.DEFAULT_ORDER` (default-off, not
+  a full removal) -- the enum entry, both `FinalBitLutShell.kt` `when`
+  branches, `StreakCard`, and `AchievementsStore`'s streak math are all
+  untouched; anyone with "streak" already in their saved card order keeps it.
+
+**Part B (all six approved):**
+- Light, unboxed "Activity"/"Workouts" section labels above consecutive
+  same-group dashboard cards -- deliberately does not re-sort cards by
+  group, only labels runs as they already appear in the user's own order.
+- `MinimalMetricCard`'s icon moved from a trailing 52dp decoration to a
+  leading 32dp badge (Apple Health list-row convention); the progress ring
+  variant is unchanged.
+- Nav bar selected-tab background pill removed entirely (this was actually
+  a two-layer pill -- an outer white container plus an inner lime icon
+  tile, not the single tile originally assumed) -- selection is now
+  tint-only (`AugustColor.Lime`), verified for contrast against the bar's
+  near-black background before landing.
+- `DashboardLoadingCard`'s spinner+text row replaced with a shimmering
+  placeholder shaped like the eventual Hero+metric-card layout;
+  `status_syncing` preserved as an accessibility label rather than visible
+  text.
+- Additive `PullToRefreshBox` on the Today tab's `LazyColumn`, alongside
+  (not replacing) the existing nav-bar sync button.
+- Extended the pass-1 sentence-case/weight cleanup to the one remaining
+  genuine ALL-CAPS+`FontWeight.Black` label found outside Today's original
+  scope (`WorkoutRecencyCard`'s label, which was `.uppercase()`'d) -- the
+  other 12 `FontWeight.Black` usages in the file are numeric/value displays
+  or button/badge text, individually verified as a different pattern and
+  intentionally left untouched.
+
+**Part C (dead-code audit, GUI layer only):**
+- Removed a dead `androidx.compose.foundation.layout.offset` import in
+  `FinalBitLutShell.kt`, orphaned by Part A's own `EngravedSignature`
+  rewrite.
+- Removed 13 dead `AugustColor` tokens (`Accent`, `AccentDark`,
+  `GrowthLime`, `AccentLight`, `SuccessBg`/`Fg`, `WarningBg`/`Fg`,
+  `NeutralBg`/`Fg`, `AccentStatusBg`/`Fg`, `GrowthStatusFg`) -- an earlier
+  design-system migration's compatibility aliases and semantic-status
+  colors, verified to have zero call sites anywhere including
+  `BitLutExpressiveTheme.kt`. `DarkPanel`/`DangerBg`/`DangerFg`/
+  `GrowthStatusBg` were also flagged by the first-pass sweep but are real
+  (`BitLutExpressiveTheme.kt`'s color schemes read all four) and were left
+  alone.
+- Removed 95 unused string resources (both `values/strings.xml` and
+  `values-ru/strings.xml`, parity verified before and after) -- orphaned
+  remnants of at least one earlier Today-tab/onboarding screen version that
+  predates the current `FinalBitLutShell.kt`, plus the unused template
+  `app_name` (the manifest's `android:label` is hardcoded to "BitLut", not
+  `@string/app_name`).
+- Explicitly did NOT remove `BitLutExpressiveTheme()` (real -- invoked as a
+  trailing lambda in `MainActivity.kt`, which a naive text search for
+  `BitLutExpressiveTheme(` misses) or any `getValue`/`setValue` imports
+  (real -- back `by remember { ... }` property-delegate syntax throughout).
+  Both were first-pass false positives, confirmed by manual re-verification
+  before this pass concluded anything was actually dead.
+
 ## 2026-09-16 (b) -- experiment: English-only fallback workout titles
 
 - **New candidate cause for the open corporate-reader "binder died" investigation** (`docs/BACKLOG.md`): fallback workout titles written to Health Connect -- used only when Huawei supplies no name of its own -- previously came from `HuaweiWorkoutTypeMapper.localizedDisplayName()`, which resolves via the app's active device locale (Russian on a Russian-locale device, English otherwise). Paulo observed the corporate reader's import failures coincide with BitLut's own fallback titles switching from English to Russian text.

@@ -21,9 +21,11 @@ import com.openhealth.sync.R
 //   Lime = primary action surface with Ink foreground
 //   Purple = focus, selection detail, and secondary interaction
 //
-// This file is the single token source of truth for Compose. Existing
-// Accent/GrowthLime names remain only as compatibility aliases so the
-// migration can stay surgical and avoid rewriting unrelated health-data UI.
+// This file is the single token source of truth for Compose. The migration
+// mentioned here (existing Accent/GrowthLime call sites moving onto this
+// file's semantic v3 names) completed some time ago; the compatibility
+// aliases themselves were removed in the 2026 GUI pass 2 audit once zero
+// call sites remained.
 
 internal object AugustColor {
     // August v3 core neutrals.
@@ -77,25 +79,25 @@ internal object AugustColor {
 
     // Compatibility aliases for incremental migration of existing call sites.
     // New UI code should prefer the semantic v3 names above.
-    val Accent = Purple
-    val AccentDark = PurpleDark
-    val GrowthLime = Lime
+    //
+    // 2026 GUI pass 2 audit: Accent/AccentDark/GrowthLime/AccentLight were
+    // this migration's original aliases -- verified zero call sites remain
+    // anywhere in the app (HealthAccent and direct AugustColor.* references
+    // fully replaced them), so the migration this comment describes is
+    // complete and they're removed. DarkPanel stays: it's still the one
+    // alias BitLutExpressiveTheme's dark scheme actually reads.
     val DarkPanel = NavyRaised
-    val AccentLight = Color(0xFF8B7DF8)
 
     // Semantic status colors remain independent from brand/action colors.
-    val SuccessBg = Color(0xFFDAF6DC)
-    val SuccessFg = Color(0xFF276131)
-    val WarningBg = Color(0xFFFFF0C9)
-    val WarningFg = Color(0xFF7B5813)
+    //
+    // 2026 GUI pass 2 audit: SuccessBg/SuccessFg/WarningBg/WarningFg/
+    // NeutralBg/NeutralFg/AccentStatusBg/AccentStatusFg/GrowthStatusFg were
+    // verified (zero references anywhere, including BitLutExpressiveTheme.kt)
+    // and removed. DangerBg/DangerFg/GrowthStatusBg stay: BitLutExpressiveTheme
+    // reads all three for its error/primaryContainer roles.
     val DangerBg = Color(0xFFFFF6F6)
     val DangerFg = Color(0xFFA43F3F)
-    val NeutralBg = Color(0xFFECECF0)
-    val NeutralFg = Color(0xFF777B88)
-    val AccentStatusBg = PurpleSoft
-    val AccentStatusFg = PurpleDark
     val GrowthStatusBg = Color(0xFFE7FF9D)
-    val GrowthStatusFg = Color(0xFF31410C)
 
     val BorderLight = Color(0x1C151728)
     val BorderDark = Color(0x1AFFFFFF)
