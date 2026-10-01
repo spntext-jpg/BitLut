@@ -163,6 +163,7 @@
     <string name="dashboard_goals_section_title">Дневные цели</string>
     <string name="goals_section_body">Задайте дневную цель по шагам для кольца прогресса и серии дней.</string>
     <string name="settings_signature">для вас старался пашенька</string>
+    <string name="settings_version_format">v%1$s</string>
     <string name="hours_unit">ч</string>
     <string name="workouts">Тренировки</string>
     <string name="recent_sessions">Последние сессии</string>
@@ -180,7 +181,6 @@
     <string name="toast_hc_launch_failed">Не удалось открыть экран разрешений Health Connect. Попробуйте ещё раз.</string>
     <string name="toast_battery_settings_launch_failed">Не удалось открыть настройки батареи. Попробуйте ещё раз.</string>
     <string name="tab_today">Сегодня</string>
-    <string name="summary_short_title">Сводка</string>
     <string name="huawei_pending_approval_title">Ждём подтверждения от Huawei</string>
     <string name="huawei_pending_approval_body">Это не ошибка. Huawei проверяет запрос на доступ к данным у каждого приложения, прежде чем синхронизация сможет заработать — это может занять несколько дней. BitLut заработает автоматически, как только заявка будет одобрена, делать ничего не нужно.</string>
     <string name="huawei_reason_privacy_not_accepted_title">Примите условия конфиденциальности Huawei Health</string>

@@ -31,8 +31,17 @@ enum class DashboardCardType(val key: String) {
     STREAK("streak");
 
     companion object {
+        // 2026 GUI pass 2: STREAK dropped from DEFAULT_ORDER (default-off,
+        // not a full removal) per product request. The enum entry, its two
+        // FinalBitLutShell.kt `when` branches, and the StreakCard composable
+        // all stay -- anyone who already has "streak" saved in their own
+        // order string (KEY_ORDER) keeps seeing it exactly as before, since
+        // fromKey()/orderedVisibleCards() only ever add missing *new* types
+        // to the end of an existing saved order, never remove a known one.
+        // This only changes what new users (or users who reset their order)
+        // see by default.
         val DEFAULT_ORDER: List<DashboardCardType> = listOf(
-            WORKOUT_LATEST, WORKOUT_PREVIOUS, LAST_7_DAYS, PERSONAL_RECORDS, STREAK
+            WORKOUT_LATEST, WORKOUT_PREVIOUS, LAST_7_DAYS, PERSONAL_RECORDS
         )
 
         fun fromKey(key: String): DashboardCardType? = values().firstOrNull { it.key == key }

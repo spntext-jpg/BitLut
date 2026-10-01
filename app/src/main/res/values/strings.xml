@@ -163,6 +163,7 @@
     <string name="dashboard_goals_section_title">Daily goals</string>
     <string name="goals_section_body">Set the daily steps target used by the progress ring and streak.</string>
     <string name="settings_signature">made with care by pashenka</string>
+    <string name="settings_version_format">v%1$s</string>
     <string name="hours_unit">h</string>
     <string name="workouts">Workouts</string>
     <string name="recent_sessions">Recent sessions</string>
@@ -180,7 +181,6 @@
     <string name="toast_hc_launch_failed">Couldn\'t open the Health Connect permissions screen. Please try again.</string>
     <string name="toast_battery_settings_launch_failed">Couldn\'t open battery settings. Please try again.</string>
     <string name="tab_today">Today</string>
-    <string name="summary_short_title">Summary</string>
     <string name="huawei_pending_approval_title">Waiting for Huawei\'s approval</string>
     <string name="huawei_pending_approval_body">This isn\'t a bug. Huawei reviews every app\'s data access request before it can start syncing — this can take a few days. BitLut will start working automatically the moment it\'s approved, with nothing for you to do in the meantime.</string>
     <string name="huawei_reason_privacy_not_accepted_title">Accept Huawei Health\'s privacy terms</string>

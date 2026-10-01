@@ -66,7 +66,15 @@ private val NAV_BAR_OUTER_VERTICAL_MARGIN = 8.dp
 // hierarchy (Refresh reads as the primary action) comes entirely from
 // Refresh being wider than a destination button, not taller.
 // BITLUT_NAVBAR_REBUILD_2026_08_30
-private val NAV_BAR_CONTROL_HEIGHT = 64.dp
+//
+// 2026 GUI pass 2: slimmed 64dp -> 56dp (Apple-style thinner bar), with the
+// icon tile/spacer/padding all reduced together rather than only the outer
+// height, to avoid repeating the exact clipping failure documented above.
+// Budget check: 56dp - 2*5dp padding = 46dp inner; content is a 24dp icon
+// tile + 3dp spacer + an 11sp label line (~13dp) = 40dp, leaving 6dp slack
+// -- comparable margin to the original 64dp design's 8dp slack, not a
+// zero-margin fit. Label font size (11sp) is unchanged.
+private val NAV_BAR_CONTROL_HEIGHT = 56.dp
 private val NAV_BAR_SYNC_ACTION_WIDTH = 84.dp
 
 /** Compact two-destination dock with one explicit sync action. */
@@ -121,7 +129,7 @@ internal fun AugustBottomNav(
                 // this pass. Translucency + a stronger shadow is the
                 // honest, dependency-free approximation.
                 .background(AugustColor.Navy.copy(alpha = 0.86f))
-                .padding(horizontal = 8.dp, vertical = 7.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -209,7 +217,7 @@ private fun AugustDestination(
         label = "destinationPressTilt"
     )
     val iconSize by animateDpAsState(
-        targetValue = if (selected) 18.dp else 17.dp,
+        targetValue = if (selected) 17.dp else 16.dp,
         animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
         label = "destinationIconSize"
     )
@@ -237,13 +245,13 @@ private fun AugustDestination(
                 role = Role.Tab,
                 onClick = onClick
             )
-            .padding(horizontal = 6.dp, vertical = 6.dp),
+            .padding(horizontal = 6.dp, vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
-                .size(26.dp)
+                .size(24.dp)
                 .clip(iconShape)
                 .background(iconTile),
             contentAlignment = Alignment.Center
@@ -255,7 +263,7 @@ private fun AugustDestination(
                 modifier = Modifier.size(iconSize)
             )
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         Text(
             text = label,
             color = contentColor,
