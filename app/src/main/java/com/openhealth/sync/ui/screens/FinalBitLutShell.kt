@@ -78,8 +78,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.automirrored.rounded.DirectionsRun
@@ -116,9 +114,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.health.connect.client.records.ExerciseSessionRecord
 
-internal enum class MainTab(val key: String, val icon: ImageVector) {
-    Today("tab_today", Icons.Rounded.Today),
-    Settings("tab_settings", Icons.Rounded.Settings)
+internal enum class MainTab(val key: String) {
+    Today("tab_today"),
+    Settings("tab_settings")
 }
 
 @Composable

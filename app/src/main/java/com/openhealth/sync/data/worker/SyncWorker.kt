@@ -431,6 +431,11 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 HomeWidget().updateAll(applicationContext)
             }
             freshSnapshot
+        } catch (e: CancellationException) {
+            // Cooperative cancellation must propagate: this block calls the
+            // suspend readDashboardSnapshot()/updateAll(), so swallowing it
+            // would let a cancelled worker keep running the steps after it.
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "Failed to refresh dashboard cache after background sync: ${e.message}", e)
             null

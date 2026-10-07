@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,16 +29,27 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -48,6 +60,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openhealth.sync.ui.theme.AugustColor
 import com.openhealth.sync.ui.theme.AugustMotion
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlinx.coroutines.delay
 
 private const val SECRET_TAP_COUNT = 5
 private const val SECRET_TAP_WINDOW_MS = 2000L
@@ -76,6 +92,26 @@ private val NAV_BAR_OUTER_VERTICAL_MARGIN = 8.dp
 // zero-margin fit. Label font size (11sp) is unchanged.
 private val NAV_BAR_CONTROL_HEIGHT = 56.dp
 private val NAV_BAR_SYNC_ACTION_WIDTH = 84.dp
+
+// BITLUT_NAV_GLYPHS_2026_10_06
+// Root cause of the "selected icon turns transparent" regression: the 2026 GUI
+// pass 2 (B3) removed the lime tile behind the selected icon but left the
+// selected icon tint at AugustColor.LimeInk. LimeInk == Ink == Navy (#151728),
+// the exact colour of the bar, so the selected glyph was dark-on-dark
+// (WCAG contrast 1.02 - 1.52 against the Navy@0.86 bar, depending on what
+// scrolls underneath) in BOTH themes: the bar is Navy in light and dark mode.
+// The glyphs are now drawn in code (see AugustNavGlyph) and only ever use
+// colours that were measured against the bar, worst case = lightest backdrop
+// (white behind the 14% show-through of the translucent bar):
+//   Lime #DFFF6A (selected)             10.36:1
+//   Lime at 72% alpha (idle)             6.22:1
+//   Tangerine #F28500 (pressed)          4.52:1 (WCAG non-text minimum is 3:1)
+// Against a black backdrop the same three colours measure 16.25 / 8.74 / 7.08.
+private val NAV_GLYPH_SIZE = 24.dp
+private val NAV_GLYPH_IDLE_COLOR = AugustColor.Lime.copy(alpha = 0.72f)
+// Keeps the orange press highlight on screen briefly after release so a quick
+// tap (finger down for ~80ms) is still visible instead of a sub-frame flash.
+private const val NAV_GLYPH_FLASH_HOLD_MS = 120L
 
 /** Compact two-destination dock with one explicit sync action. */
 @Composable
@@ -164,6 +200,16 @@ private fun AugustDestination(
     val pressed by interactionSource.collectIsPressedAsState()
     val focused by interactionSource.collectIsFocusedAsState()
     val shape = remember { RoundedCornerShape(22.dp) }
+    var tapFlash by remember { mutableStateOf(false) }
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            tapFlash = true
+        } else {
+            delay(NAV_GLYPH_FLASH_HOLD_MS)
+            tapFlash = false
+        }
+    }
+    val highlighted = pressed || tapFlash
     val label = when (tab) {
         MainTab.Today -> stringResource(R.string.tab_today)
         MainTab.Settings -> stringResource(R.string.tab_settings)
@@ -173,12 +219,12 @@ private fun AugustDestination(
     // has no background pill at all -- only a tint/weight change on
     // selection. Previously this button got a white rounded "container"
     // pill behind the whole control PLUS a separate lime tile behind just
-    // the icon when selected; both are removed here. Selected state is now
-    // carried entirely by content tint (icon + label switch to
-    // AugustColor.Lime) and the label's existing bold weight. Lime
-    // (luminance ~0.88) against the bar's near-black Navy background
-    // (luminance ~0) is extremely high contrast, so this reads clearly
-    // without needing a fill behind it.
+    // the icon when selected; both are removed. Selected state is carried
+    // by content colour (label switches to AugustColor.Lime, bold weight)
+    // and by the glyph itself (AugustNavGlyph: full Lime, heavier stroke,
+    // animated). No fill sits behind the control, so every colour used here
+    // must be bright enough to read directly on the Navy bar -- see the
+    // BITLUT_NAV_GLYPHS_2026_10_06 note above for the measured contrasts.
     val contentColor by animateColorAsState(
         targetValue = if (selected) AugustColor.Lime else AugustColor.DarkSecondaryText,
         animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
@@ -215,11 +261,6 @@ private fun AugustDestination(
         ),
         label = "destinationPressTilt"
     )
-    val iconSize by animateDpAsState(
-        targetValue = if (selected) 17.dp else 16.dp,
-        animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
-        label = "destinationIconSize"
-    )
 
     Column(
         modifier = modifier
@@ -247,17 +288,7 @@ private fun AugustDestination(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Box(
-            modifier = Modifier.size(24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = tab.icon,
-                contentDescription = label,
-                tint = if (selected) AugustColor.LimeInk else contentColor,
-                modifier = Modifier.size(iconSize)
-            )
-        }
+        AugustNavGlyph(tab = tab, selected = selected, highlighted = highlighted)
         Spacer(Modifier.height(3.dp))
         Text(
             text = label,
@@ -267,6 +298,148 @@ private fun AugustDestination(
             maxLines = 1
         )
     }
+}
+
+/**
+ * Bottom-nav glyphs, drawn on a 24x24 grid so they stay crisp at any density
+ * and can animate their own geometry (an ImageVector cannot).
+ *
+ * Colour: Lime when selected, Lime at 72% when idle (never dark -- the bar is
+ * Navy in both themes), Tangerine while pressed and for a short hold after.
+ * Motion: selecting overshoots a spring (calendar dot pops, gear turns one
+ * tooth); pressing squeezes the dot and kicks the gear / lifts the binders.
+ * BITLUT_NAV_GLYPHS_2026_10_06
+ */
+@Composable
+private fun AugustNavGlyph(
+    tab: MainTab,
+    selected: Boolean,
+    highlighted: Boolean
+) {
+    val color by animateColorAsState(
+        targetValue = when {
+            highlighted -> AugustColor.Tangerine
+            selected -> AugustColor.Lime
+            else -> NAV_GLYPH_IDLE_COLOR
+        },
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
+        label = "navGlyphColor"
+    )
+    val selectProgress by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 420f),
+        label = "navGlyphSelect"
+    )
+    val pressProgress by animateFloatAsState(
+        targetValue = if (highlighted) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = AugustMotion.PressSpringDampingRatio,
+            stiffness = AugustMotion.PressSpringStiffness
+        ),
+        label = "navGlyphPress"
+    )
+
+    Canvas(modifier = Modifier.size(NAV_GLYPH_SIZE)) {
+        val unit = size.minDimension / 24f
+        // Stroke eases from 1.7 to 2.2 grid units on selection (clamped so the
+        // spring overshoot never makes the line balloon).
+        val stroke = Stroke(
+            width = (1.7f + 0.5f * selectProgress.coerceIn(0f, 1f)) * unit,
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round
+        )
+        when (tab) {
+            MainTab.Today -> drawTodayGlyph(color, stroke, unit, selectProgress, pressProgress)
+            MainTab.Settings -> drawSettingsGlyph(color, stroke, unit, selectProgress, pressProgress)
+        }
+    }
+}
+
+/** Calendar page with binder rings and a "today" dot. */
+private fun DrawScope.drawTodayGlyph(
+    color: Color,
+    stroke: Stroke,
+    unit: Float,
+    select: Float,
+    press: Float
+) {
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(3.5f * unit, 5f * unit),
+        size = Size(17f * unit, 15.5f * unit),
+        cornerRadius = CornerRadius(4f * unit, 4f * unit),
+        style = stroke
+    )
+    drawLine(
+        color = color,
+        start = Offset(4f * unit, 10f * unit),
+        end = Offset(20f * unit, 10f * unit),
+        strokeWidth = stroke.width,
+        cap = StrokeCap.Round
+    )
+    // Binder rings lift slightly while pressed.
+    val lift = 1.2f * press * unit
+    drawLine(
+        color = color,
+        start = Offset(8f * unit, 2.8f * unit - lift),
+        end = Offset(8f * unit, 6.8f * unit - lift),
+        strokeWidth = stroke.width,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = color,
+        start = Offset(16f * unit, 2.8f * unit - lift),
+        end = Offset(16f * unit, 6.8f * unit - lift),
+        strokeWidth = stroke.width,
+        cap = StrokeCap.Round
+    )
+    // "Today" dot: grows on selection (spring overshoot = pop), squeezes on press.
+    val dotRadius = (1.5f + 0.9f * select - 0.35f * press) * unit
+    drawCircle(
+        color = color,
+        radius = dotRadius.coerceAtLeast(0f),
+        center = Offset(12f * unit, 15.25f * unit)
+    )
+}
+
+/** Eight-tooth gear with a centre hole. */
+private fun DrawScope.drawSettingsGlyph(
+    color: Color,
+    stroke: Stroke,
+    unit: Float,
+    select: Float,
+    press: Float
+) {
+    val centre = Offset(12f * unit, 12f * unit)
+    val gear = Path()
+    for (tooth in 0 until GEAR_TEETH) {
+        val mid = tooth * (360f / GEAR_TEETH)
+        val rootStart = polar(centre, GEAR_ROOT_RADIUS * unit, mid - GEAR_ROOT_HALF_ANGLE)
+        val tipStart = polar(centre, GEAR_TIP_RADIUS * unit, mid - GEAR_TIP_HALF_ANGLE)
+        val tipEnd = polar(centre, GEAR_TIP_RADIUS * unit, mid + GEAR_TIP_HALF_ANGLE)
+        val rootEnd = polar(centre, GEAR_ROOT_RADIUS * unit, mid + GEAR_ROOT_HALF_ANGLE)
+        if (tooth == 0) gear.moveTo(rootStart.x, rootStart.y) else gear.lineTo(rootStart.x, rootStart.y)
+        gear.lineTo(tipStart.x, tipStart.y)
+        gear.lineTo(tipEnd.x, tipEnd.y)
+        gear.lineTo(rootEnd.x, rootEnd.y)
+    }
+    gear.close()
+    // One full tooth step (45 degrees) on selection, an extra kick while pressed.
+    rotate(45f * select + 35f * press, centre) {
+        drawPath(path = gear, color = color, style = stroke)
+        drawCircle(color = color, radius = 2.9f * unit, center = centre, style = stroke)
+    }
+}
+
+private const val GEAR_TEETH = 8
+private const val GEAR_TIP_RADIUS = 9.4f
+private const val GEAR_ROOT_RADIUS = 7.2f
+private const val GEAR_TIP_HALF_ANGLE = 8f
+private const val GEAR_ROOT_HALF_ANGLE = 13f
+
+private fun polar(centre: Offset, radius: Float, degrees: Float): Offset {
+    val radians = (degrees * PI / 180.0).toFloat()
+    return Offset(centre.x + radius * cos(radians), centre.y + radius * sin(radians))
 }
 
 @Composable
