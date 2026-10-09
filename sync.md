@@ -829,6 +829,16 @@ Permission gates are now role-specific. Huawei import/export requires the Health
 
 Late-August/September 2026 Google investigation: Google Health 5.05 introduced a confirmed bug that could strand Health Connect sharing/permission toggles or lose the connection; Google Health 5.07 began rolling out 2026-08-28 with the official fix. No corresponding September Health Connect record-schema break was found. Health Connect's aggregate Activity reads are also affected by user-selected data-source priority, so a downstream reader using aggregates can prefer another overlapping source even when BitLut raw records exist.
 
+### 4.15 Google Health as the dashboard source: origin families (2026-10-08)
+
+The Google source (`HealthDataSource.GOOGLE_FIT`, label "Google Health") reads Health Connect records written by other apps and filters them by data origin. Two different apps now matter: Google Fit (`com.google.android.apps.fitness`) and the Google Health app, which is the renamed Fitbit app (`com.fitbit.FitbitMobile`; rollout began 2026-05-19). They are separate origins.
+
+- Daily totals (steps, distance, calories, minutes) keep reading ONE origin, Google Fit, because raw record sums across two apps double count.
+- Workout sessions are read from both origins (`DataSourcePrefs.selectedWorkoutOriginPackages`). Records arrive newest-first; a session from a different origin that overlaps an already-kept one by at least 80% of the shorter session is dropped (`GoogleHealthManager.dropCrossOriginDuplicateSessions`). Same-origin sessions are never touched. Huawei mode is a single origin (BitLut itself), so its behavior is unchanged.
+- Per-workout aggregates use the same origin family. Whether Health Connect de-duplicates overlapping steps/distance across the two origins inside `aggregate()` is not verified; if inflated per-workout metrics ever appear for Google workouts, check this first.
+- Symptom that led here: on a OnePlus 7 Pro with Google Health selected, steps imported but workouts did not. The cause is inferred from the verified package mismatch, not from a captured log. If workouts are still missing, `GoogleHealthManager.logWorkoutOriginDiagnosticOnce` writes one in-app log line per process listing the origins that own exercise sessions in Health Connect (30 days, one bounded read, existing permission).
+- Open question for a later pass, only with that evidence: steps recorded solely by the Google Health app would still be missed by the single-origin daily totals.
+
 ## 5. Orchestration: making an unattended background pipeline resilient
 
 Everything in this section exists because `readSnapshot()` +
@@ -1050,6 +1060,16 @@ the class, not the file. `syncStatus` (the specific success/error outcome
 message) is left driven only by the UI-triggered path, since that is the
 only one that actually observes and can meaningfully report a concrete
 result.
+
+### 5.7.1 The indicator follows the data, not just WorkManager (2026-10-08)
+
+Field observation: the "updating" capsule appeared and disappeared while the numbers changed a few seconds later. The capsule used to follow only `SyncUiState.isSyncing` (UI-triggered flag OR a RUNNING tagged worker), so a live Health Connect read that was still in flight kept no indicator alive. Now:
+
+- `DashboardUiState.isRefreshing` is true for exactly the lifetime of a live `DashboardViewModel.load()` (raised at the start of the coroutine, cleared by `invokeOnCompletion`, guarded by `loadGeneration` so a cancelled load cannot clear a newer one's flag).
+- The Summary capsule shows while `SyncUiState.isSyncing || DashboardUiState.isRefreshing`.
+- `SyncOrchestrator` calls `onDashboardRefresh()` before `onCompleted(true)`; `MainActivity.observeBackgroundSyncActivity()` refreshes the dashboard from cache on the RUNNING-to-idle transition of any tagged sync.
+- Lease collisions (`sync_already_running`) and their 8s/12s follow-up refreshes are unchanged: the capsule now stays up through the winner's RUNNING state and the refresh happens when it stops.
+- A manual Sync tap on an unreadable source is intercepted before any of this (`isSelectedSourceConnected()`), shows `SourceNoticeBanner`, and never starts the indicator. `triggerImmediateSync(announceUnavailableSource = false)` (used right after choosing a source in Settings) skips the sync silently instead of showing the banner.
 
 ### 5.8 Sync status indicator: alpha-only, fixed-height animation
 

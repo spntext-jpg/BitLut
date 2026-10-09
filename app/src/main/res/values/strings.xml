@@ -138,7 +138,10 @@
     <string name="insights_streak_days_other">%1$d days streak</string>
     <string name="data_source_section_title">Data source</string>
     <string name="data_source_huawei_title">Huawei Health</string>
-    <string name="data_source_google_fit_title">Google Fit</string>
+    <string name="data_source_google_fit_title">Google Health</string>
+    <string name="source_notice_title">Data source not connected</string>
+    <string name="source_notice_body">Please select it in Settings.</string>
+    <string name="source_notice_open_settings">Open Settings</string>
     <string name="onboarding_title">Why BitLut needs this</string>
     <string name="onboarding_body">To sync your Huawei Health data into Google Health Connect, BitLut needs permission to read and write a few activity metrics.</string>
     <string name="onboarding_scope_steps">Steps</string>

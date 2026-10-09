@@ -58,6 +58,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.unit.em
+import com.openhealth.sync.ui.SourceNotice
+import kotlinx.coroutines.delay
 import com.openhealth.sync.data.ActivitySessionData
 import com.openhealth.sync.data.HuaweiAuthFailureReason
 import com.openhealth.sync.data.PersonalRecord
@@ -139,6 +153,7 @@ fun FinalBitLutShell(
     onPermissionsOnboardingSeen: () -> Unit = {},
     showBatteryHint: Boolean = false,
     onOpenBatterySettings: () -> Unit = {},
+    onSourceNoticeDismissed: () -> Unit = {},
     importViewModel: ImportViewModel) {
     var selected by rememberSaveable { mutableStateOf(MainTab.Today) }
     var showArchiveImport by rememberSaveable { mutableStateOf(false) }
@@ -214,7 +229,7 @@ fun FinalBitLutShell(
                     palette, dashboardState, syncState.selectedDataSource, onRefresh, wrappedOnRequestGoogle,
                     onEditLayout = { showCardLayoutEditor = true },
                     cardLayoutVersion = cardLayoutVersion,
-                    isSyncing = syncState.isSyncing
+                    isSyncing = syncState.isSyncing || dashboardState.isRefreshing
                 )
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
@@ -225,6 +240,16 @@ fun FinalBitLutShell(
                     showBatteryHint = showBatteryHint,
                     onOpenBatterySettings = onOpenBatterySettings)
             }
+
+            SourceNoticeBanner(
+                notice = syncState.sourceNotice,
+                onOpenSettings = {
+                    selected = MainTab.Settings
+                    onSourceNoticeDismissed()
+                },
+                onDismiss = onSourceNoticeDismissed,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 
@@ -533,6 +558,94 @@ private fun SummaryScreen(
     }
 }
 
+// BITLUT_SOURCE_NOTICE_2026_10_08
+private const val SOURCE_NOTICE_VISIBLE_MS = 5_000L
+
+/**
+ * Top-of-screen notice shown when a Sync tap targets a source that cannot be
+ * read at all (for Huawei: HMS Core or Huawei Health missing, or BitLut not
+ * authorized). Slides in below the status bar (the Scaffold already supplies the
+ * inset), dismisses itself after [SOURCE_NOTICE_VISIBLE_MS], and opens Settings
+ * when tapped. Width is capped so it stays a card on tablets and landscape;
+ * text sizes are sp with bounded line counts, so large system font sizes wrap
+ * instead of clipping.
+ */
+@Composable
+private fun SourceNoticeBanner(
+    notice: SourceNotice?,
+    onOpenSettings: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Keyed on the notice id so a repeated tap restarts the countdown.
+    LaunchedEffect(notice?.id) {
+        if (notice != null) {
+            delay(SOURCE_NOTICE_VISIBLE_MS)
+            onDismiss()
+        }
+    }
+    AnimatedVisibility(
+        visible = notice != null,
+        enter = slideInVertically(animationSpec = tween(260)) { -it } + fadeIn(tween(220)),
+        exit = slideOutVertically(animationSpec = tween(200)) { -it } + fadeOut(tween(160)),
+        modifier = modifier
+    ) {
+        val shape = RoundedCornerShape(AugustRadius.Card)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .widthIn(max = 560.dp)
+                .fillMaxWidth()
+                .shadow(6.dp, shape)
+                .clip(shape)
+                .background(AugustColor.NavyRaised)
+                .border(1.dp, AugustColor.NavySoft, shape)
+                .clickable(
+                    onClickLabel = stringResource(R.string.source_notice_open_settings),
+                    onClick = onOpenSettings
+                )
+                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AugustColor.Tangerine.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.CloudOff,
+                    contentDescription = null,
+                    tint = AugustColor.Tangerine,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.source_notice_title),
+                    color = AugustColor.Surface,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.source_notice_body),
+                    color = AugustColor.DarkSecondaryText,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
 /** Dispatches to the right card composable for a DashboardCardType -- the reorderable set edited from the pencil icon. */
 @Composable
 private fun DashboardOrderedCard(palette: BitPalette, state: DashboardUiState, cardType: com.openhealth.sync.config.DashboardCardType) {
@@ -809,7 +922,14 @@ private fun SevenDayStat(
     Column(modifier = modifier) {
         Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 10.sp, maxLines = 2, lineHeight = 13.sp)
         Spacer(Modifier.height(5.dp))
-        Text(value, color = accent, fontWeight = FontWeight.Black, fontSize = 18.sp, maxLines = 1)
+        Text(
+            text = value,
+            color = accent,
+            fontWeight = FontWeight.Black,
+            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 18.sp, stepSize = 1.sp),
+            maxLines = 1,
+            softWrap = false
+        )
         if (detail.isNotBlank()) {
             Spacer(Modifier.height(2.dp))
             Text(detail, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2260,25 +2380,21 @@ private fun MinimalMetricCard(
                     fontSize = 13.sp
                 )
                 Spacer(Modifier.height(4.dp))
-                // Sprint (2026-07-09): fixed 56.sp overflowed once steps
-                // crossed 10,000 (e.g. "12 345" is wider than "9 999").
-                // Step the font size down for longer formatted values
-                // instead of letting it clip/ellipsize.
-                val valueFontSize = when {
-                    value.length > 7 -> 36.sp
-                    value.length > 5 -> 44.sp
-                    else -> 56.sp
-                }
+                // 2026-10-08: sized from the width actually available (TextAutoSize,
+                // 56sp down to 22sp) instead of a character-count table, which broke
+                // on narrow screens and larger system font sizes (a OnePlus 7 Pro showed
+                // "7..."). softWrap = false keeps the value on one line so overflow is
+                // measured rather than hidden behind a line break.
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = value,
                         color = valueColor,
                         fontWeight = FontWeight.Black,
-                        fontSize = valueFontSize,
-                        lineHeight = valueFontSize,
+                        autoSize = TextAutoSize.StepBased(minFontSize = 22.sp, maxFontSize = 56.sp, stepSize = 1.sp),
+                        lineHeight = 1.em,
                         letterSpacing = (-1.5).sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false,
                         modifier = Modifier.weight(1f, fill = false)
                     )
                     Spacer(Modifier.width(6.dp))
@@ -2405,11 +2521,14 @@ private fun StepsHeroCard(
 }
 
 /**
- * One big-number + small-unit pair inside [StepsHeroCard]. Font size steps
- * down for longer formatted values -- same overflow-safety rule
- * MinimalMetricCard already used (sprint 2026-07-09), reused here rather
- * than re-derived, since two narrower half-width columns are actually more
- * overflow-prone than MinimalMetricCard's single full-width value ever was.
+ * One big-number + small-unit pair inside [StepsHeroCard]. The number is sized
+ * by Compose's TextAutoSize from the width it is actually given (largest size
+ * that fits, 48sp down to 20sp), so it adapts to narrow phones, the system
+ * font-size and display-size settings, and split-screen. The previous
+ * character-count font table ignored the real width: on a OnePlus 7 Pro with
+ * larger system text, "7 842" was cut to "7..." because softWrap let the space
+ * become a line break. softWrap = false keeps the value on one line so the
+ * auto-sizer measures real overflow.
  */
 @Composable
 private fun HeroMetricBlock(
@@ -2417,22 +2536,17 @@ private fun HeroMetricBlock(
     unit: String,
     modifier: Modifier = Modifier
 ) {
-    val valueFontSize = when {
-        value.length > 7 -> 32.sp
-        value.length > 5 -> 40.sp
-        else -> 48.sp
-    }
     Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
                 color = AugustColor.Surface,
                 fontWeight = FontWeight.Black,
-                fontSize = valueFontSize,
-                lineHeight = valueFontSize,
+                autoSize = TextAutoSize.StepBased(minFontSize = 20.sp, maxFontSize = 48.sp, stepSize = 1.sp),
+                lineHeight = 1.em,
                 letterSpacing = (-1).sp,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
                 modifier = Modifier.weight(1f, fill = false)
             )
             Spacer(Modifier.width(4.dp))

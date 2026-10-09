@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 
 private const val TAG = "DashboardViewModel"
@@ -39,6 +40,12 @@ data class DashboardUiState(
     val permissionsChecked: Boolean = false,
     val isFromCache: Boolean = false,
     val lastUpdatedAtMs: Long = 0L,
+    /** True while a live Health Connect read started by [DashboardViewModel.load]
+     *  is still in flight. The Summary "sync in progress" capsule shows while
+     *  this OR SyncUiState.isSyncing is true, so it stays up until the numbers
+     *  on screen have actually been refreshed instead of vanishing when
+     *  WorkManager reports success and the data lands seconds later. */
+    val isRefreshing: Boolean = false,
     val stepsToday: Long = 0L,
     /** Sourced from [GoalPrefs] (v1.9.12), configurable in Settings. Defaults
      *  to [GoalPrefs.DEFAULT_STEPS_GOAL], matching the value this field was
@@ -281,6 +288,15 @@ class DashboardViewModel(
         val generation = ++loadGeneration
         if (force) loadJob?.cancel()
         loadJob = viewModelScope.launch {
+            // Keep the Summary capsule up for exactly as long as THIS live read
+            // is in flight. The generation guard stops a superseded (cancelled)
+            // load from clearing the flag that a newer load has just raised.
+            _state.update { it.copy(isRefreshing = true) }
+            coroutineContext.job.invokeOnCompletion { _ ->
+                if (generation == loadGeneration) {
+                    _state.update { it.copy(isRefreshing = false) }
+                }
+            }
             val hasPerms = try {
                 googleManager.hasDashboardReadPermissions()
             } catch (e: CancellationException) {

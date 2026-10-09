@@ -141,7 +141,10 @@
     <string name="insights_streak_days_ru_many">%1$d дней подряд</string>
     <string name="data_source_section_title">Источник данных</string>
     <string name="data_source_huawei_title">Huawei Health</string>
-    <string name="data_source_google_fit_title">Google Fit</string>
+    <string name="data_source_google_fit_title">Google Health</string>
+    <string name="source_notice_title">Источник данных не подключён</string>
+    <string name="source_notice_body">Пожалуйста, выберите его в настройках.</string>
+    <string name="source_notice_open_settings">Открыть настройки</string>
     <string name="onboarding_title">Зачем это нужно BitLut</string>
     <string name="onboarding_body">Чтобы синхронизировать данные Huawei Health с Google Health Connect, BitLut нужен доступ к нескольким показателям активности.</string>
     <string name="onboarding_scope_steps">Шаги</string>

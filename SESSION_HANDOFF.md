@@ -1,8 +1,8 @@
 # BitLut — Session Handoff
 
-**Current handoff:** 2026-09-25
+**Current handoff:** 2026-10-08
 
-**Repository state:** 2026-09-11 modernization baseline plus the 2026-09-16 Health Connect permission/cache recovery, plus the 2026-09-25 GUI pass 2 (Apple Health alignment/CJM polish, Parts A+B+dead-code audit -- see CHANGELOG.md for the full breakdown). Local verification uses `:app:compileDebugKotlin`, full assemble/lint remains in GitHub Actions.
+**Repository state:** 2026-09-11 modernization baseline plus the 2026-09-16 Health Connect permission/cache recovery, plus the 2026-09-25 GUI pass 2 (Apple Health alignment/CJM polish, Parts A+B+dead-code audit -- see CHANGELOG.md for the full breakdown), plus the 2026-10-08 OnePlus 7 Pro field-test fixes (adaptive number text, Google Health workouts, source-not-connected notice, refresh-aware sync indicator). Local verification uses `:app:compileDebugKotlin`, full assemble/lint remains in GitHub Actions.
 
 ## Source of truth
 
@@ -97,6 +97,15 @@ The release workflow should keep an early `checkReleaseAarMetadata` gate before 
 - Observer parameter naming and annotation-target warnings were cleaned.
 - Deprecated manual system-bar color writes were removed; `enableEdgeToEdge()` remains the owner.
 - Do not introduce a lint baseline or suppress new lint failures merely to unblock CI.
+
+## 2026-10-08 OnePlus 7 Pro field-test fixes
+
+- Numbers that can outgrow their slot use `Text(autoSize = TextAutoSize.StepBased(...))` with `softWrap = false` -- never a character-count font table (that table, plus soft wrapping at the space in "7 842", caused the "7..." truncation). Applied to `HeroMetricBlock`, `MinimalMetricCard`, `SevenDayStat`.
+- Google Health = the renamed Fitbit app (`com.fitbit.FitbitMobile`), a different Health Connect origin from Google Fit (`com.google.android.apps.fitness`). Workout sessions (and per-workout aggregates) are read from both origins with 80%-overlap cross-origin de-duplication; daily totals still use the single Google Fit origin. Enum/storage value stays `google_fit`; only the label is "Google Health".
+- OPEN, needs a device log: whether this fully restores workouts. If still empty, the in-app log holds one line per process listing the origins that own exercise sessions in Health Connect (`GoogleHealthManager.logWorkoutOriginDiagnosticOnce`). Do not widen daily totals to a second origin without that evidence (double-count risk).
+- Explicit Sync tap on an unconnected source shows `SourceNoticeBanner` (top, auto-dismiss 5s, tap opens Settings); automatic syncs and the follow-up sync after choosing a source stay silent.
+- Summary capsule = `SyncUiState.isSyncing || DashboardUiState.isRefreshing`; orchestrator refreshes before completing; `MainActivity` refreshes from cache when a background sync stops running.
+- Not verified in the sandbox (no Android SDK): that `Text(autoSize = ...)`, `Icons.Rounded.CloudOff` and the other new APIs compile against the project's Compose BOM, and how any of this looks on screen. The user's Gradle build and eyes are the only gates.
 
 ## Huawei-specific constraints
 

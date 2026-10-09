@@ -29,8 +29,9 @@ Current top-priority goal: lift the Huawei Health Kit 100-user test-phase cap, a
 - `DashboardCardLayoutPrefs` is the sole dashboard card order/visibility layer.
 - `GoalPrefs` stores the steps goal only.
 - August colors and system light/dark themes remain the design baseline; surfaces are now quieter and flatter.
-- Bottom navbar: all controls share one common height (64dp); Refresh reads as primary via width (84dp pill), not height.
+- Bottom navbar: all controls share one common height (56dp, verified against `GlassNavigation.kt`); Refresh reads as primary via width (84dp pill), not height.
 - Codespaces patch scripts run a local compile check only (`:app:compileDebugKotlin`); the full `assembleDebug`/`lintDebug` build runs in GitHub Actions, not locally. See "Local checks vs. CI build" below.
+- 2026-10-08 (OnePlus 7 Pro field test): Google source reads workout sessions from two Health Connect origins (Google Fit + Google Health/Fitbit, `DataSourcePrefs.selectedWorkoutOriginPackages`) while daily totals keep one origin; the Summary capsule follows `SyncUiState.isSyncing || DashboardUiState.isRefreshing`; an unconnected source on an explicit Sync tap shows `SourceNoticeBanner`. See CHANGELOG.md.
 
 ## Architecture anchors
 
@@ -64,6 +65,8 @@ The corporate wellness app started reliably importing BitLut-origin workouts aft
 - One obvious primary action per group; Settings primary action is `Sync now`.
 - Icon-only actions require content descriptions.
 - Missing workout metrics are omitted, never replaced with invented zeroes.
+- Numbers that can outgrow their slot use `Text(autoSize = TextAutoSize.StepBased(...))` with `softWrap = false`, never a character-count font table. Design for large system font sizes, narrow phones, tablets and split-screen: bounded `maxLines` plus sp sizes, and `widthIn(max = ...)` for overlay cards.
+- A manual Sync tap on a source that cannot be read shows the top `SourceNoticeBanner`; it is never a silent no-op. Visible text follows the device language through string resources (RU on Russian devices, EN otherwise), always added to both `values` and `values-ru`.
 
 ## Localization contract
 

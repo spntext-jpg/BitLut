@@ -1,9 +1,10 @@
 # BitLut Backlog
 
-Updated: 2026-09-16 (b)
+Updated: 2026-10-08
 
 ## Highest priority
 
+- **Open verification: Google Health workouts (2026-10-08, OnePlus 7 Pro).** Workout sessions are now read from Google Fit AND Google Health (`com.fitbit.FitbitMobile`) origins; confirm on the device that workouts appear. If not, read the one-time in-app log line listing the exercise-session origins in Health Connect and adjust the origin family from that evidence. Do not extend daily totals to a second origin without it.
 - **Open verification: corporate wellness app sync failures ("binder died" / rate-limit errors after ~2 minutes), reported late August/early September 2026.** In addition to the Google Health 5.05 connection regression (fixed in 5.07), code review found a concrete BitLut churn amplifier: every 30-minute daily-step reconcile deleted all BitLut `StepsRecord`s across the 7-day Huawei window, including workout-scoped Steps introduced on 2026-08-30, then recreated them. The 2026-09-16 v2 fix removes that range delete, gives unchanged daily totals stable versions, and defers Health Connect binder failures to WorkManager backoff. Phone verification is still required before calling this incident resolved; do not change workout serialization/metadata meanwhile.
 - **New candidate cause added to the same open investigation (2026-09-16 (b)): fallback workout-title language.** Paulo observed the corporate reader's failures coincide with BitLut's fallback workout titles (used only when Huawei supplies no name) switching from English to Russian text. As an experiment, `HuaweiWorkoutTypeMapper.exportDisplayName()` now always writes English fallback titles to Health Connect regardless of device locale, while the existing `localizedDisplayName()` (dashboard-only) is unchanged. Not yet confirmed -- awaiting a real-device retest with the corporate reader. If this does not resolve the failures, revert the two call sites in `HuaweiHealthManager.kt`/`HuaweiExportParser.kt` back to `localizedDisplayName()`.
 - **Scaling: submit Huawei Health Kit Verification** to lift the 100-user test-phase cap -- the top current scaling goal. See `docs/SCALING_ROADMAP.md` section 2 for the concrete action items (~15 working day review, no code changes required).

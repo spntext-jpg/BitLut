@@ -217,6 +217,7 @@ class MainActivity : ComponentActivity() {
                     },
                     showBatteryHint = showBatteryHint,
                     onOpenBatterySettings = { openBatteryOptimizationSettings() },
+                    onSourceNoticeDismissed = { syncViewModel.dismissSourceNotice() },
                     importViewModel = importViewModel
                 )
             }
@@ -324,8 +325,9 @@ class MainActivity : ComponentActivity() {
 
         // Refresh immediately in either mode. Huawei mode imports into Health
         // Connect; Google Fit mode skips Huawei and refreshes the selected
-        // source cache/widget only.
-        triggerImmediateSync()
+        // source cache/widget only. Not announced as a missing source: the
+        // person is in Settings choosing it right now.
+        triggerImmediateSync(announceUnavailableSource = false)
     }
 
     // 2026-09: periodic-sync and evening-reminder scheduling moved to
@@ -361,12 +363,21 @@ class MainActivity : ComponentActivity() {
      */
     // BITLUT_OBSERVE_BACKGROUND_SYNC_ACTIVITY_2026_08_31
     private fun observeBackgroundSyncActivity() {
+        var backgroundSyncWasActive = false
         WorkManager.getInstance(applicationContext)
             .getWorkInfosByTagLiveData(HuaweiConfig.SYNC_ACTIVITY_TAG)
             .observe(this) { infos ->
                 val active = infos.orEmpty().any { info ->
                     info.state == WorkInfo.State.RUNNING
                 }
+                // A background (periodic or deferred-manual) sync just finished while
+                // the app is open: pull its fresh cache into the dashboard in the same
+                // step that clears the indicator, so the capsule never ends before the
+                // numbers change.
+                if (backgroundSyncWasActive && !active) {
+                    dashboardViewModel.refreshFromCache()
+                }
+                backgroundSyncWasActive = active
                 syncViewModel.setBackgroundSyncActive(active)
             }
     }
@@ -418,13 +429,43 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun triggerImmediateSync() {
+    /**
+     * Cheap, synchronous "can the selected source be read at all?" check for an
+     * explicit Sync tap. Huawei needs HMS Core, Huawei Health and the stored
+     * authorization flag (all local reads). Health Connect permissions are NOT
+     * checked here: SyncOrchestrator already reports those through
+     * onMissingPermissions, which opens the permission flow.
+     */
+    private fun isSelectedSourceConnected(): Boolean =
+        when ((application as SyncApplication).container.dataSourcePrefs.selected()) {
+            HealthDataSource.HUAWEI_HEALTH ->
+                HmsCoreHelper.isInstalled(this) &&
+                    HmsCoreHelper.isHuaweiHealthInstalled(this) &&
+                    syncViewModel.huaweiHealthManager.isAuthorized()
+            HealthDataSource.GOOGLE_FIT -> true
+        }
+
+    /**
+     * [announceUnavailableSource] is true for an explicit Sync tap (the person is
+     * asking for a refresh and deserves to hear why nothing will happen) and false
+     * for the follow-up sync after choosing a source in Settings, where the person
+     * is already on the screen the notice would send them to.
+     */
+    private fun triggerImmediateSync(announceUnavailableSource: Boolean = true) {
         // Do not enqueue another manual WorkRequest while any sync is already
         // running. This is intentionally checked before launching the coroutine so
         // repeated taps cannot queue extra work during the UI/WorkManager state gap.
         // The navbar still receives the tap and plays its press/release animation.
         if (syncViewModel.uiState.value.isSyncing) {
             AppLogger.i("MainActivity", "Manual sync tap ignored: sync already in progress")
+            return
+        }
+        // An explicit Sync tap on a source that cannot be read at all used to be a
+        // silent no-op (SyncWorker degrades to GracefulNoop). Say what is wrong and
+        // where to fix it instead.
+        if (!isSelectedSourceConnected()) {
+            AppLogger.i("MainActivity", "Manual sync blocked: selected source is not connected")
+            if (announceUnavailableSource) syncViewModel.showSourceNotConnectedNotice()
             return
         }
         if (!manualSyncTriggerInFlight.compareAndSet(false, true)) {

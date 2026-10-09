@@ -88,8 +88,10 @@ class SyncOrchestrator(
                             }
                         } else {
                             AppLogger.i(TAG, "Manual sync completed successfully (reason=$reason)")
-                            onCompleted(true)
+                            // Land the fresh numbers first, then end the indicator, so the
+                            // capsule never disappears before the data it announces.
                             onDashboardRefresh()
+                            onCompleted(true)
                         }
                     }
                     WorkInfo.State.FAILED,

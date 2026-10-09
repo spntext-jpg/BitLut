@@ -22,6 +22,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** One-shot, auto-dismissing "data source not connected" notice. [id] restarts the dismiss timer on repeat taps. */
+data class SourceNotice(val id: Long)
+
 data class SyncUiState(
     val isGoogleAvailable: Boolean = false,
     val showImportScreen: Boolean = false,
@@ -42,7 +45,8 @@ data class SyncUiState(
     val isUiTriggeredSyncing: Boolean = false,
     val isBackgroundSyncActive: Boolean = false,
     val syncStatus: String = "sync_status_idle",
-    val lastSyncTime: String = "sync_no_data"
+    val lastSyncTime: String = "sync_no_data",
+    val sourceNotice: SourceNotice? = null
 ) {
     /**
      * True while the "Syncing..." indicator should show. Previously this was
@@ -116,6 +120,15 @@ class SyncViewModel(
 
     fun showImportScreen() { _uiState.update { it.copy(showImportScreen = true) } }
     fun hideImportScreen() { _uiState.update { it.copy(showImportScreen = false) } }
+
+    /** Shown when an explicit Sync tap targets a source that cannot be read at all. */
+    fun showSourceNotConnectedNotice() {
+        _uiState.update { it.copy(sourceNotice = SourceNotice(SystemClock.elapsedRealtime())) }
+    }
+
+    fun dismissSourceNotice() {
+        _uiState.update { it.copy(sourceNotice = null) }
+    }
 
     fun setDataSource(source: HealthDataSource) {
         dataSourcePrefs.setSelected(source)

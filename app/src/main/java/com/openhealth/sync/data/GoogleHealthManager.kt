@@ -30,6 +30,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -47,6 +48,8 @@ private const val WORKOUT_DISTANCE_QUERY_PADDING_SECONDS = 2L * 60L * 60L
 private const val MAX_WORKOUT_DISTANCE_SOURCE_RECORD_MS = 3L * 60L * 60L * 1000L
 private const val MIN_RECOVERED_WORKOUT_DISTANCE_METERS = 25.0
 private const val READ_PAGE_SIZE = 1000
+/** Share of the shorter session two different origins must overlap to count as one workout. */
+private const val CROSS_ORIGIN_DUPLICATE_OVERLAP = 0.8
 /** Sprint 2026-07-08: single quick retry delay for a transient permission-
  *  check failure -- see [GoogleHealthManager.grantedPermissionsOrEmpty]. */
 private const val TRANSIENT_PERMISSION_RETRY_DELAY_MS = 400L
@@ -161,6 +164,80 @@ class GoogleHealthManager(
     private fun selectedDataOrigins(): Set<DataOrigin> = setOf(
         DataOrigin(dataSourcePrefs.selectedOriginPackage(context.packageName))
     )
+
+    /**
+     * Origins allowed to own workout sessions. Same as [selectedDataOrigins] for
+     * Huawei/BitLut; for Google it also includes the Google Health app. Used for
+     * session reads and per-session aggregates only -- daily totals keep the
+     * single selected origin so two apps are never summed twice.
+     */
+    private fun selectedWorkoutDataOrigins(): Set<DataOrigin> =
+        dataSourcePrefs.selectedWorkoutOriginPackages(context.packageName)
+            .map { DataOrigin(it) }
+            .toSet()
+
+    /**
+     * Fit and Google Health can each record or mirror the same workout. Records
+     * arrive newest-first; a record is dropped when a record from a *different*
+     * origin that was already kept overlaps at least
+     * [CROSS_ORIGIN_DUPLICATE_OVERLAP] of the shorter session. Same-origin
+     * sessions are never touched, so single-origin (Huawei/BitLut) reads are
+     * unchanged.
+     */
+    private fun dropCrossOriginDuplicateSessions(records: List<ExerciseSessionRecord>): List<ExerciseSessionRecord> {
+        if (records.size < 2) return records
+        if (records.map { it.metadata.dataOrigin.packageName }.distinct().size < 2) return records
+
+        val kept = ArrayList<ExerciseSessionRecord>(records.size)
+        for (candidate in records) {
+            val candidateOrigin = candidate.metadata.dataOrigin.packageName
+            val candidateStart = candidate.startTime.toEpochMilli()
+            val candidateEnd = candidate.endTime.toEpochMilli()
+            val duplicate = kept.any { other ->
+                if (other.metadata.dataOrigin.packageName == candidateOrigin) return@any false
+                val otherStart = other.startTime.toEpochMilli()
+                val otherEnd = other.endTime.toEpochMilli()
+                val overlap = minOf(candidateEnd, otherEnd) - maxOf(candidateStart, otherStart)
+                val shorter = minOf(candidateEnd - candidateStart, otherEnd - otherStart)
+                shorter > 0L && overlap.toDouble() / shorter.toDouble() >= CROSS_ORIGIN_DUPLICATE_OVERLAP
+            }
+            if (!duplicate) kept += candidate
+        }
+        return kept
+    }
+
+    private val workoutOriginDiagnosticLogged = AtomicBoolean(false)
+
+    /**
+     * Evidence for the next session if the Google source still shows no workouts:
+     * logs, once per process, which data origins actually own exercise sessions
+     * in Health Connect. Uses the already-granted ExerciseSession read permission
+     * (no new permission or category) and a single bounded read.
+     */
+    private suspend fun logWorkoutOriginDiagnosticOnce(client: HealthConnectClient) {
+        if (isHuaweiBridgeSourceSelected()) return
+        if (!workoutOriginDiagnosticLogged.compareAndSet(false, true)) return
+        try {
+            val start = LocalDate.now().minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val origins = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = ExerciseSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, Instant.now()),
+                    ascendingOrder = false,
+                    pageSize = 100
+                )
+            ).records.groupingBy { it.metadata.dataOrigin.packageName }.eachCount()
+            AppLogger.i(
+                TAG,
+                "Google source found no workouts for ${selectedWorkoutDataOrigins().map { it.packageName }}; " +
+                    "exercise-session origins present in Health Connect (30d): $origins"
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "Workout origin diagnostic failed: ${e.message}")
+        }
+    }
 
     private fun isHuaweiBridgeSourceSelected(): Boolean =
         dataSourcePrefs.selectedOriginPackage(context.packageName) == context.packageName
@@ -1057,6 +1134,7 @@ class GoogleHealthManager(
             // This keeps all insight cards consistent with the raw records that
             // were just written, avoiding Health Connect aggregate-cache lag.
             val recentWorkouts = readRecentWorkouts(200)
+            if (recentWorkouts.isEmpty()) logWorkoutOriginDiagnosticOnce(client)
             val activityWindow = readDailyActivitySummaries(
                 client = client,
                 daysBack = DASHBOARD_HISTORY_DAYS,
@@ -1122,7 +1200,7 @@ class GoogleHealthManager(
                         ElevationGainedRecord.ELEVATION_GAINED_TOTAL
                     ),
                     timeRangeFilter = TimeRangeFilter.between(start, end),
-                    dataOriginFilter = selectedDataOrigins()
+                    dataOriginFilter = selectedWorkoutDataOrigins()
                 )
             )
 
@@ -1564,9 +1642,10 @@ class GoogleHealthManager(
                 client = client,
                 recordType = ExerciseSessionRecord::class,
                 timeRangeFilter = TimeRangeFilter.between(start, end),
-                dataOriginFilter = selectedDataOrigins(),
+                dataOriginFilter = selectedWorkoutDataOrigins(),
                 pageSize = limit.coerceIn(1, 100)
             )
+                .let { dropCrossOriginDuplicateSessions(it) }
                 .take(limit)
                 .map { record ->
                     val startTimeMs = record.startTime.toEpochMilli()
