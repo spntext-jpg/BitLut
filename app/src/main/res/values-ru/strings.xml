@@ -109,7 +109,6 @@
     <string name="battery_optimization_button">Открыть настройки батареи</string>
 <string name="kcal_unit">ккал</string>
     <string name="distance_today_value">%1$s км</string>
-    <string name="distance_unit_km">км</string>
     <string name="updated_just_now">Обновлено только что</string>
     <string name="updated_minutes_ago">Обновлено %1$d мин назад</string>
     <string name="updated_hours_ago">Обновлено %1$d ч назад</string>

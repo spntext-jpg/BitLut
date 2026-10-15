@@ -518,10 +518,44 @@ private fun SummaryScreen(
                         title = stringResource(R.string.steps_today),
                         stepsValue = formatNumber(state.stepsToday),
                         stepsUnit = stringResource(R.string.steps_unit),
-                        distanceValue = formatOneDecimal(state.distanceMeters / 1000.0),
-                        distanceUnit = stringResource(R.string.distance_unit_km),
+                        goalValue = state.stepsGoal.takeIf { it > 0 }?.let { formatNumber(it) },
                         progress = state.stepsProgress,
-                        progressText = stepsGoalProgressText(state.stepsToday, state.stepsGoal)
+                        progressText = stepsGoalProgressText(state.stepsToday, state.stepsGoal),
+                        stats = listOf(
+                            HeroStat(
+                                icon = Icons.AutoMirrored.Rounded.DirectionsWalk,
+                                tint = AugustColor.Purple,
+                                label = stringResource(R.string.distance_short_title),
+                                value = stringResource(
+                                    R.string.distance_today_value,
+                                    formatOneDecimal(state.distanceMeters / 1000.0)
+                                )
+                            ),
+                            HeroStat(
+                                icon = Icons.Rounded.LocalFireDepartment,
+                                tint = AugustColor.Tangerine,
+                                label = stringResource(R.string.workout_stat_calories_label),
+                                // 0 means "no calorie data" far more often than "burned
+                                // nothing" (source-dependent), so show a dash, not 0 kcal.
+                                value = if (state.caloriesKcal > 0.0) {
+                                    stringResource(
+                                        R.string.workout_calories_value,
+                                        formatNumber(Math.round(state.caloriesKcal))
+                                    )
+                                } else {
+                                    stringResource(R.string.no_data_short)
+                                }
+                            ),
+                            HeroStat(
+                                icon = Icons.Rounded.Schedule,
+                                tint = AugustColor.Lime,
+                                label = stringResource(R.string.dashboard_section_workouts),
+                                value = stringResource(
+                                    R.string.dashboard_workout_minutes_value,
+                                    state.workoutMinutesToday
+                                )
+                            )
+                        )
                     )
                 }
 
@@ -2446,68 +2480,112 @@ private fun MinimalMetricCard(
  * DashboardOrderedCard, etc.) -- this remains a dedicated Hero-only
  * composable.
  */
+/**
+ * One tile in the hero card's bottom row. 2026-10-14 home-screen redesign:
+ * only activity metrics BitLut can really read (distance, calories, workout
+ * time). No heart-rate/sleep/SpO2 tiles -- those scopes are permanently
+ * unavailable to an individual Huawei developer account.
+ */
+private data class HeroStat(
+    val icon: ImageVector,
+    val tint: Color,
+    val label: String,
+    val value: String
+)
+
+/**
+ * Steps hero, 2026-10-14 redesign (designer's mockup, Claude variant): small
+ * label + goal-percent pill, one big number with the goal beside it, a pill
+ * progress bar, the "to go" line, then a row of [HeroStat] tiles. Only
+ * existing August tokens are used; the hero stays Navy in light and dark.
+ */
 @Composable
 private fun StepsHeroCard(
     palette: BitPalette,
     title: String,
     stepsValue: String,
     stepsUnit: String,
-    distanceValue: String,
-    distanceUnit: String,
+    goalValue: String?,
     progress: Float?,
-    progressText: String?
+    progressText: String?,
+    stats: List<HeroStat>
 ) {
+    val safeProgress = progress?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
     SoftCard(
         palette = palette,
         modifier = Modifier.fillMaxWidth(),
         hero = true
     ) {
-        Text(
-            text = title,
-            color = AugustColor.DarkSecondaryText,
-            fontWeight = FontWeight.Medium,
-            fontSize = 14.sp
-        )
-        Spacer(Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(20.dp)
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (progress != null) {
-                ProgressRingChip(
-                    progress = progress,
-                    accent = AugustColor.Lime,
-                    size = 108.dp,
-                    strokeWidth = 9.dp,
-                    centerText = null
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                HeroMetricBlock(value = stepsValue, unit = stepsUnit)
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = title,
+                color = AugustColor.DarkSecondaryText,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            if (safeProgress != null) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(AugustRadius.Pill))
+                        .background(AugustColor.Tangerine.copy(alpha = 0.18f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
                     Text(
-                        text = distanceValue,
-                        color = AugustColor.Surface,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 18.sp,
+                        text = "${(safeProgress * 100).toInt()}%",
+                        color = AugustColor.Tangerine,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
                         maxLines = 1
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = distanceUnit,
-                        color = AugustColor.DarkSecondaryText,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        modifier = Modifier.padding(bottom = 2.dp)
                     )
                 }
             }
         }
-        if (progressText != null) {
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            HeroMetricBlock(
+                value = stepsValue,
+                unit = stepsUnit,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (goalValue != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "/ $goalValue",
+                    color = AugustColor.DarkSecondaryText,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+        }
+        if (safeProgress != null) {
             Spacer(Modifier.height(14.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(AugustRadius.Pill))
+                    .background(AugustColor.Surface.copy(alpha = 0.12f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(safeProgress)
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(AugustRadius.Pill))
+                        .background(AugustColor.Lime)
+                )
+            }
+        }
+        if (progressText != null) {
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = progressText,
                 color = AugustColor.DarkSecondaryText,
@@ -2517,6 +2595,57 @@ private fun StepsHeroCard(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        if (stats.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                stats.forEach { stat ->
+                    HeroStatTile(stat = stat, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Value text is sized by TextAutoSize from the width the tile really gets
+ * (three tiles share the hero's inner width), so "1 245 kcal" shrinks
+ * instead of clipping on narrow phones or large system font sizes.
+ */
+@Composable
+private fun HeroStatTile(stat: HeroStat, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(AugustRadius.Control))
+            .background(AugustColor.NavySoft)
+            .padding(horizontal = 10.dp, vertical = 12.dp)
+    ) {
+        Icon(
+            imageVector = stat.icon,
+            contentDescription = null,
+            tint = stat.tint,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stat.value,
+            color = AugustColor.Surface,
+            fontWeight = FontWeight.Bold,
+            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 16.sp, stepSize = 1.sp),
+            maxLines = 1,
+            softWrap = false
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = stat.label,
+            color = AugustColor.DarkSecondaryText,
+            fontWeight = FontWeight.Medium,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -2613,7 +2742,7 @@ private fun DashboardLoadingCard(palette: BitPalette) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SoftCard(palette = palette, hero = true) {
-            ShimmerBlock(onDark = true, palette = palette, modifier = Modifier.fillMaxWidth().height(140.dp))
+            ShimmerBlock(onDark = true, palette = palette, modifier = Modifier.fillMaxWidth().height(244.dp))
         }
         SoftCard(palette = palette) {
             ShimmerBlock(onDark = false, palette = palette, modifier = Modifier.fillMaxWidth().height(96.dp))
