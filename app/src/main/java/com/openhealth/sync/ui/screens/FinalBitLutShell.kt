@@ -478,6 +478,25 @@ private fun SummaryScreen(
     val orderedCards = remember(cardLayoutVersion) {
         com.openhealth.sync.config.DashboardCardLayoutPrefs(context).orderedVisibleCards()
     }
+    // 2026-10-16 (stage 3): the greeting row and the freshness/sync line live
+    // inside the dark hero panel in every state (locked, loading, loaded), so the
+    // Sync button is never missing. Each state hands this slot to its own hero card.
+    val panelHeader: @Composable () -> Unit = {
+        TodayPanelHeader(
+            // BitLut has no account or name, so the greeting carries none.
+            greeting = greetingText(),
+            status = formatDashboardSourceStatus(
+                source = dataSource,
+                lastUpdatedAtMs = state.lastUpdatedAtMs,
+                isFromCache = state.isFromCache
+            ),
+            // One UI signal covers UI-triggered work plus actually RUNNING
+            // tagged background SyncWorker instances. Header layout stays stable.
+            isSyncing = isSyncing,
+            onEditClick = onEditLayout,
+            onSyncClick = onSyncNow
+        )
+    }
     // 2026 GUI pass 2 (B5): additive pull-to-refresh, not a replacement for
     // the header's dedicated sync button (AugustSyncAction, in the navbar
     // until 2026-10-15). Pull-to-refresh calls onRefresh (status + cache
@@ -493,25 +512,10 @@ private fun SummaryScreen(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            MinimalHeader(
-                palette = palette,
-                // 2026-10-15: the old "Summary" title (dropped in GUI pass 2 as a
-                // repeat of the tab label) is replaced by a time-of-day greeting,
-                // as in the Today mockup. BitLut has no account or name, so the
-                // greeting carries none.
-                title = greetingText(),
-                trailing = formatDashboardSourceStatus(
-                    source = dataSource,
-                    lastUpdatedAtMs = state.lastUpdatedAtMs,
-                    isFromCache = state.isFromCache
-                ),
-                // One UI signal covers UI-triggered work plus actually RUNNING
-                // tagged background SyncWorker instances. Header layout stays stable.
-                isSyncing = isSyncing,
-                onEditClick = onEditLayout,
-                onSyncClick = onSyncNow
-            )
+        // The locked state has no steps hero, so it gets a header-only panel; the
+        // loading and loaded states carry the header inside their own hero card.
+        if (state.showConnectLockScreen) {
+            item { TodayHeaderCard(palette = palette, header = panelHeader) }
         }
 
         when {
@@ -528,13 +532,14 @@ private fun SummaryScreen(
             }
 
             state.isLoading && state.stepsToday == 0L && state.recentWorkouts.isEmpty() -> item {
-                DashboardLoadingCard(palette = palette)
+                DashboardLoadingCard(palette = palette, header = panelHeader)
             }
 
             else -> {
                 item {
                     StepsHeroCard(
                         palette = palette,
+                        header = panelHeader,
                         title = stringResource(R.string.steps_today),
                         stepsValue = formatNumber(state.stepsToday),
                         goalValue = state.stepsGoal.takeIf { it > 0 }?.let { formatNumber(it) },
@@ -2234,57 +2239,71 @@ private val HEADER_META_LINE_HEIGHT = 28.dp
 @Composable
 private fun MinimalHeader(
     palette: BitPalette,
-    title: String?,
-    subtitle: String? = null,
-    trailing: String? = null,
-    isSyncing: Boolean = false,
-    onEditClick: (() -> Unit)? = null,
-    onSyncClick: (() -> Unit)? = null
+    title: String
+) {
+    Text(
+        text = title,
+        color = palette.text,
+        fontWeight = FontWeight.ExtraBold,
+        autoSize = TextAutoSize.StepBased(minFontSize = 20.sp, maxFontSize = 30.sp, stepSize = 1.sp),
+        maxLines = 1,
+        softWrap = false,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+/**
+ * Greeting row + freshness/sync line for the dark hero panel (2026-10-16,
+ * stage 3). It lives in every Today state (locked, loading, loaded) so the Sync
+ * button never disappears. Colors are fixed (the hero is Navy in both themes);
+ * the content was moved here from MinimalHeader, which is now title-only.
+ */
+@Composable
+private fun TodayPanelHeader(
+    greeting: String,
+    status: String?,
+    isSyncing: Boolean,
+    onEditClick: () -> Unit,
+    onSyncClick: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = if (title == null) Arrangement.End else Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (title != null) {
-                Text(
-                    text = title,
-                    color = palette.text,
-                    fontWeight = FontWeight.ExtraBold,
-                    // 2026-10-15: the Today greeting ("Добрый вечер") plus two
-                    // 48dp buttons can outgrow 30sp on narrow phones.
-                    autoSize = TextAutoSize.StepBased(minFontSize = 20.sp, maxFontSize = 30.sp, stepSize = 1.sp),
-                    maxLines = 1,
-                    softWrap = false,
-                    modifier = Modifier.weight(1f)
+            Text(
+                text = greeting,
+                color = AugustColor.Surface,
+                fontWeight = FontWeight.ExtraBold,
+                // The greeting ("Добрый вечер") shares the row with two 48dp buttons
+                // inside the hero's 28dp padding (about 148dp on a 360dp phone), so the
+                // size follows the measured width.
+                autoSize = TextAutoSize.StepBased(minFontSize = 18.sp, maxFontSize = 26.sp, stepSize = 1.sp),
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(10.dp))
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(AugustRadius.Pill))
+                    .background(AugustColor.NavySoft)
+                    .clickable(onClick = onEditClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.Edit,
+                    contentDescription = stringResource(R.string.dashboard_edit_layout),
+                    tint = AugustColor.DarkSecondaryText,
+                    modifier = Modifier.size(20.dp)
                 )
             }
-            if (onEditClick != null) {
-                Spacer(Modifier.width(10.dp))
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(AugustRadius.Pill))
-                        .background(if (palette.dark) AugustColor.NavySoft else AugustColor.Soft)
-                        .clickable(onClick = onEditClick),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Rounded.Edit,
-                        contentDescription = stringResource(R.string.dashboard_edit_layout),
-                        tint = palette.secondaryText,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-            if (onSyncClick != null) {
-                Spacer(Modifier.width(10.dp))
-                AugustSyncAction(onClick = onSyncClick)
-            }
+            Spacer(Modifier.width(10.dp))
+            AugustSyncAction(onClick = onSyncClick)
         }
 
-        if (trailing != null || isSyncing) {
+        if (status != null || isSyncing) {
             Spacer(Modifier.height(3.dp))
             Box(
                 modifier = Modifier
@@ -2298,8 +2317,7 @@ private fun MinimalHeader(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .clip(statusShape)
-                            .background(if (palette.dark) AugustColor.NavySoft else AugustColor.Surface)
-                            .border(1.dp, palette.stroke, statusShape)
+                            .background(AugustColor.NavySoft)
                             .padding(horizontal = 9.dp, vertical = 4.dp)
                     ) {
                         CircularProgressIndicator(
@@ -2310,16 +2328,16 @@ private fun MinimalHeader(
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = stringResource(R.string.sync_status_updating),
-                            color = palette.text,
+                            color = AugustColor.Surface,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
                             maxLines = 1
                         )
                     }
-                } else if (trailing != null) {
+                } else if (status != null) {
                     Text(
-                        text = trailing,
-                        color = palette.secondaryText,
+                        text = status,
+                        color = AugustColor.DarkSecondaryText,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
                         maxLines = 1
@@ -2327,17 +2345,14 @@ private fun MinimalHeader(
                 }
             }
         }
+    }
+}
 
-        if (subtitle != null) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = subtitle,
-                color = palette.secondaryText,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 13.sp,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
+/** Header-only hero panel for the locked state, which has no steps hero below it. */
+@Composable
+private fun TodayHeaderCard(palette: BitPalette, header: @Composable () -> Unit) {
+    SoftCard(palette = palette, modifier = Modifier.fillMaxWidth(), hero = true) {
+        header()
     }
 }
 
@@ -2599,10 +2614,13 @@ private data class HeroStat(
  * label + goal-percent pill, one big number with the goal beside it, a pill
  * progress bar, the "to go" line, then a row of [HeroStat] tiles. Only
  * existing August tokens are used; the hero stays Navy in light and dark.
+ * 2026-10-16 (stage 3): [header] (greeting row + sync line) is drawn first
+ * inside the same card, as in the mockup.
  */
 @Composable
 private fun StepsHeroCard(
     palette: BitPalette,
+    header: @Composable () -> Unit,
     title: String,
     stepsValue: String,
     goalValue: String?,
@@ -2616,6 +2634,8 @@ private fun StepsHeroCard(
         modifier = Modifier.fillMaxWidth(),
         hero = true
     ) {
+        header()
+        Spacer(Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2842,7 +2862,7 @@ private fun ShimmerBlock(modifier: Modifier = Modifier, onDark: Boolean, palette
 }
 
 @Composable
-private fun DashboardLoadingCard(palette: BitPalette) {
+private fun DashboardLoadingCard(palette: BitPalette, header: @Composable () -> Unit) {
     val loadingDescription = stringResource(R.string.status_syncing)
     Column(
         modifier = Modifier
@@ -2851,6 +2871,8 @@ private fun DashboardLoadingCard(palette: BitPalette) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SoftCard(palette = palette, hero = true) {
+            header()
+            Spacer(Modifier.height(16.dp))
             // 250dp: the hero's inner height after the 2026-10-15 tile redesign
             // (label row ~24 + 14 + number 48 + 14 + bar 8 + 8 + "to go" ~16 + 18
             // + tiles ~100). Estimated from the layout, not measured on a device.

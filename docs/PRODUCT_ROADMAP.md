@@ -42,10 +42,12 @@ header (`AugustSyncAction`).
 2. **Today hero conformance.** Goal pill reads "N% of goal" and uses Lime
    (Tangerine stays reserved for sync and the Settings toggle); no unit chip
    next to the steps number; light stat tiles with a value and a unit.
-3. **Today polish (optional, decide after reviewing 1 and 2 on a device).**
-   Header inside the hero (full-bleed dark panel as in the mockup). Needs
-   status-bar inset handling and a light-theme decision, so it is not
-   scheduled until the earlier stages are seen on a real phone.
+3. **Header inside the hero (done 2026-10-16).** The greeting row, the
+   freshness/sync line and the steps hero share one dark card in every state
+   (locked, loading, loaded), so the Sync button never disappears. Built as an
+   inset card, not the mockup's full-bleed panel: full-bleed means drawing
+   under the status bar and flipping the status-bar icon color as the panel
+   scrolls away, which cannot be checked without a device.
 4. **Workouts content.** Static, bundled, offline tips written by the owner
    (EN + RU). No network, no accounts. Content format and structure to be
    decided when the content exists.
