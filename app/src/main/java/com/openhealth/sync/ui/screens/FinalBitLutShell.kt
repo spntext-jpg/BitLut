@@ -233,13 +233,7 @@ fun FinalBitLutShell(
                     cardLayoutVersion = cardLayoutVersion,
                     isSyncing = syncState.isSyncing || dashboardState.isRefreshing
                 )
-                MainTab.Workouts -> TabPlaceholderScreen(
-                    palette = palette,
-                    icon = Icons.Rounded.FitnessCenter,
-                    title = stringResource(R.string.tab_workouts),
-                    headline = stringResource(R.string.workouts_placeholder_title),
-                    body = stringResource(R.string.workouts_placeholder_body)
-                )
+                MainTab.Workouts -> WorkoutsScreen(palette = palette)
                 MainTab.Nutrition -> TabPlaceholderScreen(
                     palette = palette,
                     icon = Icons.Rounded.LocalFireDepartment,
@@ -2237,7 +2231,7 @@ private fun SecondaryButton(
 private val HEADER_META_LINE_HEIGHT = 28.dp
 
 @Composable
-private fun MinimalHeader(
+internal fun MinimalHeader(
     palette: BitPalette,
     title: String
 ) {

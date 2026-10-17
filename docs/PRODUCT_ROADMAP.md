@@ -48,9 +48,12 @@ header (`AugustSyncAction`).
    inset card, not the mockup's full-bleed panel: full-bleed means drawing
    under the status bar and flipping the status-bar icon color as the panel
    scrolls away, which cannot be checked without a device.
-4. **Workouts content.** Static, bundled, offline tips written by the owner
-   (EN + RU). No network, no accounts. Content format and structure to be
-   decided when the content exists.
+4. **Workouts content (done 2026-10-16).** Static, bundled, offline tips (EN +
+   RU) in `strings.xml` (`workout_tip_*`), shown as expandable cards by
+   `WorkoutsScreen`. No network, no accounts, no health data. The eight starter
+   tips are general guidance written as a starting point: the owner should
+   review, edit or replace them; adding a tip means one `WorkoutTip` line plus
+   two strings per language.
 5. **Nutrition.** Local-only food journal and calorie counter. Decisions needed
    before any code:
    - Storage is local to the device. Writing meals to Health Connect would
