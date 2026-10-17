@@ -1,6 +1,6 @@
 # BitLut Product Roadmap
 
-Updated: 2026-10-15
+Updated: 2026-10-16
 
 Scope: the app's screen structure and UI direction. Scaling (Huawei user cap)
 lives in `docs/SCALING_ROADMAP.md`; sync/Health Connect bugs live in
@@ -16,9 +16,9 @@ because it needs no photos.
 
 | Tab | Purpose | Status |
 |---|---|---|
-| Today | Start screen: greeting, sync button, steps hero, activity and workout cards | Built; conformance to the mockup in progress |
-| Workouts | Training tips | Placeholder screen; content in a later sprint |
-| Nutrition | Food journal and calorie counter | Placeholder screen; content in a later sprint |
+| Today | Start screen: greeting, sync button, steps hero, activity and workout cards | Built (stages 1 to 3); awaiting review on a device |
+| Workouts | Training tips | Built (stage 4): eight starter tips for the owner to review |
+| Nutrition | Food journal and calorie counter | Built (stage 5): manual, local-only journal with a daily total |
 | Settings | Data source, goals, import, diagnostics | Existing |
 
 The navbar's center sync button is gone; sync is a circular button in the Today
@@ -66,12 +66,15 @@ header (`AugustSyncAction`).
    - No food database: manual entry only (name optional, calories 1 to 9999).
    - Left out on purpose: calorie goal, macros, search, editing an entry (delete
      and re-add instead), browsing forward past today.
-6. **Docs pass.** `CHANGELOG.md`, `SESSION_HANDOFF.md`, `CLAUDE.md` (navbar and
-   UI contract), `design.md` (navigation, Tangerine role), README screenshots.
-   Done at the end of the sprint, not per stage.
+6. **Docs pass (done 2026-10-16).** `CHANGELOG.md`, `SESSION_HANDOFF.md`,
+   `CLAUDE.md`, `CONTEXT.md`, `design.md`, `README.md`, `docs/BACKLOG.md`. The
+   README screenshots were not regenerated: they need real captures.
 
 ## Open questions
 
-- Should the Workouts and Nutrition placeholders ship in a store release, or
-  stay behind a development build until they have content?
-- Nutrition: calorie goal per day, or journal only at first?
+- Do the eight starter Workouts tips ship as written, or does the owner replace
+  them first?
+- Nutrition: add a daily calorie goal, or compare eaten with burned calories?
+- The AppGallery data declarations must be reviewed for the local food journal
+  before the next store release (outside the repo).
+- Full-bleed hero: revisit only after the inset hero has been seen on a device.

@@ -1,8 +1,8 @@
 # BitLut — Session Handoff
 
-**Current handoff:** 2026-10-08
+**Current handoff:** 2026-10-16
 
-**Repository state:** 2026-09-11 modernization baseline plus the 2026-09-16 Health Connect permission/cache recovery, plus the 2026-09-25 GUI pass 2 (Apple Health alignment/CJM polish, Parts A+B+dead-code audit -- see CHANGELOG.md for the full breakdown), plus the 2026-10-08 OnePlus 7 Pro field-test fixes (adaptive number text, Google Health workouts, source-not-connected notice, refresh-aware sync indicator). Local verification uses `:app:compileDebugKotlin`, full assemble/lint remains in GitHub Actions.
+**Repository state:** 2026-09-11 modernization baseline plus the 2026-09-16 Health Connect permission/cache recovery, plus the 2026-09-25 GUI pass 2 (Apple Health alignment/CJM polish, Parts A+B+dead-code audit -- see CHANGELOG.md for the full breakdown), plus the 2026-10-08 OnePlus 7 Pro field-test fixes (adaptive number text, Google Health workouts, source-not-connected notice, refresh-aware sync indicator), plus the 2026-10-15/16 UI sprint (Today redesign from the mockup, four-tab navigation, Workouts tips, local Nutrition journal -- see CHANGELOG.md). Local verification uses `:app:compileDebugKotlin`, full assemble/lint remains in GitHub Actions.
 
 ## Source of truth
 
@@ -107,6 +107,17 @@ The release workflow should keep an early `checkReleaseAarMetadata` gate before 
 - Summary capsule = `SyncUiState.isSyncing || DashboardUiState.isRefreshing`; orchestrator refreshes before completing; `MainActivity` refreshes from cache when a background sync stops running.
 - Not verified in the sandbox (no Android SDK): that `Text(autoSize = ...)`, `Icons.Rounded.CloudOff` and the other new APIs compile against the project's Compose BOM, and how any of this looks on screen. The user's Gradle build and eyes are the only gates.
 
+## 2026-10-15/16 UI sprint (four tabs)
+
+Planned in `docs/PRODUCT_ROADMAP.md`; the full breakdown is in CHANGELOG.md. State to know before touching the UI:
+
+- `MainTab` has four values (Today, Workouts, Nutrition, Settings). Every `when` over it must stay exhaustive: the label, press tilt and glyph in `GlassNavigation.kt`, and the screen switch in `FinalBitLutShell`.
+- Sync is not in the navbar. It is `AugustSyncAction` (48dp, Tangerine) inside `TodayPanelHeader`, which is passed as a `header` slot into `StepsHeroCard`, `DashboardLoadingCard` and `TodayHeaderCard`, so it exists in every Today state.
+- The hero's accent is Lime (goal pill, progress bar, tile icon chips). Tangerine is only the sync button and spinner, the source-not-connected notice and the Settings toggle.
+- Workouts and Nutrition live in `WorkoutsScreen.kt` and `NutritionScreen.kt`. The Nutrition journal is local-only (`NutritionJournalPrefs`: private SharedPreferences file, no Health Connect, no network, no backup). Giving it Health Connect nutrition records or any upload needs a new product/scope review and a privacy-policy update (CLAUDE.md, product boundary).
+- `PrimaryButton`, `SecondaryButton` and `MinimalHeader` are `internal` because the new screens reuse them.
+- None of this has been seen rendered yet: see the top item of `docs/BACKLOG.md`.
+
 ## Huawei-specific constraints
 
 BitLut is **Huawei AppGallery / Huawei Health first**.
@@ -132,7 +143,7 @@ Any future platform migration must regression-test at least:
 - Lime is reserved for primary action emphasis.
 - Normal cards are flat/subtly outlined; hero depth remains restrained.
 - Buttons are pill-shaped with comfortable touch targets.
-- Navbar hierarchy comes from width/role, not inconsistent heights (control height is 56dp as of the 2026-09-25 GUI pass 2; still one shared height for every control).
+- Navbar: four destinations (Today, Workouts, Nutrition, Settings) share one control height (56dp as of the 2026-09-25 GUI pass 2). Since 2026-10-15 there is no sync control in the navbar, so there is no width-based "primary" control any more.
 - Navbar selected-tab state is tint-only (`AugustColor.Lime` on icon+label) as of the 2026-09-25 GUI pass 2 -- no background pill. Don't reintroduce one without the project owner explicitly asking; this was a deliberate opt-in stylistic choice (tasks.md Part B3), not a default recommendation.
 - Dashboard-card visibility/order is controlled only by `DashboardCardLayoutPrefs`; `STREAK` was dropped from `DEFAULT_ORDER` (default-off, not deleted) in the 2026-09-25 pass -- the enum/composable/streak math are all still present.
 - Settings remains intentionally minimal.
@@ -153,6 +164,8 @@ Any future platform migration must regression-test at least:
 - Current source plus a green GitHub Actions run overrides stale historical documentation.
 
 ## Next-session starting point
+
+First look at the 2026-10-15/16 UI sprint on a real phone, in light and dark themes, before building on it; the checklist is the top item in `docs/BACKLOG.md`.
 
 Start from the current `main` branch and the latest successful GitHub Actions run. GUI pass 2 (2026-09-25: Parts A+B+dead-code audit, see CHANGELOG.md) is complete and landed -- do not re-propose any of tasks.md's Part A/B items or redo the dead-code audit from scratch; if new dead code is suspected, verify against live call sites individually before touching anything (a first-pass automated sweep produced several false positives in the 2026-09-25 audit, including flagging `BitLutExpressiveTheme()` itself as unused when it's actually the app's root theme, invoked as a trailing lambda). The 2026-09-16 recovery patch targets a concrete obsolete Health Connect write-permission gate plus permission-cache/version-churn bugs found while investigating the downstream reader regression.
 

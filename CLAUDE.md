@@ -31,9 +31,10 @@ Current top-priority goal: lift the Huawei Health Kit 100-user test-phase cap, a
 - `DashboardCardLayoutPrefs` is the sole dashboard card order/visibility layer.
 - `GoalPrefs` stores the steps goal only.
 - August colors and system light/dark themes remain the design baseline; surfaces are now quieter and flatter.
-- Bottom navbar: all controls share one common height (56dp, verified against `GlassNavigation.kt`); Refresh reads as primary via width (84dp pill), not height.
+- Bottom navbar: four destinations (Today, Workouts, Nutrition, Settings) share one common height (56dp, verified against `GlassNavigation.kt`); there is no sync control in the navbar since 2026-10-15 -- sync is the round Tangerine `AugustSyncAction` button in the Today header.
 - Codespaces patch scripts run a local compile check only (`:app:compileDebugKotlin`); the full `assembleDebug`/`lintDebug` build runs in GitHub Actions, not locally. See "Local checks vs. CI build" below.
 - 2026-10-08 (OnePlus 7 Pro field test): Google source reads workout sessions from two Health Connect origins (Google Fit + Google Health/Fitbit, `DataSourcePrefs.selectedWorkoutOriginPackages`) while daily totals keep one origin; the Summary capsule follows `SyncUiState.isSyncing || DashboardUiState.isRefreshing`; an unconnected source on an explicit Sync tap shows `SourceNoticeBanner`. See CHANGELOG.md.
+- 2026-10-15/16 UI sprint (see CHANGELOG.md and `docs/PRODUCT_ROADMAP.md`): Today redesigned from the mockup (dark hero panel with greeting, sync button, steps, progress and three light stat tiles), four-tab navigation, a Workouts tips tab and a local-only Nutrition food journal. Not yet seen on a device.
 
 ## Architecture anchors
 
@@ -57,7 +58,7 @@ The corporate wellness app started reliably importing BitLut-origin workouts aft
 
 ### UI
 
-`FinalBitLutShell` owns current screens. `DashboardViewModel` owns dashboard state. Keep Settings minimal and preserve the existing Huawei/Google/Health Connect flows. Split files only when there is a concrete maintenance benefit; file size alone is not a reason.
+`FinalBitLutShell` owns the Today and Settings screens and the shared components; `WorkoutsScreen.kt` and `NutritionScreen.kt` own the other two tabs. `DashboardViewModel` owns dashboard state. Keep Settings minimal and preserve the existing Huawei/Google/Health Connect flows. Split files only when there is a concrete maintenance benefit; file size alone is not a reason.
 
 ## UI contract
 
@@ -65,6 +66,7 @@ The corporate wellness app started reliably importing BitLut-origin workouts aft
 - Normal cards: flat, subtle outline, no fake press animation. Hero may keep restrained depth.
 - Pill buttons, practical touch targets, restrained tween motion. No routine bounce/elastic motion.
 - One obvious primary action per group; Settings primary action is `Sync now`.
+- Navigation is four tabs and the Today screen owns the sync button. Tangerine is a sync/active-state signal (Today sync button and spinner, source-not-connected notice, Settings toggle); the hero's accent is Lime.
 - Icon-only actions require content descriptions.
 - Missing workout metrics are omitted, never replaced with invented zeroes.
 - Numbers that can outgrow their slot use `Text(autoSize = TextAutoSize.StepBased(...))` with `softWrap = false`, never a character-count font table. Design for large system font sizes, narrow phones, tablets and split-screen: bounded `maxLines` plus sp sizes, and `widthIn(max = ...)` for overlay cards.

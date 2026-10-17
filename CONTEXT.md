@@ -43,7 +43,7 @@ Activity/workout data only. No backend/account. Real data first. The only approv
 
 ## UI baseline
 
-August colors remain unchanged. UI direction is quieter/content-first: flat outlined cards, restrained hero depth, pill buttons, 48 dp targets, restrained tween motion, one primary Settings action, no fake press animation on non-clickable cards. Bottom navbar: all controls share one common height (64dp); Refresh reads as primary via width (84dp pill), not height. Today header uses one fixed-height metadata row: source/freshness at rest and a Tangerine spinner + semantic high-contrast "Syncing..." label while `SyncUiState.isSyncing` (`isUiTriggeredSyncing || isBackgroundSyncActive`) is true. Background activity means WorkManager `RUNNING` only; periodic `ENQUEUED` work is idle scheduling. Settings ends with a small engraved-style signature (no new font asset).
+August colors remain unchanged. UI direction is quieter/content-first: flat outlined cards, restrained hero depth, pill buttons, 48 dp targets, restrained tween motion, one primary Settings action, no fake press animation on non-clickable cards. Bottom navbar: four destinations (Today, Workouts, Nutrition, Settings) share one common height (56dp); sync is not in the navbar (it is the Today hero header button). The Today hero panel header uses one fixed-height metadata row: source/freshness at rest and a Tangerine spinner + semantic high-contrast "Syncing..." label while `SyncUiState.isSyncing` (`isUiTriggeredSyncing || isBackgroundSyncActive`) is true. Background activity means WorkManager `RUNNING` only; periodic `ENQUEUED` work is idle scheduling. Settings ends with a small engraved-style signature (no new font asset).
 
 ## Dashboard cache
 

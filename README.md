@@ -104,6 +104,7 @@ Current UI principles:
 - tactile spring motion only on interactive controls;
 - no decorative bounce on static content;
 - bottom navigation with subtle compression, press depth, tilt, and release tremor;
+- four tabs: Today (steps hero with the sync button, activity and recent workouts), Workouts (general training tips), Nutrition (a manual food journal stored only on the device, never uploaded or written to Health Connect) and Settings;
 - a persistent high-contrast sync-status capsule that remains visible long enough to perceive in both light and dark themes.
 
 The Settings screen stays intentionally small: data source, connection/sync actions, Health Connect settings, and the steps goal.

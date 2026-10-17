@@ -1,6 +1,6 @@
 # BitLut Design System
 
-Updated: 2026-09-02
+Updated: 2026-10-16
 
 ## Direction
 
@@ -13,8 +13,8 @@ BitLut keeps the August v3 palette but moves to a quieter 2026 content-first int
 - Ink `#151728`: core neutral / foreground-on-Lime / dark canvas. Also aliased as Navy in its architectural-anchor/navigation role — same color, two semantic names for two roles.
 - Navy Raised `#1C1E33`: dark raised/hero surface.
 - Canvas `#F7F8FC`: light background. Surface `#FFFFFF`: white card fill.
-- Lime `#DFFF6A`: primary action and hero progress.
-- Tangerine `#F28500`: sync action / active toggle signal (Settings toggle "on" track and the bottom nav Refresh fill only; Purple keeps every other focus/selection role).
+- Lime `#DFFF6A`: primary action, hero progress, the hero goal pill and icon chips (always with an Ink icon).
+- Tangerine `#F28500`: sync action / active toggle signal (the Today-header sync button and its in-progress spinner, the source-not-connected notice, and the Settings toggle "on" track; Purple keeps every other focus/selection role).
 - Tangerine is an active-state shape/indicator, not small foreground copy on Canvas. Pair it with Ink/Surface semantic text when a label is required; this preserves the palette while meeting readable light/dark contrast.
 - Purple `#6E5CF6`: focus and secondary interaction detail.
 - Inter Variable remains the app font.
@@ -51,18 +51,22 @@ Do not add new colors when an existing semantic role works.
 ## Navigation
 
 - Persistent Navy bottom dock.
-- Two destinations: Today and Settings.
-- Sync remains a center action, not a fake destination.
-- Selected destination uses Surface + Lime icon tile.
-- Center sync remains Tangerine but is visually integrated (60 dp, restrained motion).
+- Four destinations: Today, Workouts, Nutrition, Settings. Labels auto-size from 11sp to 9sp.
+- Sync is not in the dock: it is a round Tangerine button in the Today header.
+- Selected destination is tint-only (Lime icon and label), no background pill.
 
 ## Dashboard
 
-- Steps + distance remain the pinned hero.
+- The pinned hero is one dark card holding the greeting row (edit-layout and sync buttons), the freshness/sync line, steps with the goal, a progress bar and three light stat tiles (distance, calories, workout minutes).
 - Other cards use `DashboardCardLayoutPrefs` only for order/visibility.
 - Workout cards are type-aware and show only meaningful metrics.
 - Missing metrics are omitted rather than replaced with invented zeros.
 - Card content should scan top-to-bottom: label -> key value/title -> supporting metrics.
+
+## Workouts and Nutrition
+
+- Workouts: a title, one intro line, expandable tip cards (Lime icon chip, one expanded at a time) and a short "general information" note.
+- Nutrition: a title, a day navigator (backwards only), a total card, one card per meal that has entries, and a primary "Add food" button opening a dialog (meal choice, calories, optional name). Empty days show a short empty state; a footer line states that data stays on the device.
 
 ## Settings
 
