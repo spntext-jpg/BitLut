@@ -22,8 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
@@ -56,6 +56,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openhealth.sync.ui.theme.AugustColor
@@ -67,7 +68,13 @@ import kotlinx.coroutines.delay
 
 private const val SECRET_TAP_COUNT = 5
 private const val SECRET_TAP_WINDOW_MS = 2000L
-private val NAV_BAR_OUTER_HORIZONTAL_MARGIN = 24.dp
+// 2026-10-15: four destinations share the bar, so the outer margin goes
+// 24dp -> 16dp and the gaps between controls 8dp -> 4dp. Slot width on a
+// 360dp phone = (360 - 2*16 margin - 2*8 row padding - 3*4 gaps) / 4 = 75dp
+// (the previous Today / Sync / Settings layout gave each destination 98dp),
+// leaving 67dp for a label after the 4dp side padding. Labels use autoSize
+// (11sp down to 9sp) because "Тренировки" does not fit at 11sp.
+private val NAV_BAR_OUTER_HORIZONTAL_MARGIN = 16.dp
 private val NAV_BAR_OUTER_VERTICAL_MARGIN = 8.dp
 
 // 2026-08-30: navbar rebuild. The previous resize shrank destination
@@ -91,7 +98,10 @@ private val NAV_BAR_OUTER_VERTICAL_MARGIN = 8.dp
 // -- comparable margin to the original 64dp design's 8dp slack, not a
 // zero-margin fit. Label font size (11sp) is unchanged.
 private val NAV_BAR_CONTROL_HEIGHT = 56.dp
-private val NAV_BAR_SYNC_ACTION_WIDTH = 84.dp
+// 2026-10-15: the sync action left the navbar and lives in the Today header
+// (see MinimalHeader in FinalBitLutShell.kt). 48dp is the practical touch
+// target; the circle matches the header's edit-layout button.
+private val SYNC_ACTION_SIZE = 48.dp
 
 // BITLUT_NAV_GLYPHS_2026_10_06
 // Root cause of the "selected icon turns transparent" regression: the 2026 GUI
@@ -113,13 +123,12 @@ private val NAV_GLYPH_IDLE_COLOR = AugustColor.Lime.copy(alpha = 0.72f)
 // tap (finger down for ~80ms) is still visible instead of a sub-frame flash.
 private const val NAV_GLYPH_FLASH_HOLD_MS = 120L
 
-/** Compact two-destination dock with one explicit sync action. */
+/** Compact four-destination dock: Today, Workouts, Nutrition, Settings. Sync lives on the Today screen. */
 @Composable
 internal fun AugustBottomNav(
     selected: MainTab,
     onSelected: (MainTab) -> Unit,
-    onSecretLogViewerTriggered: () -> Unit = {},
-    onRefreshClick: () -> Unit = {}
+    onSecretLogViewerTriggered: () -> Unit = {}
 ) {
     var secretTapCount by remember { mutableIntStateOf(0) }
     var lastSecretTapAtMs by remember { mutableLongStateOf(0L) }
@@ -167,7 +176,7 @@ internal fun AugustBottomNav(
                 .background(AugustColor.Navy.copy(alpha = 0.86f))
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             AugustDestination(
                 modifier = Modifier.weight(1f),
@@ -175,7 +184,18 @@ internal fun AugustBottomNav(
                 selected = selected == MainTab.Today,
                 onClick = { onSelected(MainTab.Today) }
             )
-            AugustSyncAction(onClick = onRefreshClick)
+            AugustDestination(
+                modifier = Modifier.weight(1f),
+                tab = MainTab.Workouts,
+                selected = selected == MainTab.Workouts,
+                onClick = { onSelected(MainTab.Workouts) }
+            )
+            AugustDestination(
+                modifier = Modifier.weight(1f),
+                tab = MainTab.Nutrition,
+                selected = selected == MainTab.Nutrition,
+                onClick = { onSelected(MainTab.Nutrition) }
+            )
             AugustDestination(
                 modifier = Modifier.weight(1f),
                 tab = MainTab.Settings,
@@ -212,6 +232,8 @@ private fun AugustDestination(
     val highlighted = pressed || tapFlash
     val label = when (tab) {
         MainTab.Today -> stringResource(R.string.tab_today)
+        MainTab.Workouts -> stringResource(R.string.tab_workouts)
+        MainTab.Nutrition -> stringResource(R.string.tab_nutrition)
         MainTab.Settings -> stringResource(R.string.tab_settings)
     }
 
@@ -252,7 +274,7 @@ private fun AugustDestination(
     )
     val pressTilt by animateFloatAsState(
         targetValue = if (pressed) {
-            if (tab == MainTab.Today) -AugustMotion.DestinationPressTiltDegrees
+            if (tab == MainTab.Today || tab == MainTab.Workouts) -AugustMotion.DestinationPressTiltDegrees
             else AugustMotion.DestinationPressTiltDegrees
         } else 0f,
         animationSpec = spring(
@@ -284,7 +306,7 @@ private fun AugustDestination(
                 role = Role.Tab,
                 onClick = onClick
             )
-            .padding(horizontal = 6.dp, vertical = 5.dp),
+            .padding(horizontal = 4.dp, vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -294,8 +316,10 @@ private fun AugustDestination(
             text = label,
             color = contentColor,
             fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
-            fontSize = 11.sp,
-            maxLines = 1
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 11.sp, stepSize = 1.sp),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -307,7 +331,8 @@ private fun AugustDestination(
  * Colour: Lime when selected, Lime at 72% when idle (never dark -- the bar is
  * Navy in both themes), Tangerine while pressed and for a short hold after.
  * Motion: selecting overshoots a spring (calendar dot pops, gear turns one
- * tooth); pressing squeezes the dot and kicks the gear / lifts the binders.
+ * tooth, dumbbell plates and cutlery tips grow a little); pressing squeezes
+ * the dot, kicks the gear, lifts the binders and tips the dumbbell / cutlery.
  * BITLUT_NAV_GLYPHS_2026_10_06
  */
 @Composable
@@ -350,6 +375,8 @@ private fun AugustNavGlyph(
         )
         when (tab) {
             MainTab.Today -> drawTodayGlyph(color, stroke, unit, selectProgress, pressProgress)
+            MainTab.Workouts -> drawWorkoutsGlyph(color, stroke, unit, selectProgress, pressProgress)
+            MainTab.Nutrition -> drawNutritionGlyph(color, stroke, unit, selectProgress, pressProgress)
             MainTab.Settings -> drawSettingsGlyph(color, stroke, unit, selectProgress, pressProgress)
         }
     }
@@ -431,6 +458,86 @@ private fun DrawScope.drawSettingsGlyph(
     }
 }
 
+/** Dumbbell: two plates joined by a bar, with a short end cap on each side. */
+private fun DrawScope.drawWorkoutsGlyph(
+    color: Color,
+    stroke: Stroke,
+    unit: Float,
+    select: Float,
+    press: Float
+) {
+    val centre = Offset(12f * unit, 12f * unit)
+    // Plates grow a little taller on selection (spring overshoot = pop).
+    val grow = 1f * select
+    // The whole dumbbell tips while pressed.
+    rotate(-12f * press, centre) {
+        for (plateLeft in floatArrayOf(5f, 15.6f)) {
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(plateLeft * unit, (6.2f - grow / 2f) * unit),
+                size = Size(3.4f * unit, (11.6f + grow) * unit),
+                cornerRadius = CornerRadius(1.4f * unit, 1.4f * unit),
+                style = stroke
+            )
+        }
+        drawLine(
+            color = color,
+            start = Offset(8.4f * unit, 12f * unit),
+            end = Offset(15.6f * unit, 12f * unit),
+            strokeWidth = stroke.width,
+            cap = StrokeCap.Round
+        )
+        for (capX in floatArrayOf(2.2f, 21.8f)) {
+            drawLine(
+                color = color,
+                start = Offset(capX * unit, 9.7f * unit),
+                end = Offset(capX * unit, 14.3f * unit),
+                strokeWidth = stroke.width,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+/** Fork (three tines) and knife, drawn as outlines like the other glyphs. */
+private fun DrawScope.drawNutritionGlyph(
+    color: Color,
+    stroke: Stroke,
+    unit: Float,
+    select: Float,
+    press: Float
+) {
+    val centre = Offset(12f * unit, 12f * unit)
+    // Cutlery tips rise a little on selection (spring overshoot = pop).
+    val top = (3.2f - 0.8f * select) * unit
+    // The whole glyph tips while pressed.
+    rotate(8f * press, centre) {
+        val fork = Path().apply {
+            moveTo(5.2f * unit, top)
+            lineTo(5.2f * unit, 7.6f * unit)
+            cubicTo(5.2f * unit, 9.9f * unit, 6.4f * unit, 10.8f * unit, 8f * unit, 10.8f * unit)
+            cubicTo(9.6f * unit, 10.8f * unit, 10.8f * unit, 9.9f * unit, 10.8f * unit, 7.6f * unit)
+            lineTo(10.8f * unit, top)
+        }
+        drawPath(path = fork, color = color, style = stroke)
+        // Fork centre tine + handle, and the knife spine, are one line each.
+        for (lineX in floatArrayOf(8f, 17f)) {
+            drawLine(
+                color = color,
+                start = Offset(lineX * unit, top),
+                end = Offset(lineX * unit, 20.8f * unit),
+                strokeWidth = stroke.width,
+                cap = StrokeCap.Round
+            )
+        }
+        val blade = Path().apply {
+            moveTo(17f * unit, top)
+            cubicTo(20.8f * unit, 4.4f * unit, 21.4f * unit, 10.4f * unit, 17f * unit, 12.6f * unit)
+        }
+        drawPath(path = blade, color = color, style = stroke)
+    }
+}
+
 private const val GEAR_TEETH = 8
 private const val GEAR_TIP_RADIUS = 9.4f
 private const val GEAR_ROOT_RADIUS = 7.2f
@@ -442,8 +549,9 @@ private fun polar(centre: Offset, radius: Float, degrees: Float): Offset {
     return Offset(centre.x + radius * cos(radians), centre.y + radius * sin(radians))
 }
 
+/** Circular sync button for the Today header (moved out of the navbar 2026-10-15). */
 @Composable
-private fun AugustSyncAction(onClick: () -> Unit) {
+internal fun AugustSyncAction(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val focused by interactionSource.collectIsFocusedAsState()
@@ -486,14 +594,12 @@ private fun AugustSyncAction(onClick: () -> Unit) {
         label = "syncFill"
     )
 
-    // Same shared height as AugustDestination (NAV_BAR_CONTROL_HEIGHT) so
-    // the whole bar aligns on one baseline; a wider fixed width (rather
-    // than a taller box) is what makes this read as the primary action,
-    // per the 2026-08-30 navbar rebuild note above.
+    // Tangerine fill + Ink icon keep the sync action's established look
+    // (Ink on Tangerine ~6.9:1, see AugustColor.Tangerine); only the size
+    // and shape changed when it moved from the navbar to the header.
     Box(
-        modifier = Modifier
-            .width(NAV_BAR_SYNC_ACTION_WIDTH)
-            .height(NAV_BAR_CONTROL_HEIGHT)
+        modifier = modifier
+            .size(SYNC_ACTION_SIZE)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -520,7 +626,7 @@ private fun AugustSyncAction(onClick: () -> Unit) {
             contentDescription = stringResource(R.string.sync_now),
             tint = AugustColor.Ink,
             modifier = Modifier
-                .size(32.dp)
+                .size(24.dp)
                 .graphicsLayer { rotationZ = rotation }
         )
     }

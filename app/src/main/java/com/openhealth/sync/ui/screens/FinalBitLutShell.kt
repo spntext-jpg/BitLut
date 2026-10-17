@@ -130,6 +130,8 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
 
 internal enum class MainTab(val key: String) {
     Today("tab_today"),
+    Workouts("tab_workouts"),
+    Nutrition("tab_nutrition"),
     Settings("tab_settings")
 }
 
@@ -198,8 +200,7 @@ fun FinalBitLutShell(
             AugustBottomNav(
                 selected = selected,
                 onSelected = { selected = it },
-                onSecretLogViewerTriggered = { showLogViewer = true },
-                onRefreshClick = onSyncNow
+                onSecretLogViewerTriggered = { showLogViewer = true }
             )
         }
     ) { padding ->
@@ -227,9 +228,24 @@ fun FinalBitLutShell(
             } else when (selected) {
                 MainTab.Today -> SummaryScreen(
                     palette, dashboardState, syncState.selectedDataSource, onRefresh, wrappedOnRequestGoogle,
+                    onSyncNow = onSyncNow,
                     onEditLayout = { showCardLayoutEditor = true },
                     cardLayoutVersion = cardLayoutVersion,
                     isSyncing = syncState.isSyncing || dashboardState.isRefreshing
+                )
+                MainTab.Workouts -> TabPlaceholderScreen(
+                    palette = palette,
+                    icon = Icons.Rounded.FitnessCenter,
+                    title = stringResource(R.string.tab_workouts),
+                    headline = stringResource(R.string.workouts_placeholder_title),
+                    body = stringResource(R.string.workouts_placeholder_body)
+                )
+                MainTab.Nutrition -> TabPlaceholderScreen(
+                    palette = palette,
+                    icon = Icons.Rounded.LocalFireDepartment,
+                    title = stringResource(R.string.tab_nutrition),
+                    headline = stringResource(R.string.nutrition_placeholder_title),
+                    body = stringResource(R.string.nutrition_placeholder_body)
                 )
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
@@ -453,6 +469,7 @@ private fun SummaryScreen(
     dataSource: HealthDataSource,
     onRefresh: () -> Unit,
     onRequestGoogle: () -> Unit,
+    onSyncNow: () -> Unit,
     onEditLayout: () -> Unit,
     cardLayoutVersion: Int,
     isSyncing: Boolean = false
@@ -462,9 +479,10 @@ private fun SummaryScreen(
         com.openhealth.sync.config.DashboardCardLayoutPrefs(context).orderedVisibleCards()
     }
     // 2026 GUI pass 2 (B5): additive pull-to-refresh, not a replacement for
-    // the nav bar's own dedicated sync button (AugustSyncAction) -- both
-    // trigger the same onRefresh callback. isSyncing already exists as a
-    // param and doubles as PullToRefreshBox's isRefreshing.
+    // the header's dedicated sync button (AugustSyncAction, in the navbar
+    // until 2026-10-15). Pull-to-refresh calls onRefresh (status + cache
+    // refresh); the button calls onSyncNow (a real sync). isSyncing already
+    // exists as a param and doubles as PullToRefreshBox's isRefreshing.
     PullToRefreshBox(
         isRefreshing = isSyncing,
         onRefresh = onRefresh,
@@ -478,10 +496,11 @@ private fun SummaryScreen(
         item {
             MinimalHeader(
                 palette = palette,
-                // 2026 GUI pass 2: dropped the redundant "Summary" title that
-                // just repeated the tab label. MinimalHeader's title is now
-                // nullable specifically for this call site.
-                title = null,
+                // 2026-10-15: the old "Summary" title (dropped in GUI pass 2 as a
+                // repeat of the tab label) is replaced by a time-of-day greeting,
+                // as in the Today mockup. BitLut has no account or name, so the
+                // greeting carries none.
+                title = greetingText(),
                 trailing = formatDashboardSourceStatus(
                     source = dataSource,
                     lastUpdatedAtMs = state.lastUpdatedAtMs,
@@ -490,7 +509,8 @@ private fun SummaryScreen(
                 // One UI signal covers UI-triggered work plus actually RUNNING
                 // tagged background SyncWorker instances. Header layout stays stable.
                 isSyncing = isSyncing,
-                onEditClick = onEditLayout
+                onEditClick = onEditLayout,
+                onSyncClick = onSyncNow
             )
         }
 
@@ -2228,7 +2248,8 @@ private fun MinimalHeader(
     subtitle: String? = null,
     trailing: String? = null,
     isSyncing: Boolean = false,
-    onEditClick: (() -> Unit)? = null
+    onEditClick: (() -> Unit)? = null,
+    onSyncClick: (() -> Unit)? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -2241,8 +2262,11 @@ private fun MinimalHeader(
                     text = title,
                     color = palette.text,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 30.sp,
+                    // 2026-10-15: the Today greeting ("Добрый вечер") plus two
+                    // 48dp buttons can outgrow 30sp on narrow phones.
+                    autoSize = TextAutoSize.StepBased(minFontSize = 20.sp, maxFontSize = 30.sp, stepSize = 1.sp),
                     maxLines = 1,
+                    softWrap = false,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -2251,7 +2275,7 @@ private fun MinimalHeader(
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .clip(RoundedCornerShape(AugustRadius.Compact))
+                        .clip(RoundedCornerShape(AugustRadius.Pill))
                         .background(if (palette.dark) AugustColor.NavySoft else AugustColor.Soft)
                         .clickable(onClick = onEditClick),
                     contentAlignment = Alignment.Center
@@ -2263,6 +2287,10 @@ private fun MinimalHeader(
                         modifier = Modifier.size(20.dp)
                     )
                 }
+            }
+            if (onSyncClick != null) {
+                Spacer(Modifier.width(10.dp))
+                AugustSyncAction(onClick = onSyncClick)
             }
         }
 
@@ -2319,6 +2347,82 @@ private fun MinimalHeader(
                 fontSize = 13.sp,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
+
+/** Time-of-day greeting for the Today header. */
+@Composable
+private fun greetingText(): String {
+    val hour = java.time.LocalTime.now().hour
+    return stringResource(
+        when (hour) {
+            in 5..11 -> R.string.greeting_morning
+            in 12..17 -> R.string.greeting_afternoon
+            else -> R.string.greeting_evening
+        }
+    )
+}
+
+/**
+ * Empty-state screen for the Workouts and Nutrition tabs (2026-10-15). Both
+ * tabs are placeholders until their content ships in later sprints; this keeps
+ * the four-tab navigation real without inventing data or controls.
+ */
+@Composable
+private fun TabPlaceholderScreen(
+    palette: BitPalette,
+    icon: ImageVector,
+    title: String,
+    headline: String,
+    body: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        MinimalHeader(palette = palette, title = title)
+        SoftCard(palette = palette) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(AugustRadius.Pill))
+                        .background(if (palette.dark) AugustColor.NavySoft else AugustColor.Soft),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = palette.secondaryText,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = headline,
+                    color = palette.text,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = body,
+                    color = palette.secondaryText,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

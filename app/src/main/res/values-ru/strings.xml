@@ -91,6 +91,15 @@
     <string name="toast_hc_launch_failed">Не удалось открыть экран разрешений Health Connect. Попробуйте ещё раз.</string>
     <string name="toast_battery_settings_launch_failed">Не удалось открыть настройки батареи. Попробуйте ещё раз.</string>
     <string name="tab_today">Сегодня</string>
+    <string name="tab_workouts">Тренировки</string>
+    <string name="tab_nutrition">Питание</string>
+    <string name="workouts_placeholder_title">Советы по тренировкам скоро появятся</string>
+    <string name="workouts_placeholder_body">Здесь будут руководства и советы по тренировкам.</string>
+    <string name="nutrition_placeholder_title">Журнал питания скоро появится</string>
+    <string name="nutrition_placeholder_body">Здесь можно будет вести учёт приёмов пищи и калорий.</string>
+    <string name="greeting_morning">Доброе утро</string>
+    <string name="greeting_afternoon">Добрый день</string>
+    <string name="greeting_evening">Добрый вечер</string>
     <string name="huawei_pending_approval_title">Ждём подтверждения от Huawei</string>
     <string name="huawei_pending_approval_body">Это не ошибка. Huawei проверяет запрос на доступ к данным у каждого приложения, прежде чем синхронизация сможет заработать — это может занять несколько дней. BitLut заработает автоматически, как только заявка будет одобрена, делать ничего не нужно.</string>
     <string name="huawei_reason_privacy_not_accepted_title">Примите условия конфиденциальности Huawei Health</string>
