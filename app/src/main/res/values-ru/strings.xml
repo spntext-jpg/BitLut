@@ -66,6 +66,10 @@
     <string name="toast_huawei_health_missing">Установите Huawei Health и войдите в аккаунт.</string>
     <string name="toast_huawei_start_failed">Не удалось открыть авторизацию Huawei Health.</string>
     <string name="steps_unit">шагов</string>
+    <string name="hero_goal_percent">%1$d%% цели</string>
+    <string name="hero_unit_km">км</string>
+    <string name="hero_unit_kcal">ккал</string>
+    <string name="hero_unit_min">мин</string>
     <string name="steps_goal_reached">Цель на сегодня достигнута 🎉</string>
     <string name="steps_goal_remaining">Ещё %1$s до цели</string>
     <string name="dashboard_rings_steps">Шаги</string>

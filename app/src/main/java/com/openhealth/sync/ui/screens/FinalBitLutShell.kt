@@ -537,43 +537,33 @@ private fun SummaryScreen(
                         palette = palette,
                         title = stringResource(R.string.steps_today),
                         stepsValue = formatNumber(state.stepsToday),
-                        stepsUnit = stringResource(R.string.steps_unit),
                         goalValue = state.stepsGoal.takeIf { it > 0 }?.let { formatNumber(it) },
                         progress = state.stepsProgress,
                         progressText = stepsGoalProgressText(state.stepsToday, state.stepsGoal),
                         stats = listOf(
                             HeroStat(
                                 icon = Icons.AutoMirrored.Rounded.DirectionsWalk,
-                                tint = AugustColor.Purple,
                                 label = stringResource(R.string.distance_short_title),
-                                value = stringResource(
-                                    R.string.distance_today_value,
-                                    formatOneDecimal(state.distanceMeters / 1000.0)
-                                )
+                                value = formatOneDecimal(state.distanceMeters / 1000.0),
+                                unit = stringResource(R.string.hero_unit_km)
                             ),
                             HeroStat(
                                 icon = Icons.Rounded.LocalFireDepartment,
-                                tint = AugustColor.Tangerine,
                                 label = stringResource(R.string.workout_stat_calories_label),
                                 // 0 means "no calorie data" far more often than "burned
                                 // nothing" (source-dependent), so show a dash, not 0 kcal.
                                 value = if (state.caloriesKcal > 0.0) {
-                                    stringResource(
-                                        R.string.workout_calories_value,
-                                        formatNumber(Math.round(state.caloriesKcal))
-                                    )
+                                    formatNumber(Math.round(state.caloriesKcal))
                                 } else {
                                     stringResource(R.string.no_data_short)
-                                }
+                                },
+                                unit = stringResource(R.string.hero_unit_kcal)
                             ),
                             HeroStat(
                                 icon = Icons.Rounded.Schedule,
-                                tint = AugustColor.Lime,
                                 label = stringResource(R.string.dashboard_section_workouts),
-                                value = stringResource(
-                                    R.string.dashboard_workout_minutes_value,
-                                    state.workoutMinutesToday
-                                )
+                                value = formatNumber(state.workoutMinutesToday),
+                                unit = stringResource(R.string.hero_unit_min)
                             )
                         )
                     )
@@ -2589,12 +2579,19 @@ private fun MinimalMetricCard(
  * only activity metrics BitLut can really read (distance, calories, workout
  * time). No heart-rate/sleep/SpO2 tiles -- those scopes are permanently
  * unavailable to an individual Huawei developer account.
+ *
+ * 2026-10-15 (mockup conformance): a tile shows a bare [value] with its [unit]
+ * under it, like the mockup; [label] is the metric's name and is only used as
+ * the spoken description. The icon colour tint is gone: every tile uses the
+ * same Lime chip with an Ink icon (Tangerine and Lime icons fail 3:1 on a
+ * white tile: 2.58:1 and 1.13:1), and Tangerine stays reserved for sync and
+ * the Settings toggle per AugustColor.
  */
 private data class HeroStat(
     val icon: ImageVector,
-    val tint: Color,
     val label: String,
-    val value: String
+    val value: String,
+    val unit: String
 )
 
 /**
@@ -2608,7 +2605,6 @@ private fun StepsHeroCard(
     palette: BitPalette,
     title: String,
     stepsValue: String,
-    stepsUnit: String,
     goalValue: String?,
     progress: Float?,
     progressText: String?,
@@ -2638,12 +2634,15 @@ private fun StepsHeroCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(AugustRadius.Pill))
-                        .background(AugustColor.Tangerine.copy(alpha = 0.18f))
+                        // Lime, like the progress bar below it (Lime text on this
+                        // 16% Lime-over-NavyRaised fill is 9.18:1). Tangerine is
+                        // reserved for sync and the Settings toggle.
+                        .background(AugustColor.Lime.copy(alpha = 0.16f))
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "${(safeProgress * 100).toInt()}%",
-                        color = AugustColor.Tangerine,
+                        text = stringResource(R.string.hero_goal_percent, (safeProgress * 100).toInt()),
+                        color = AugustColor.Lime,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
                         maxLines = 1
@@ -2655,7 +2654,6 @@ private fun StepsHeroCard(
         Row(verticalAlignment = Alignment.Bottom) {
             HeroMetricBlock(
                 value = stepsValue,
-                unit = stepsUnit,
                 modifier = Modifier.weight(1f, fill = false)
             )
             if (goalValue != null) {
@@ -2714,37 +2712,52 @@ private fun StepsHeroCard(
 }
 
 /**
- * Value text is sized by TextAutoSize from the width the tile really gets
- * (three tiles share the hero's inner width), so "1 245 kcal" shrinks
- * instead of clipping on narrow phones or large system font sizes.
+ * Light tile on the dark hero, as in the mockup (2026-10-15): Lime icon chip,
+ * a bold value and its unit underneath. Colours: Ink on Surface 17.72:1,
+ * Muted unit text on Surface 4.70:1, Ink icon on the Lime chip 15.74:1.
+ *
+ * The value is sized by TextAutoSize from the width the tile really gets
+ * (three tiles share the hero's inner width), so "1 245" shrinks instead of
+ * clipping on narrow phones or large system font sizes. The whole tile is one
+ * spoken node: "Distance: 5.2 km".
  */
 @Composable
 private fun HeroStatTile(stat: HeroStat, modifier: Modifier = Modifier) {
+    val spoken = "${stat.label}: ${stat.value} ${stat.unit}"
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(AugustRadius.Control))
-            .background(AugustColor.NavySoft)
+            .background(AugustColor.Surface)
+            .semantics(mergeDescendants = true) { contentDescription = spoken }
             .padding(horizontal = 10.dp, vertical = 12.dp)
     ) {
-        Icon(
-            imageVector = stat.icon,
-            contentDescription = null,
-            tint = stat.tint,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(AugustRadius.Pill))
+                .background(AugustColor.Lime),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = stat.icon,
+                contentDescription = null,
+                tint = AugustColor.Ink,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        Spacer(Modifier.height(10.dp))
         Text(
             text = stat.value,
-            color = AugustColor.Surface,
-            fontWeight = FontWeight.Bold,
-            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 16.sp, stepSize = 1.sp),
+            color = AugustColor.Ink,
+            fontWeight = FontWeight.ExtraBold,
+            autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = 20.sp, stepSize = 1.sp),
             maxLines = 1,
             softWrap = false
         )
         Spacer(Modifier.height(2.dp))
         Text(
-            text = stat.label,
-            color = AugustColor.DarkSecondaryText,
+            text = stat.unit,
+            color = AugustColor.Muted,
             fontWeight = FontWeight.Medium,
             fontSize = 11.sp,
             maxLines = 1,
@@ -2754,7 +2767,9 @@ private fun HeroStatTile(stat: HeroStat, modifier: Modifier = Modifier) {
 }
 
 /**
- * One big-number + small-unit pair inside [StepsHeroCard]. The number is sized
+ * The big number inside [StepsHeroCard] (the unit chip beside it was removed
+ * 2026-10-15: the "Steps today" label already says what it counts, and the
+ * mockup shows only "8,432 / 10,000"). The number is sized
  * by Compose's TextAutoSize from the width it is actually given (largest size
  * that fits, 48sp down to 20sp), so it adapts to narrow phones, the system
  * font-size and display-size settings, and split-screen. The previous
@@ -2766,7 +2781,6 @@ private fun HeroStatTile(stat: HeroStat, modifier: Modifier = Modifier) {
 @Composable
 private fun HeroMetricBlock(
     value: String,
-    unit: String,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -2781,15 +2795,6 @@ private fun HeroMetricBlock(
                 maxLines = 1,
                 softWrap = false,
                 modifier = Modifier.weight(1f, fill = false)
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = unit,
-                color = AugustColor.Lime,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 13.sp,
-                maxLines = 1,
-                modifier = Modifier.padding(bottom = 4.dp)
             )
         }
     }
@@ -2846,7 +2851,10 @@ private fun DashboardLoadingCard(palette: BitPalette) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SoftCard(palette = palette, hero = true) {
-            ShimmerBlock(onDark = true, palette = palette, modifier = Modifier.fillMaxWidth().height(244.dp))
+            // 250dp: the hero's inner height after the 2026-10-15 tile redesign
+            // (label row ~24 + 14 + number 48 + 14 + bar 8 + 8 + "to go" ~16 + 18
+            // + tiles ~100). Estimated from the layout, not measured on a device.
+            ShimmerBlock(onDark = true, palette = palette, modifier = Modifier.fillMaxWidth().height(250.dp))
         }
         SoftCard(palette = palette) {
             ShimmerBlock(onDark = false, palette = palette, modifier = Modifier.fillMaxWidth().height(96.dp))

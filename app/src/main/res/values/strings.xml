@@ -66,6 +66,10 @@
     <string name="toast_huawei_health_missing">Install Huawei Health and sign in.</string>
     <string name="toast_huawei_start_failed">Could not open Huawei Health authorization.</string>
     <string name="steps_unit">steps</string>
+    <string name="hero_goal_percent">%1$d%% of goal</string>
+    <string name="hero_unit_km">km</string>
+    <string name="hero_unit_kcal">kcal</string>
+    <string name="hero_unit_min">min</string>
     <string name="steps_goal_reached">Goal reached today 🎉</string>
     <string name="steps_goal_remaining">%1$s to go</string>
     <string name="dashboard_rings_steps">Steps</string>
