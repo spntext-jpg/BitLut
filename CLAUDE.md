@@ -12,6 +12,8 @@ HUAWEI Health -> BitLut -> Android Health Connect -> compatible readers
 
 No BitLut backend/account. Production scope is activity/workout data only: steps, distance, floors/elevation, calories when available, and exercise sessions. Do not add sleep, heart rate, SpO2, HRV, stress, or other biometric categories without an explicit product/scope review.
 
+One approved exception (2026-10-16): the Nutrition tab's manual food journal (`NutritionJournalPrefs`). It holds only what the person types, lives in a private app file on the device, is never uploaded, never written to Health Connect and never read from Huawei Health. Do not give it Health Connect nutrition records, a network source or cloud backup without a new product/scope review and a privacy-policy update.
+
 Real-data rule: never fabricate missing metrics. The only approved exception is the existing workout total-calorie estimate used when Huawei supplies no workout calories; it is dashboard-display-only and must not be written to Health Connect.
 
 Current top-priority goal: lift the Huawei Health Kit 100-user test-phase cap, and add `HEALTHKIT_CALORIES_READ` if it can be done without an Enterprise account. See `docs/SCALING_ROADMAP.md` for the plan; do not add any Advanced-tier scope (sleep/heart rate/SpO2/stress) regardless -- that remains permanently closed to individual developers.

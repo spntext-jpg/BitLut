@@ -234,13 +234,7 @@ fun FinalBitLutShell(
                     isSyncing = syncState.isSyncing || dashboardState.isRefreshing
                 )
                 MainTab.Workouts -> WorkoutsScreen(palette = palette)
-                MainTab.Nutrition -> TabPlaceholderScreen(
-                    palette = palette,
-                    icon = Icons.Rounded.LocalFireDepartment,
-                    title = stringResource(R.string.tab_nutrition),
-                    headline = stringResource(R.string.nutrition_placeholder_title),
-                    body = stringResource(R.string.nutrition_placeholder_body)
-                )
+                MainTab.Nutrition -> NutritionScreen(palette = palette)
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
                     onOpenHealthConnectSettings = onOpenHealthConnectSettings,
@@ -2162,7 +2156,7 @@ private fun PillActionButton(
 }
 
 @Composable
-private fun PrimaryButton(
+internal fun PrimaryButton(
     text: String,
     enabled: Boolean = true,
     compact: Boolean = false,
@@ -2191,7 +2185,7 @@ private fun PrimaryButton(
 
 /** Quiet secondary action: flat neutral fill, pill shape, Purple focus. */
 @Composable
-private fun SecondaryButton(
+internal fun SecondaryButton(
     text: String,
     palette: BitPalette,
     enabled: Boolean = true,
@@ -2361,69 +2355,6 @@ private fun greetingText(): String {
             else -> R.string.greeting_evening
         }
     )
-}
-
-/**
- * Empty-state screen for the Workouts and Nutrition tabs (2026-10-15). Both
- * tabs are placeholders until their content ships in later sprints; this keeps
- * the four-tab navigation real without inventing data or controls.
- */
-@Composable
-private fun TabPlaceholderScreen(
-    palette: BitPalette,
-    icon: ImageVector,
-    title: String,
-    headline: String,
-    body: String
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        MinimalHeader(palette = palette, title = title)
-        SoftCard(palette = palette) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(AugustRadius.Pill))
-                        .background(if (palette.dark) AugustColor.NavySoft else AugustColor.Soft),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = palette.secondaryText,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = headline,
-                    color = palette.text,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = body,
-                    color = palette.secondaryText,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
 }
 
 @Composable

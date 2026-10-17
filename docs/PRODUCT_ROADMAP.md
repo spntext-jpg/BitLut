@@ -54,15 +54,18 @@ header (`AugustSyncAction`).
    tips are general guidance written as a starting point: the owner should
    review, edit or replace them; adding a tip means one `WorkoutTip` line plus
    two strings per language.
-5. **Nutrition.** Local-only food journal and calorie counter. Decisions needed
-   before any code:
-   - Storage is local to the device. Writing meals to Health Connect would
-     need a new permission, which the constraints above forbid.
-   - `CLAUDE.md` currently limits production scope to activity and workout
-     data; adding a food journal is a product-boundary change that needs an
-     explicit update there, in `docs/PRIVACY_POLICY.md`, and in the AppGallery
-     data declarations.
-   - No bundled or online food database is assumed; manual entry first.
+5. **Nutrition (done 2026-10-16).** Manual, local-only food journal with a daily
+   calorie total (`NutritionScreen`, `NutritionJournalPrefs`). Decisions as built:
+   - Storage is a private SharedPreferences file on the device (one JSON array),
+     no new dependency. Nothing is written to Health Connect (that would need a
+     new permission, which the constraints above forbid), nothing is uploaded,
+     and the app declares `allowBackup="false"`.
+   - `CLAUDE.md` (product boundary) and `docs/PRIVACY_POLICY.md` were updated in
+     this stage. Still to do by hand, outside the repo: review the AppGallery
+     data declarations before the next store release.
+   - No food database: manual entry only (name optional, calories 1 to 9999).
+   - Left out on purpose: calorie goal, macros, search, editing an entry (delete
+     and re-add instead), browsing forward past today.
 6. **Docs pass.** `CHANGELOG.md`, `SESSION_HANDOFF.md`, `CLAUDE.md` (navbar and
    UI contract), `design.md` (navigation, Tangerine role), README screenshots.
    Done at the end of the sprint, not per stage.

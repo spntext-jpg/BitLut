@@ -24,6 +24,10 @@ BitLut does not sell user data.
 
 BitLut does not create mock steps, distance, workout sessions, elevation, or placeholder health records. If Huawei Health does not provide calories for a real workout, BitLut may calculate an estimated total calorie value from the real workout type and duration for its own app display only. This estimate is local, bounded to the real workout, is not written to Android Health Connect, and is never used to invent another health metric.
 
+## Nutrition journal
+
+The Nutrition tab lets you type in meals and calories yourself. These entries are stored only in BitLut's private storage on your device. BitLut does not upload them, does not write them to Android Health Connect, does not read them from Huawei Health, and does not include them in Android app backups. They are removed when you delete them in the app, clear BitLut's app data or uninstall BitLut.
+
 ## Local processing
 
 Health data is processed locally on the user's Android device and transferred between Huawei Health Kit and Android Health Connect using the permissions granted by the user.
