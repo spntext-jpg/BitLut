@@ -8,6 +8,15 @@ import android.content.Intent
  * Keep these interfaces activity-only for v1.9.6. Do not add sleep, pulse,
  * SpO2, HRV, stress or Activity Intensity until Huawei approval scope expands.
  */
+data class ExportDiagnostic(
+    val available: Boolean,
+    val canRead: Boolean = false,
+    val workoutCount: Int = 0,
+    val hasMore: Boolean = false,
+    val newestEnd: Long? = null,
+    val backgroundRead: Boolean = false
+)
+
 interface HealthConnectManager {
     val permissions: Set<String>
 
@@ -19,6 +28,8 @@ interface HealthConnectManager {
     suspend fun missingSyncPermissions(): Set<String>
     suspend fun hasSyncPermissions(): Boolean
     suspend fun hasDashboardReadPermissions(): Boolean
+    suspend fun canReadInBackground(): Boolean = false
+    suspend fun exportDiagnostic(): ExportDiagnostic = ExportDiagnostic(available = false)
     suspend fun readDashboardSnapshot(): GoogleDashboardSnapshot?
     suspend fun writeSnapshot(snapshot: HuaweiHealthSnapshot): WriteSnapshotResult
 
@@ -40,7 +51,7 @@ interface HealthConnectManager {
  * whose only visible symptom -- a single generic toast -- could have meant
  * any of these). Each case maps to a distinct, actionable next step; see
  * HuaweiHealthManager's classifyFailure() for the exact HMS error code
- * mapping and CLAUDE.md for the platform-specific detail behind each one.
+ * mapping and agents.md for the platform-specific detail behind each one.
  */
 enum class HuaweiAuthFailureReason {
     /** HMS code 50005. Huawei's own server-side review of this app's

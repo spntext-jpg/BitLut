@@ -1,85 +1,44 @@
-# BitLut Design System
+# BitLut design system
 
-Updated: 2026-10-16
+Updated: 2026-11-18. Android/Material adaptation of August; see `docs/GUI_AUDIT_2026_11.md` for findings and acceptance checks.
 
-## Direction
+## Palette and hierarchy
 
-BitLut keeps the August v3 palette but moves to a quieter 2026 content-first interface. The reference is the clarity and restraint of the ChatGPT app rather than decorative glassmorphism: clear hierarchy, calm surfaces, grouped controls, generous touch targets and minimal motion.
+Keep the brand palette and bundled Inter Variable. Exact values remain in `AugustTokens.kt`.
 
-## Color roles — unchanged
+| Role | Light | Dark |
+|---|---|---|
+| Canvas | Canvas `#F7F8FC` | Navy `#151728` |
+| Card / hero | Surface `#FFFFFF` | NavyRaised `#1C1E33` |
+| Nested quiet surface | Soft `#F2F3F7` | NavySoft `#24263D` |
+| Primary content | Ink `#151728` | Surface `#FFFFFF` |
+| Secondary content | InkSoft `#292C3E` | DarkSecondaryText `#B8BDCE` |
+| Filled primary action | Lime with Ink | Lime with Ink |
+| Text action / field focus | PurpleDark | Lime |
+| Sync action | Tangerine with Ink | Tangerine with Ink |
+| Navigation anchor | Navy | Navy |
 
-`AugustTokens.kt` (`AugustColor`) is the single source of truth for the exact hex values; this section names the semantic roles.
+`BitLutExpressiveTheme` is the sole theme decision point. `ThemeMode` persists System (default), Light or Dark. `BitPalette.from(MaterialTheme.colorScheme)` adapts existing components; it does not independently sample OS mode. Root surfaces, hero, greeting, values, progress track and stat tiles update immediately. Only the Navy dock/rail remains an intentional constant architectural anchor.
 
-- Ink `#151728`: core neutral / foreground-on-Lime / dark canvas. Also aliased as Navy in its architectural-anchor/navigation role — same color, two semantic names for two roles.
-- Navy Raised `#1C1E33`: dark raised/hero surface.
-- Canvas `#F7F8FC`: light background. Surface `#FFFFFF`: white card fill.
-- Lime `#DFFF6A`: primary action, hero progress, the hero goal pill and icon chips (always with an Ink icon).
-- Tangerine `#F28500`: sync action / active toggle signal (the Today-header sync button and its in-progress spinner, the source-not-connected notice, and the Settings toggle "on" track; Purple keeps every other focus/selection role).
-- Tangerine is an active-state shape/indicator, not small foreground copy on Canvas. Pair it with Ink/Surface semantic text when a label is required; this preserves the palette while meeting readable light/dark contrast.
-- Purple `#6E5CF6`: focus and secondary interaction detail.
-- Inter Variable remains the app font.
+Lime is a filled brand surface, not small text on a white background. Light Material focus/text roles use the existing PurpleDark. Outlined inputs use contrast-bearing outlines; normal cards keep the quieter decorative border.
 
-Do not add new colors when an existing semantic role works.
+## Layout and controls
 
-## Surface rules
+Cards use 24 dp rounding, heroes 32 dp and restrained depth. Ordinary cards are flat with one subtle outline. Keep one dominant metric, clear section hierarchy and generous whitespace. Use readable, scalable type; numbers may fit their measured width with `TextAutoSize`, never a character-count lookup. Avoid truncating data to create symmetry.
 
-- Normal cards: flat fill + one subtle outline, 22 dp radius, no routine shadow.
-- Dark root canvas stays Navy; DarkPanel/NavyRaised are surfaces above it. Do not gradient the root into a card surface, which erases layer separation at the bottom of the screen.
-- Hero card: 30 dp radius, restrained shadow only where hierarchy needs it.
-- Do not tint every card boundary with an accent.
-- Non-clickable cards never scale/lift on touch.
-- Use whitespace and typography before adding decoration.
+Use a minimum 48 dp action target, labelled icon controls, visible focus and standard Material input/radio/chip semantics. Static cards do not animate. Navigation uses short tweens, no spring overshoot. Four destinations remain Today, Workouts, Nutrition, Settings; sync stays in Today’s header. At 600 dp available width the dock becomes a navigation rail. Content is capped at 840 dp and the food editor at 600 dp.
 
-## Buttons and controls
+## Screens
 
-- Primary buttons: Lime + Ink, pill shape, minimum 48 dp height, no glow/shadow.
-- Secondary buttons: neutral Surface/Soft/NavySoft, subtle outline, pill shape, minimum 48 dp height.
-- One clear primary action per action group. In Settings that is `Sync now`.
-- Connect Google, Connect Huawei, Refresh status, Import archive and Health Connect settings are secondary actions in the same grouped card.
-- Icon-only controls need a clear content description and a practical touch target.
-- Focus styling must observe the same `MutableInteractionSource` used by the actual Material control; a decorative wrapper source does not receive focus events.
-- Goal +/- controls use quiet round/pill containers; steps is the only editable goal.
+- Today: greeting/sync, steps and progress, distance/calories/workout tiles, configured activity/workout cards and a food-intake summary. Eaten calories and macros have their own card and are not mixed with burned calories. Local nutrition remains accessible without Health Connect permission.
+- Nutrition: day navigation, daily kcal/macros and optional target, food list grouped by meal, searchable offline catalog with portion preview, custom entries and editable log rows. Deletion offers Undo. Empty, unavailable catalog, invalid input, incomplete macros and storage failures are explicit states. The editor scrolls above the keyboard and preserves form state across recreation.
+- Settings: data-source and sync actions, steps goal, theme selection, bounded shared-workout check and local log access.
+- Workouts: existing offline training tips retain their behavior.
 
-## Motion
+The catalog distinguishes raw/cooked and other preparation details. Values are per 100 g of edible food, scaled to the entered grams. Custom fields are explicitly whole-portion values and do not silently scale when weight changes. No default personal calorie target is prescribed.
 
-- 140–200 ms tween for press/color state.
-- No bounce/elastic overshoot in standard navigation/buttons.
-- Sync icon may use a small rotational press cue, but no exaggerated lift.
-- Status transitions that share one semantic slot should crossfade inside a reserved-height container instead of adding/removing layout rows.
-- Motion communicates state; it is not decoration.
+## Accessibility, localization and checks
 
-## Navigation
+Control and body copy use resources with EN/RU key/format parity; catalog names carry EN/RU labels. Test TalkBack, 320/360 dp phones, 200% fonts, landscape, split screen, large windows, keyboard, both system themes and manual theme overrides. Theme checks must cover loaded, locked, empty and loading dashboard states. Keep existing cache and missing-metric semantics intact.
 
-- Persistent Navy bottom dock.
-- Four destinations: Today, Workouts, Nutrition, Settings. Labels auto-size from 11sp to 9sp.
-- Sync is not in the dock: it is a round Tangerine button in the Today header.
-- Selected destination is tint-only (Lime icon and label), no background pill.
-
-## Dashboard
-
-- The pinned hero is one dark card holding the greeting row (edit-layout and sync buttons), the freshness/sync line, steps with the goal, a progress bar and three light stat tiles (distance, calories, workout minutes).
-- Other cards use `DashboardCardLayoutPrefs` only for order/visibility.
-- Workout cards are type-aware and show only meaningful metrics.
-- Missing metrics are omitted rather than replaced with invented zeros.
-- Card content should scan top-to-bottom: label -> key value/title -> supporting metrics.
-
-## Workouts and Nutrition
-
-- Workouts: a title, one intro line, expandable tip cards (Lime icon chip, one expanded at a time) and a short "general information" note.
-- Nutrition: a title, a day navigator (backwards only), a total card, one card per meal that has entries, and a primary "Add food" button opening a dialog (meal choice, calories, optional name). Empty days show a short empty state; a footer line states that data stays on the device.
-
-## Settings
-
-- Minimal data-source selector.
-- One grouped actions card, buttons only.
-- One primary action (`Sync now`), all other actions secondary.
-- Steps goal only.
-- Workout filter UI stays removed; sync-time `WorkoutFilterPrefs` behavior remains.
-- Health Connect settings deep link remains for diagnostics.
-
-## Accessibility and localization
-
-- Keep interactive targets at least 48 dp where practical.
-- Icon-only controls require content descriptions.
-- EN and RU resource keys must remain in parity in every patch.
-- Never hardcode locale-specific UI copy in Kotlin when a resource is appropriate.
+Reference baseline, reviewed 2026-11-18: [Android accessibility](https://developer.android.com/design/ui/mobile/guides/foundations/accessibility) (scalable text, contrast, semantics and 48 dp targets); [adaptive app quality](https://developer.android.com/docs/quality-guidelines/adaptive-app-quality/tier-2) (window-aware layout, rails and bounded secondary surfaces). Code inspection does not certify visual quality; device acceptance remains required.

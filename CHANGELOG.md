@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-18 — Health Connect recovery, shared themes and offline nutrition
+
+- Deliberate 1.2.0-alpha06 Health Connect pin for August certificate/signature fixes; AAR-required compile SDK 37.0 / AGP 9.1.1 / Gradle 9.3.1 migration with explicit legacy Kotlin/DSL compatibility. Target remains 36; Huawei runtime remains pinned.
+- Continuous/raw-step value-sensitive versions, 100-record complete-bundle transactions, whole-cycle provider failure deferral and optional background reading. Read-only export diagnostic added; corporate regression remains unconfirmed without reader evidence.
+- Corrected Huawei dashboard daily-step double counting.
+- System/Light/Dark theme selection; shared semantic dashboard surfaces; flat cards; restrained navigation; adaptive rail and bounded content.
+- 200-source-ID offline USDA food catalog with EN/RU search, portions/macros, custom entries, edit/delete/undo, optional calorie target and Today totals. Legacy journal migration and fail-closed storage behavior.
+- Canonical docs renamed to agents.md/context.md. Regression tests and push/PR verification workflow added. See docs/VALIDATION_2026_11.md for verification boundaries.
+
 ## 2026-10-16 -- Today redesign from the mockup, four-tab navigation, Workouts tips, local Nutrition journal
 
 One UI sprint in six stages (stages 1 and 2 landed on 2026-10-15, stages 3 to 6 on 2026-10-16), planned in `docs/PRODUCT_ROADMAP.md`; each stage was delivered as its own patch script behind the `:app:compileDebugKotlin` gate. Source: a three-variant mockup (ChatGPT / Claude / Figma Make); the dark-hero layout with one dominant number was chosen because BitLut has no photos. No new Health Connect or Huawei permission, no change to the 7-day window, no advanced-category path (the mockup's heart-rate tile became today's workout time); `SyncWorker`, the lease, retry/backoff and every Huawei/Health Connect read and write path are untouched.
@@ -9,8 +18,8 @@ One UI sprint in six stages (stages 1 and 2 landed on 2026-10-15, stages 3 to 6 
 - **Stage 2 -- hero conformance.** The goal pill reads "N% of goal" and is Lime (it was Tangerine, which `AugustColor` reserves for sync and the Settings toggle); the unit chip beside the steps number is gone; the stat tiles are light (Surface) with a Lime icon chip, a bold value and its unit (km / kcal / min), each spoken as one node. Contrast, computed: Ink on Surface 17.72:1, Muted unit text on Surface 4.70:1, Ink icon on the Lime chip 15.74:1, Lime pill text on its 16% fill 9.18:1. Tangerine and Lime icons on a white tile fail 3:1 (2.58:1 and 1.13:1), hence Ink-on-Lime chips.
 - **Stage 3 -- header inside the hero.** The greeting row, the edit-layout and sync buttons and the freshness/sync line now sit inside the dark hero card in every state (locked, loading, loaded), so Sync never disappears: `TodayPanelHeader` is passed as a slot into the loaded `StepsHeroCard`, the loading skeleton card and a header-only `TodayHeaderCard` for the locked state. `MinimalHeader` is title-only again (Settings, Workouts, Nutrition). Built as an inset card, not the mockup's full-bleed panel (reasoning in `docs/PRODUCT_ROADMAP.md`).
 - **Stage 4 -- Workouts tab.** `WorkoutsScreen`: eight expandable tip cards, bundled and offline (`workout_tip_*` strings, EN + RU). The text is general starter guidance for the owner to review; it uses no health-record data.
-- **Stage 5 -- Nutrition tab.** `NutritionScreen` + `NutritionJournalPrefs`: a manual food journal with a daily kcal total, day browsing (backwards only), four meal sections and an add dialog (meal, calories 1 to 9999, optional name). Local-only: one JSON array in a private SharedPreferences file (`bitlut_nutrition_journal`), no new dependency, no network, nothing written to Health Connect, nothing read from Huawei Health, excluded from backup (`allowBackup="false"`), untouched by disconnecting a data source. `CLAUDE.md` (product boundary) and `docs/PRIVACY_POLICY.md` were updated for it.
-- **Docs.** `CHANGELOG.md`, `SESSION_HANDOFF.md`, `CLAUDE.md`, `CONTEXT.md`, `design.md`, `README.md`, `docs/BACKLOG.md` and `docs/PRODUCT_ROADMAP.md`. README screenshots were not regenerated.
+- **Stage 5 -- Nutrition tab.** `NutritionScreen` + `NutritionJournalPrefs`: a manual food journal with a daily kcal total, day browsing (backwards only), four meal sections and an add dialog (meal, calories 1 to 9999, optional name). Local-only: one JSON array in a private SharedPreferences file (`bitlut_nutrition_journal`), no new dependency, no network, nothing written to Health Connect, nothing read from Huawei Health, excluded from backup (`allowBackup="false"`), untouched by disconnecting a data source. `agents.md` (product boundary) and `docs/PRIVACY_POLICY.md` were updated for it.
+- **Docs.** `CHANGELOG.md`, `SESSION_HANDOFF.md`, `agents.md`, `context.md`, `design.md`, `README.md`, `docs/BACKLOG.md` and `docs/PRODUCT_ROADMAP.md`. README screenshots were not regenerated.
 - **Verification status.** Every stage's patch script was reproduced byte-for-byte from a hand-edited mirror, tested for idempotency and for recovery after a failed gate, and the touched Kotlin was parsed with the Kotlin 2.3.21 compiler; none of that is a Gradle build and none of it renders Compose. Not yet seen on a device: the navbar with four labels (and the 9sp fallback on narrow phones), the nav glyph shapes, white stat tiles on the dark hero in the dark theme, the greeting size inside the hero, the 250dp loading skeleton (estimated, not measured) and the Nutrition dialog with the keyboard open.
 
 ## 2026-10-08 -- OnePlus 7 Pro field test: adaptive number text, Google Health workouts, source-not-connected notice, honest sync indicator
@@ -21,7 +30,7 @@ Four fixes from a real-device test on a OnePlus 7 Pro with Google Health selecte
 - **Google Health source: workouts.** "Google Health" is the renamed Fitbit app (Play package `com.fitbit.FitbitMobile`, rollout began 2026-05-19) and is a different Health Connect data origin from Google Fit (`com.google.android.apps.fitness`). The dashboard read only the Google Fit origin, which fits steps appearing while workouts recorded in Google Health were filtered out. Workout *sessions* and their per-workout aggregates are now read from both origins (`DataSourcePrefs.selectedWorkoutOriginPackages`, `GoogleHealthManager.selectedWorkoutDataOrigins`); sessions from different origins that overlap by 80% or more of the shorter one are treated as the same workout. Daily totals deliberately still use the single Google Fit origin so two apps are never summed twice. The UI label is now "Google Health"; the enum/storage value stays `google_fit`, so no migration. **Not yet confirmed on a device:** this is the evidence-based cause (verified package mismatch), not a captured log. If the Google source still shows no workouts, `GoogleHealthManager` now logs once per process which origins actually own exercise sessions in Health Connect -- read that line in the in-app log before changing anything else.
 - **Source-not-connected notice.** An explicit Sync tap on an unreadable source used to be a silent no-op (`SyncWorker` degrades to `GracefulNoop`). `MainActivity.triggerImmediateSync()` now checks the selected source first; for Huawei that means HMS Core installed, Huawei Health installed and BitLut authorized (all local reads). If not, a top banner (`SourceNoticeBanner`, driven by `SyncUiState.sourceNotice`) slides in under the status bar -- "Data source not connected / Please select it in Settings." (RU: "Источник данных не подключён / Пожалуйста, выберите его в настройках."), opens Settings when tapped and dismisses itself after 5 seconds. Health Connect permission gaps keep their existing permission flow. Automatic syncs (launch/resume) and the sync that follows choosing a source in Settings stay silent.
 - **Sync indicator follows the data.** The Summary capsule followed only WorkManager state, so it could vanish while a live Health Connect read was still pending and the numbers then changed seconds later. `DashboardUiState.isRefreshing` now covers every in-flight live `load()`, and the capsule shows while `SyncUiState.isSyncing || DashboardUiState.isRefreshing`. `SyncOrchestrator` refreshes the dashboard *before* reporting completion, and `MainActivity` refreshes it from cache in the same step in which a background sync stops running.
-- **Docs.** CLAUDE.md's stale "navbar 64dp" line corrected to the verified 56dp (`GlassNavigation.kt`).
+- **Docs.** agents.md's stale "navbar 64dp" line corrected to the verified 56dp (`GlassNavigation.kt`).
 
 ## 2026-09-25 -- GUI pass 2 (Apple Health alignment, CJM polish) + dead-code audit
 
@@ -283,7 +292,7 @@ streak calculation were not touched.
   approved. No code changed -- both existing call sites already prefer
   real Huawei data over the estimate via a plain `?:` fallback, so adding
   the scope later needs no restructuring.
-- `docs/BACKLOG.md`, `CONTEXT.md`, `CLAUDE.md`, and `SESSION_HANDOFF.md`
+- `docs/BACKLOG.md`, `context.md`, `agents.md`, and `SESSION_HANDOFF.md`
   updated with pointers to `docs/SCALING_ROADMAP.md` and the two action
   items (Verification submission, calorie-scope request) as current
   highest priority.
@@ -299,12 +308,12 @@ streak calculation were not touched.
 - **Corporate wellness app status corrected across all docs.** `sync.md`
   (2026-08-31) already recorded that the corporate wellness app reliably
   imports and accepts BitLut-synced workouts once the session-scoped
-  Distance/Steps/Elevation sub-metric write landed, but `CLAUDE.md`,
-  `CONTEXT.md`, `SESSION_HANDOFF.md`, `docs/BACKLOG.md`, and `README.md`
+  Distance/Steps/Elevation sub-metric write landed, but `agents.md`,
+  `context.md`, `SESSION_HANDOFF.md`, `docs/BACKLOG.md`, and `README.md`
   had not been updated to match and still described this as an open,
   unresolved investigation. All five now point to `sync.md` section 4.6 as
   the resolved explanation; no code change, documentation only.
-- `CLAUDE.md`'s "Current baseline" header was still dated 2026-08-29, a day
+- `agents.md`'s "Current baseline" header was still dated 2026-08-29, a day
   behind its own already-current content plus the 2026-08-31 work recorded
   everywhere else (navbar rebuild, session-scoped workout sub-metrics,
   sync-activity signal, midnight-cache guard). Updated the header and added
@@ -425,12 +434,12 @@ streak calculation were not touched.
   Added the delivered-script list for (b) and (c), and a guardrail note
   that a patch script or backup file sitting in the repo root is stale
   debris, not pending work.
-- Fixed a stale line in `CONTEXT.md`'s "UI baseline" that still said
+- Fixed a stale line in `context.md`'s "UI baseline" that still said
   "Updating..." after the wording was tightened to "Syncing..." in the
   previous sprint's `strings.xml` change (the docs patch for that sprint
-  updated `SESSION_HANDOFF.md`/`CHANGELOG.md` but missed `CONTEXT.md`).
+  updated `SESSION_HANDOFF.md`/`CHANGELOG.md` but missed `context.md`).
   Also added the Settings signature and Huawei summary-sum facts that
-  were likewise missing from `CONTEXT.md`.
+  were likewise missing from `context.md`.
 
 ## 2026-08-29 (c) -- Huawei workout summary fix, Settings signature, wording pass
 
@@ -445,7 +454,7 @@ streak calculation were not touched.
 - Settings screen: new wood-carved-style signature at the very bottom
   (`EngravedSignature()`), built from Inter Black + letter-spacing + a
   two-layer engraved-shadow effect (no new font asset added -- see
-  CLAUDE.md's GMS-free/Downloadable-Fonts constraint). New string
+  agents.md's GMS-free/Downloadable-Fonts constraint). New string
   `settings_signature`, EN + RU.
 - Tightened `sync_status_updating` wording for both locales to match
   existing sync terminology: EN "Updating..." -> "Syncing..."; RU
@@ -703,7 +712,7 @@ did not handle that.
   propagates to `readSnapshot()`, which decides skip-one-category vs.
   fully-unauthorized, not directly to `SyncWorker` for a single-category
   failure).
-- Updated CLAUDE.md: refreshed "Current status" (first confirmed real
+- Updated agents.md: refreshed "Current status" (first confirmed real
   device auth success; this fix), corrected Gotcha 13's now-stale "working
   theory" framing, added Gotcha 14 documenting the exact bug and fix.
 
@@ -750,7 +759,7 @@ Health Kit scope application at the app level (App ID 117824685). Device
 logs taken immediately after still showed `localHuaweiAuthorized=false`/
 50005 -- expected, not a regression, since that's a locally-cached flag
 from the last real OAuth attempt, decoupled from the server-side approval
-(see CLAUDE.md Gotcha 12). The new retry button exists specifically to
+(see agents.md Gotcha 12). The new retry button exists specifically to
 make the next required action -- a fresh authorization attempt -- obvious,
 since Huawei's approval notification arrives outside the app entirely and
 BitLut has no way to detect it on its own.
@@ -763,7 +772,7 @@ each root-caused from device logs/screenshots rather than guessed.
 **Widget colors (`Gradle compileDebugKotlin` failure, caught before commit)**
 - `ColorProvider(day = Color(...), night = Color(...))` does not exist in
   `glance-appwidget:1.1.1` -- only `ColorProvider(color: Color)` and
-  `ColorProvider(resId: Int)` do (see CLAUDE.md Gotcha 9). Switched
+  `ColorProvider(resId: Int)` do (see agents.md Gotcha 9). Switched
   `widget/HomeWidget.kt` to resource-qualified colors instead: added
   `widget_card`/`widget_text`/`widget_secondary_text` to both
   `values/colors.xml` (light) and a new `values-night/colors.xml` (dark).
@@ -773,7 +782,7 @@ each root-caused from device logs/screenshots rather than guessed.
   siblings of the main `Scaffold`, not through its content slot, so they
   never got the Scaffold's automatic safe-area inset padding -- invisible
   before `enableEdgeToEdge()`, a real visible bug the moment it shipped
-  (see CLAUDE.md Gotcha 10). Fixed with `.statusBarsPadding()`/
+  (see agents.md Gotcha 10). Fixed with `.statusBarsPadding()`/
   `.navigationBarsPadding()` on both screens' root `Box`. The 2026-07-14
   sprint's own new `DataScopesScreen` was unaffected -- it renders inside
   `SettingsScreen`, inside the Scaffold's own padding.
@@ -784,7 +793,7 @@ each root-caused from device logs/screenshots rather than guessed.
   Huawei-sync-succeeded branch. While Huawei was pending -- true for weeks
   -- that branch was never reached, so the widget stayed stuck indefinitely
   even though Health Connect could already contain real data from other
-  apps regardless of Huawei's state (see CLAUDE.md Gotcha 11). Fixed by
+  apps regardless of Huawei's state (see agents.md Gotcha 11). Fixed by
   calling the refresh on the `isPendingApproval()` and
   `!localHuaweiAuthorized` graceful-no-op paths too.
 - Investigated but deliberately did NOT change: a separately reported
@@ -851,7 +860,7 @@ Follow-up to the 2026-07-10 series. That sprint removed History from the
 bottom nav and stubbed sleep/heart-rate/SpO2/stress fields to empty/null,
 but deliberately left the underlying code in place, dormant, as minimal-diff
 precedent. This sprint changes that precedent for code proven to be
-permanently dead (see CLAUDE.md Gotcha 8) and deletes it outright instead.
+permanently dead (see agents.md Gotcha 8) and deletes it outright instead.
 
 **Sleep / heart-rate / SpO2 / stress -- removed in full**
 - `GoogleDashboardSnapshot`, `DashboardUiState`, and `DashboardSnapshotCache`
@@ -910,7 +919,7 @@ permanently dead (see CLAUDE.md Gotcha 8) and deletes it outright instead.
   `connect_google_history_body`) from both locale files, and reworded
   `widget_visibility_section_body` to drop its now-inaccurate "...and in
   history" clause.
-- Updated `CLAUDE.md` to match: Gotcha 8's "deliberately unused, don't
+- Updated `agents.md` to match: Gotcha 8's "deliberately unused, don't
   clean up reflexively" list no longer includes anything from History
   (only `DashboardWidgetGrid`/`WeeklyComparisonCard`/
   `readWeekOverWeekComparison` remain dormant by that precedent -- unrelated

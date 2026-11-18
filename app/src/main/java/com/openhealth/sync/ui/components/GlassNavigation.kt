@@ -3,7 +3,6 @@ package com.openhealth.sync
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -19,6 +18,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -97,7 +99,7 @@ private val NAV_BAR_OUTER_VERTICAL_MARGIN = 8.dp
 // tile + 3dp spacer + an 11sp label line (~13dp) = 40dp, leaving 6dp slack
 // -- comparable margin to the original 64dp design's 8dp slack, not a
 // zero-margin fit. Label font size (11sp) is unchanged.
-private val NAV_BAR_CONTROL_HEIGHT = 56.dp
+private val NAV_BAR_CONTROL_HEIGHT = 64.dp
 // 2026-10-15: the sync action left the navbar and lives in the Today header
 // (see MinimalHeader in FinalBitLutShell.kt). 48dp is the practical touch
 // target; the circle matches the header's edit-layout button.
@@ -118,7 +120,7 @@ private val SYNC_ACTION_SIZE = 48.dp
 //   Tangerine #F28500 (pressed)          4.52:1 (WCAG non-text minimum is 3:1)
 // Against a black backdrop the same three colours measure 16.25 / 8.74 / 7.08.
 private val NAV_GLYPH_SIZE = 24.dp
-private val NAV_GLYPH_IDLE_COLOR = AugustColor.Lime.copy(alpha = 0.72f)
+private val NAV_GLYPH_IDLE_COLOR = AugustColor.DarkSecondaryText
 // Keeps the orange press highlight on screen briefly after release so a quick
 // tap (finger down for ~80ms) is still visible instead of a sub-frame flash.
 private const val NAV_GLYPH_FLASH_HOLD_MS = 120L
@@ -154,6 +156,7 @@ internal fun AugustBottomNav(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(IntrinsicSize.Min)
                 .shadow(
                     elevation = 12.dp,
                     shape = shellShape,
@@ -173,7 +176,7 @@ internal fun AugustBottomNav(
                 // current dependency of this project) -- out of scope for
                 // this pass. Translucency + a stronger shadow is the
                 // honest, dependency-free approximation.
-                .background(AugustColor.Navy.copy(alpha = 0.86f))
+                .background(AugustColor.Navy)
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -258,18 +261,12 @@ private fun AugustDestination(
     // BITLUT_FINAL_UI_SPRINT_2026_09_11
     val scale by animateFloatAsState(
         targetValue = if (pressed) AugustMotion.DestinationPressScale else 1f,
-        animationSpec = spring(
-            dampingRatio = AugustMotion.PressSpringDampingRatio,
-            stiffness = AugustMotion.PressSpringStiffness
-        ),
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "destinationPressScale"
     )
     val pressDepth by animateDpAsState(
         targetValue = if (pressed) AugustMotion.PressTranslationDp.dp else 0.dp,
-        animationSpec = spring(
-            dampingRatio = AugustMotion.PressSpringDampingRatio,
-            stiffness = AugustMotion.PressSpringStiffness
-        ),
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "destinationPressDepth"
     )
     val pressTilt by animateFloatAsState(
@@ -277,16 +274,14 @@ private fun AugustDestination(
             if (tab == MainTab.Today || tab == MainTab.Workouts) -AugustMotion.DestinationPressTiltDegrees
             else AugustMotion.DestinationPressTiltDegrees
         } else 0f,
-        animationSpec = spring(
-            dampingRatio = AugustMotion.PressSpringDampingRatio,
-            stiffness = AugustMotion.PressSpringStiffness
-        ),
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "destinationPressTilt"
     )
 
     Column(
         modifier = modifier
-            .height(NAV_BAR_CONTROL_HEIGHT)
+            .heightIn(min = NAV_BAR_CONTROL_HEIGHT)
+            .fillMaxHeight()
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -316,9 +311,9 @@ private fun AugustDestination(
             text = label,
             color = contentColor,
             fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
-            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 11.sp, stepSize = 1.sp),
-            maxLines = 1,
-            softWrap = false,
+            fontSize = 12.sp,
+            maxLines = 2,
+            softWrap = true,
             overflow = TextOverflow.Ellipsis
         )
     }
@@ -352,15 +347,12 @@ private fun AugustNavGlyph(
     )
     val selectProgress by animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.5f, stiffness = 420f),
+        animationSpec = tween(AugustMotion.DefaultMs, easing = AugustMotion.StandardEasing),
         label = "navGlyphSelect"
     )
     val pressProgress by animateFloatAsState(
         targetValue = if (highlighted) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = AugustMotion.PressSpringDampingRatio,
-            stiffness = AugustMotion.PressSpringStiffness
-        ),
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "navGlyphPress"
     )
 
@@ -558,34 +550,22 @@ internal fun AugustSyncAction(onClick: () -> Unit, modifier: Modifier = Modifier
     val shape = remember { RoundedCornerShape(24.dp) }
     val scale by animateFloatAsState(
         targetValue = if (pressed) AugustMotion.PrimaryPressScale else 1f,
-        animationSpec = spring(
-            dampingRatio = AugustMotion.PressSpringDampingRatio,
-            stiffness = AugustMotion.PressSpringStiffness
-        ),
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "syncPressScale"
     )
     val pressDepth by animateDpAsState(
         targetValue = if (pressed) AugustMotion.PressTranslationDp.dp else 0.dp,
-        animationSpec = spring(
-            dampingRatio = AugustMotion.PressSpringDampingRatio,
-            stiffness = AugustMotion.PressSpringStiffness
-        ),
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "syncPressDepth"
     )
     val pressTilt by animateFloatAsState(
         targetValue = if (pressed) AugustMotion.SyncPressTiltDegrees else 0f,
-        animationSpec = spring(
-            dampingRatio = AugustMotion.PressSpringDampingRatio,
-            stiffness = AugustMotion.PressSpringStiffness
-        ),
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "syncPressTilt"
     )
     val rotation by animateFloatAsState(
         targetValue = if (pressed) AugustMotion.SyncIconPressRotationDegrees else 0f,
-        animationSpec = spring(
-            dampingRatio = AugustMotion.PressSpringDampingRatio,
-            stiffness = AugustMotion.PressSpringStiffness
-        ),
+        animationSpec = tween(AugustMotion.FastMs, easing = AugustMotion.StandardEasing),
         label = "syncPressRotation"
     )
     val fill by animateColorAsState(

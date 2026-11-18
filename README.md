@@ -9,9 +9,9 @@
 **Private by design · Huawei-first · Android 16 ready · No backend**
 
 <p>
-  <img alt="Android" src="https://img.shields.io/badge/Android-16%20%2F%20API%2036.1-3DDC84?logo=android&logoColor=white" />
+  <img alt="Android" src="https://img.shields.io/badge/Android-compile%2037.0%20%2F%20target%2036-3DDC84?logo=android&logoColor=white" />
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.3.21-7F52FF?logo=kotlin&logoColor=white" />
-  <img alt="Health Connect" src="https://img.shields.io/badge/Health%20Connect-1.1.0-4285F4" />
+  <img alt="Health Connect" src="https://img.shields.io/badge/Health%20Connect-1.2.0--alpha06-4285F4" />
   <img alt="Huawei" src="https://img.shields.io/badge/Huawei-Health%20Kit-E60012?logo=huawei&logoColor=white" />
   <img alt="AppGallery" src="https://img.shields.io/badge/Distribution-AppGallery-E60012" />
 </p>
@@ -50,7 +50,6 @@ There is no BitLut account, cloud backend, advertising layer, or server-side hea
 - Exercise sessions
 - Session-scoped distance
 - Session-scoped steps
-- Session-scoped elevation
 - Session-scoped active calories
 - Huawei device/source metadata
 
@@ -88,50 +87,50 @@ The only approved derived metric is a documented fallback for total workout calo
 
 ## Corporate wellness compatibility
 
-The current interoperability path has been validated with a downstream corporate wellness application reading BitLut-synced workouts through Health Connect. Sync failures were reported again in late August/early September 2026; as a targeted response the per-workout payload was reduced on 2026-09-10 (elevation and total-calories removed) -- not yet a confirmed fix.
+Earlier builds were reported to import successfully into a corporate wellness app. Current end-to-end recovery is unverified because that reader’s React Native source and correlated logs were not supplied. Sync failures were reported again in late August/early September 2026; as a targeted response the per-workout payload was reduced on 2026-09-10 (elevation and total-calories removed) -- not yet a confirmed fix.
 
 The important compatibility contract is that real per-workout distance and steps are written inside the workout's actual time window rather than exposed only as daily aggregates. See [`sync.md`](sync.md) for the full data contract and reliability notes.
 
 ## Interface
 
-BitLut uses the **August** design system: Navy, Lime, Tangerine, Purple, Inter Variable, system light/dark themes, restrained glass surfaces, and content-first hierarchy.
+BitLut uses the **August** design system: Navy, Lime, Tangerine, Purple, Inter Variable, System/Light/Dark selection, semantic surfaces, and content-first hierarchy.
 
 Current UI principles:
 
 - flat outlined content cards with restrained depth;
 - pill-shaped controls and comfortable touch targets;
 - Lime reserved for the primary action;
-- tactile spring motion only on interactive controls;
+- restrained tween motion on interactive controls;
 - no decorative bounce on static content;
-- bottom navigation with subtle compression, press depth, tilt, and release tremor;
-- four tabs: Today (steps hero with the sync button, activity and recent workouts), Workouts (general training tips), Nutrition (a manual food journal stored only on the device, never uploaded or written to Health Connect) and Settings;
+- Navy four-tab dock on compact windows and a navigation rail on larger windows;
+- four tabs: Today (steps hero with the sync button, activity and recent workouts), Workouts (general training tips), Nutrition (200 offline foods, gram-based calories/macros, custom entries and a private food log, never uploaded or written to Health Connect) and Settings;
 - a persistent high-contrast sync-status capsule that remains visible long enough to perceive in both light and dark themes.
 
-The Settings screen stays intentionally small: data source, connection/sync actions, Health Connect settings, and the steps goal.
+Settings groups source/sync actions, the steps goal, appearance, shared-workout verification and local logs. Nutrition has an optional user-entered calorie target.
 
 ## Production stack
 
 <table>
 <tr><th align="left">Layer</th><th align="left">Production baseline</th></tr>
-<tr><td>Android</td><td>compileSdk 36.1 · targetSdk 36 · minSdk 26</td></tr>
-<tr><td>Android Gradle Plugin</td><td>8.13.2</td></tr>
-<tr><td>Gradle</td><td>8.13</td></tr>
+<tr><td>Android</td><td>compileSdk 37.0 · targetSdk 36 · minSdk 26</td></tr>
+<tr><td>Android Gradle Plugin</td><td>9.1.1</td></tr>
+<tr><td>Gradle</td><td>9.3.1</td></tr>
 <tr><td>Kotlin / Compose plugin</td><td>2.3.21</td></tr>
 <tr><td>Compose BOM</td><td>2026.06.01</td></tr>
 <tr><td>AndroidX Core</td><td>1.18.0</td></tr>
 <tr><td>Lifecycle</td><td>2.10.0</td></tr>
-<tr><td>Health Connect client</td><td>1.1.0</td></tr>
+<tr><td>Health Connect client</td><td>1.2.0-alpha06 (explicit certificate-fix preview exception)</td></tr>
 <tr><td>Huawei AGConnect plugin</td><td>1.9.6.300</td></tr>
 <tr><td>Huawei Health Kit</td><td>6.11.0.303</td></tr>
 <tr><td>JDK</td><td>17</td></tr>
 </table>
 
-This is the newest stable production lane currently used by BitLut without crossing into the API 37 / AGP 9 migration boundary. AGP 9 is treated as a dedicated Huawei-compatibility migration, not a routine dependency bump.
+Health Connect has one intentional preview exception for the August 2026 certificate/signature fixes. Its AAR requires the compile SDK 37.0 / AGP 9.1.1 / Gradle 9.3.1 upgrade. Target SDK remains 36 and Huawei’s runtime stays pinned; official legacy Kotlin/DSL compatibility switches preserve the current AGConnect integration. See [recovery investigation](docs/HEALTH_CONNECT_RECOVERY.md). This is a deliberate Huawei-compatibility migration, requiring real-device and signed-release acceptance.
 
 ## Build & verification
 
 > [!IMPORTANT]
-> **Codespaces local gate:** run structural checks plus `:app:compileDebugKotlin` only. Do not run `assembleDebug` or `lintDebug` locally; full build/lint remains authoritative in GitHub Actions.
+> **Codespaces local gate:** run structural checks plus AAR metadata and `:app:compileDebugKotlin`. Do not run `assembleDebug` or `lintDebug` locally; full build/lint remains authoritative in GitHub Actions.
 
 ### Codespaces
 
@@ -143,11 +142,11 @@ git diff --check
 git status --short
 ```
 
-Patch scripts must include their own structural/resource verification and must be idempotent and fail-closed.
+Patch scripts must include their own structural/resource/AAR verification and must be idempotent and fail-closed.
 
 ### GitHub Actions
 
-The release workflow performs the real production gate on a clean runner:
+Push/PR verification now runs unit tests, dependency metadata, lint and debug assembly. The separate manual release workflow performs the signed production gate on a clean runner:
 
 ```text
 AAR metadata compatibility
@@ -174,12 +173,12 @@ Lint reports are uploaded even when lint fails. A release is considered verified
 | `app/src/main/java/com/openhealth/sync/widget/` | Home-screen widget |
 | `sync.md` | Sync contract and reliability rules |
 | `design.md` | August UI decisions |
-| `CONTEXT.md` | Long-lived engineering context |
+| `context.md` | Long-lived engineering context |
 | `SESSION_HANDOFF.md` | Current continuation point for the next coding session |
 
 ## Engineering rules
 
-Before changing code, read `CLAUDE.md`, `CONTEXT.md`, `SESSION_HANDOFF.md`, `design.md`, and `sync.md`.
+Before changing code, read `agents.md`, `context.md`, `SESSION_HANDOFF.md`, `design.md`, and `sync.md`.
 
 - Preserve working Huawei → Health Connect behavior while changing UI.
 - Never suppress lint or create a lint baseline just to make CI green.

@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -123,7 +124,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.health.connect.client.records.ExerciseSessionRecord
@@ -165,17 +165,8 @@ fun FinalBitLutShell(
     var showLogViewer by rememberSaveable { mutableStateOf(false) }
     val dashboardState = dashboardStateProvider()
     val syncState = syncStateProvider()
-    // August v3 dark theme (2026-08-22): non-hero cards now follow the OS
-    // appearance setting via BitPalette.dark()/light(). The Hero card itself
-    // is unaffected either way -- SoftCard's `hero` branch hardcodes
-    // AugustColor.NavyRaised directly, independent of `palette`, since the
-    // Steps card was always meant to read as the dark architectural anchor
-    // in both modes (confirmed product decision, not a default carried over
-    // by omission).
-    val isDarkTheme = isSystemInDarkTheme()
-    val palette = remember(isDarkTheme) {
-        if (isDarkTheme) BitPalette.dark() else BitPalette.light()
-    }
+    val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+    val palette = BitPalette.from(scheme)
 
     // Sprint 7: the first time someone would trigger the real Health Connect
     // permission request, show a plain-language rationale screen instead --
@@ -194,7 +185,9 @@ fun FinalBitLutShell(
     // August v3 keeps navigation as a stable Navy anchor. Scaffold owns
     // content insets normally; no blur-source or measured-clearance plumbing.
 
-    Scaffold(
+    AdaptiveBitLutScaffold(
+        selected = selected,
+        onSelected = { selected = it },
         containerColor = palette.systemBackground,
         bottomBar = {
             AugustBottomNav(
@@ -211,7 +204,7 @@ fun FinalBitLutShell(
                 .background(palette.backgroundBrush)
                 .padding(padding)
         ) {
-            
+
             if (showArchiveImport) {
                 ImportScreen(
                     viewModel = importViewModel,
@@ -231,12 +224,14 @@ fun FinalBitLutShell(
                     onSyncNow = onSyncNow,
                     onEditLayout = { showCardLayoutEditor = true },
                     cardLayoutVersion = cardLayoutVersion,
+                    onOpenNutrition = { selected = MainTab.Nutrition },
                     isSyncing = syncState.isSyncing || dashboardState.isRefreshing
                 )
                 MainTab.Workouts -> WorkoutsScreen(palette = palette)
                 MainTab.Nutrition -> NutritionScreen(palette = palette)
                 MainTab.Settings -> SettingsScreen(palette, syncState, onRefresh, wrappedOnRequestGoogle, onRequestHuawei, onSyncNow,
                     onImportArchive = { showArchiveImport = true },
+                    onViewLogs = { showLogViewer = true },
                     onOpenHealthConnectSettings = onOpenHealthConnectSettings,
                     onDataSourceSelected = onDataSourceSelected,
                     stepsGoal = dashboardState.stepsGoal,
@@ -358,7 +353,7 @@ private fun LogViewerScreen(palette: BitPalette, onClose: () -> Unit) {
                         text = entry,
                         color = palette.text,
                         fontWeight = FontWeight.Medium,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     )
                 }
@@ -460,6 +455,7 @@ private fun SummaryScreen(
     onSyncNow: () -> Unit,
     onEditLayout: () -> Unit,
     cardLayoutVersion: Int,
+    onOpenNutrition: () -> Unit,
     isSyncing: Boolean = false
 ) {
     val context = LocalContext.current
@@ -472,6 +468,7 @@ private fun SummaryScreen(
     val panelHeader: @Composable () -> Unit = {
         TodayPanelHeader(
             // BitLut has no account or name, so the greeting carries none.
+            palette = palette,
             greeting = greetingText(),
             status = formatDashboardSourceStatus(
                 source = dataSource,
@@ -591,6 +588,7 @@ private fun SummaryScreen(
                 }
             }
         }
+        item(key = "nutrition-today") { NutritionDashboardCard(palette, onOpenNutrition) }
     }
     }
 }
@@ -957,7 +955,7 @@ private fun SevenDayStat(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
-        Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 10.sp, maxLines = 2, lineHeight = 13.sp)
+        Text(label, color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, lineHeight = 13.sp)
         Spacer(Modifier.height(5.dp))
         Text(
             text = value,
@@ -1200,7 +1198,7 @@ private fun WorkoutRecencyCard(
                         text = label,
                         color = palette.secondaryText,
                         fontWeight = FontWeight.Medium,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -1211,7 +1209,7 @@ private fun WorkoutRecencyCard(
                             .background(accent.copy(alpha = 0.14f))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
-                        Text(text = "#$position", color = accent, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                        Text(text = "#$position", color = accent, fontWeight = FontWeight.Black, fontSize = 12.sp)
                     }
                 }
                 Spacer(Modifier.height(7.dp))
@@ -1229,7 +1227,7 @@ private fun WorkoutRecencyCard(
                         text = formatWorkoutDateTime(session.startTimeMs),
                         color = palette.secondaryText,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         maxLines = 1
                     )
                 }
@@ -1298,7 +1296,7 @@ private fun WorkoutStat(
             text = label,
             color = palette.secondaryText,
             fontWeight = FontWeight.Medium,
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1442,7 +1440,7 @@ private fun PersonalRecordsCard(
                         .background(HealthAccent.activity().copy(alpha = 0.18f), shape = RoundedCornerShape(20.dp))
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
-                    Text(stringResource(R.string.insights_new_record_badge), color = HealthAccent.activity(), fontWeight = FontWeight.Black, fontSize = 10.sp)
+                    Text(stringResource(R.string.insights_new_record_badge), color = HealthAccent.activity(), fontWeight = FontWeight.Black, fontSize = 12.sp)
                 }
             }
         }
@@ -1476,7 +1474,7 @@ private fun PersonalRecordRow(palette: BitPalette, item: PersonalRecordDisplay) 
         )
         Column(horizontalAlignment = Alignment.End) {
             Text(item.value, color = palette.text, fontWeight = FontWeight.Black, fontSize = 15.sp)
-            Text(formatRecordDate(item.record.date), color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 10.sp)
+            Text(formatRecordDate(item.record.date), color = palette.secondaryText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
         }
     }
 }
@@ -1518,7 +1516,7 @@ private fun StreakCard(palette: BitPalette, streak: StreakState, stepsGoal: Long
                         text = stringResource(R.string.insights_streak_best),
                         color = palette.secondaryText,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 10.sp
+                        fontSize = 12.sp
                     )
                 }
             }
@@ -1565,6 +1563,7 @@ private fun SettingsScreen(
     onRequestHuawei: () -> Unit,
     onSyncNow: () -> Unit,
     onImportArchive: () -> Unit,
+    onViewLogs: () -> Unit,
     onOpenHealthConnectSettings: () -> Unit,
     onDataSourceSelected: (HealthDataSource) -> Unit,
     stepsGoal: Long,
@@ -1729,6 +1728,9 @@ private fun SettingsScreen(
             )
         }
 
+        AppearanceSettingsCard(palette)
+        HealthConnectDiagnosticCard(palette)
+        SecondaryButton(stringResource(R.string.view_logs), palette, onClick = onViewLogs)
         Spacer(Modifier.height(24.dp))
         EngravedSignature(palette = palette)
     }
@@ -2057,13 +2059,13 @@ private fun GoalStepperButton(
  */
 internal object HealthAccent {
     @Composable
-    fun activity(): Color = if (isSystemInDarkTheme()) AugustColor.Lime else AugustColor.InkSoft
+    fun activity(): Color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
 
     @Composable
-    fun violet(): Color = if (isSystemInDarkTheme()) AugustColor.Lime else AugustColor.InkSoft
+    fun violet(): Color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
 
     @Composable
-    fun mind(): Color = if (isSystemInDarkTheme()) AugustColor.Lime else AugustColor.InkSoft
+    fun mind(): Color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
 }
 
 /**
@@ -2170,8 +2172,8 @@ internal fun PrimaryButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = AugustColor.Lime,
             contentColor = AugustColor.LimeInk,
-            disabledContainerColor = AugustColor.Soft,
-            disabledContentColor = AugustColor.Muted
+            disabledContainerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant,
+            disabledContentColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         ),
         border = if (focused) BorderStroke(2.dp, AugustColor.Purple) else null,
         enabled = enabled,
@@ -2248,6 +2250,7 @@ internal fun MinimalHeader(
  */
 @Composable
 private fun TodayPanelHeader(
+    palette: BitPalette,
     greeting: String,
     status: String?,
     isSyncing: Boolean,
@@ -2261,7 +2264,7 @@ private fun TodayPanelHeader(
         ) {
             Text(
                 text = greeting,
-                color = AugustColor.Surface,
+                color = palette.text,
                 fontWeight = FontWeight.ExtraBold,
                 // The greeting ("Добрый вечер") shares the row with two 48dp buttons
                 // inside the hero's 28dp padding (about 148dp on a 360dp phone), so the
@@ -2276,14 +2279,14 @@ private fun TodayPanelHeader(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(AugustRadius.Pill))
-                    .background(AugustColor.NavySoft)
+                    .background(palette.soft)
                     .clickable(onClick = onEditClick),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Rounded.Edit,
                     contentDescription = stringResource(R.string.dashboard_edit_layout),
-                    tint = AugustColor.DarkSecondaryText,
+                    tint = palette.secondaryText,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -2305,29 +2308,29 @@ private fun TodayPanelHeader(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .clip(statusShape)
-                            .background(AugustColor.NavySoft)
+                            .background(palette.soft)
                             .padding(horizontal = 9.dp, vertical = 4.dp)
                     ) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(12.dp),
-                            color = AugustColor.Tangerine,
+                            color = palette.heroAccent,
                             strokeWidth = 2.dp
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = stringResource(R.string.sync_status_updating),
-                            color = AugustColor.Surface,
+                            color = palette.text,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             maxLines = 1
                         )
                     }
                 } else if (status != null) {
                     Text(
                         text = status,
-                        color = AugustColor.DarkSecondaryText,
+                        color = palette.secondaryText,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         maxLines = 1
                     )
                 }
@@ -2398,10 +2401,10 @@ private fun MinimalMetricCard(
     onClick: (() -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val resolvedAccent = if (hero) AugustColor.Lime else accent
-    val titleColor = if (hero) AugustColor.DarkSecondaryText else palette.secondaryText
-    val valueColor = if (hero) AugustColor.Surface else palette.text
-    val supportingColor = if (hero) AugustColor.DarkSecondaryText else palette.secondaryText
+    val resolvedAccent = if (hero) palette.heroAccent else accent
+    val titleColor = palette.secondaryText
+    val valueColor = palette.text
+    val supportingColor = palette.secondaryText
     val cardModifier = if (onClick != null) {
         Modifier
             .fillMaxWidth()
@@ -2436,7 +2439,7 @@ private fun MinimalMetricCard(
                         .background(resolvedAccent.copy(alpha = if (hero) 1f else 0.16f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = null, tint = if (hero) AugustColor.LimeInk else resolvedAccent, modifier = Modifier.size(16.dp))
+                    Icon(icon, contentDescription = null, tint = if (hero) palette.card else resolvedAccent, modifier = Modifier.size(16.dp))
                 }
                 Spacer(Modifier.width(12.dp))
             }
@@ -2568,7 +2571,7 @@ private fun StepsHeroCard(
         ) {
             Text(
                 text = title,
-                color = AugustColor.DarkSecondaryText,
+                color = palette.secondaryText,
                 fontWeight = FontWeight.Medium,
                 fontSize = 14.sp,
                 maxLines = 1,
@@ -2582,12 +2585,12 @@ private fun StepsHeroCard(
                         // Lime, like the progress bar below it (Lime text on this
                         // 16% Lime-over-NavyRaised fill is 9.18:1). Tangerine is
                         // reserved for sync and the Settings toggle.
-                        .background(AugustColor.Lime.copy(alpha = 0.16f))
+                        .background(palette.heroAccent.copy(alpha = 0.12f))
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = stringResource(R.string.hero_goal_percent, (safeProgress * 100).toInt()),
-                        color = AugustColor.Lime,
+                        color = palette.heroAccent,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
                         maxLines = 1
@@ -2598,6 +2601,7 @@ private fun StepsHeroCard(
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.Bottom) {
             HeroMetricBlock(
+                palette = palette,
                 value = stepsValue,
                 modifier = Modifier.weight(1f, fill = false)
             )
@@ -2605,7 +2609,7 @@ private fun StepsHeroCard(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = "/ $goalValue",
-                    color = AugustColor.DarkSecondaryText,
+                    color = palette.secondaryText,
                     fontWeight = FontWeight.Medium,
                     fontSize = 14.sp,
                     maxLines = 1,
@@ -2620,7 +2624,7 @@ private fun StepsHeroCard(
                     .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(AugustRadius.Pill))
-                    .background(AugustColor.Surface.copy(alpha = 0.12f))
+                    .background(AugustColor.NavySoft)
             ) {
                 Box(
                     modifier = Modifier
@@ -2635,7 +2639,7 @@ private fun StepsHeroCard(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = progressText,
-                color = AugustColor.DarkSecondaryText,
+                color = palette.secondaryText,
                 fontWeight = FontWeight.Medium,
                 fontSize = 13.sp,
                 maxLines = 1,
@@ -2649,7 +2653,7 @@ private fun StepsHeroCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 stats.forEach { stat ->
-                    HeroStatTile(stat = stat, modifier = Modifier.weight(1f))
+                    HeroStatTile(palette = palette, stat = stat, modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -2667,12 +2671,12 @@ private fun StepsHeroCard(
  * spoken node: "Distance: 5.2 km".
  */
 @Composable
-private fun HeroStatTile(stat: HeroStat, modifier: Modifier = Modifier) {
+private fun HeroStatTile(palette: BitPalette, stat: HeroStat, modifier: Modifier = Modifier) {
     val spoken = "${stat.label}: ${stat.value} ${stat.unit}"
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(AugustRadius.Control))
-            .background(AugustColor.Surface)
+            .background(palette.soft)
             .semantics(mergeDescendants = true) { contentDescription = spoken }
             .padding(horizontal = 10.dp, vertical = 12.dp)
     ) {
@@ -2693,7 +2697,7 @@ private fun HeroStatTile(stat: HeroStat, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(10.dp))
         Text(
             text = stat.value,
-            color = AugustColor.Ink,
+            color = palette.text,
             fontWeight = FontWeight.ExtraBold,
             autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = 20.sp, stepSize = 1.sp),
             maxLines = 1,
@@ -2702,9 +2706,9 @@ private fun HeroStatTile(stat: HeroStat, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(2.dp))
         Text(
             text = stat.unit,
-            color = AugustColor.Muted,
+            color = palette.secondaryText,
             fontWeight = FontWeight.Medium,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -2725,6 +2729,7 @@ private fun HeroStatTile(stat: HeroStat, modifier: Modifier = Modifier) {
  */
 @Composable
 private fun HeroMetricBlock(
+    palette: BitPalette,
     value: String,
     modifier: Modifier = Modifier
 ) {
@@ -2732,7 +2737,7 @@ private fun HeroMetricBlock(
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
-                color = AugustColor.Surface,
+                color = palette.text,
                 fontWeight = FontWeight.Black,
                 autoSize = TextAutoSize.StepBased(minFontSize = 20.sp, maxFontSize = 48.sp, stepSize = 1.sp),
                 lineHeight = 1.em,
@@ -2801,7 +2806,7 @@ private fun DashboardLoadingCard(palette: BitPalette, header: @Composable () -> 
             // 250dp: the hero's inner height after the 2026-10-15 tile redesign
             // (label row ~24 + 14 + number 48 + 14 + bar 8 + 8 + "to go" ~16 + 18
             // + tiles ~100). Estimated from the layout, not measured on a device.
-            ShimmerBlock(onDark = true, palette = palette, modifier = Modifier.fillMaxWidth().height(250.dp))
+            ShimmerBlock(onDark = palette.dark, palette = palette, modifier = Modifier.fillMaxWidth().height(250.dp))
         }
         SoftCard(palette = palette) {
             ShimmerBlock(onDark = false, palette = palette, modifier = Modifier.fillMaxWidth().height(96.dp))
@@ -2892,51 +2897,24 @@ internal data class BitPalette(
     val mind: Color,
     val backgroundBrush: Brush
 ) {
+    val heroAccent: Color get() = if (dark) AugustColor.Lime else AugustColor.InkSoft
+    val soft: Color get() = if (dark) AugustColor.NavySoft else AugustColor.Soft
+
     companion object {
-        // August design system integration, phase 1 (see AugustTokens.kt).
-        // activity/mind here are fixed InkSoft, matching HealthAccent's own
-        // light-mode value directly rather than calling
-        // HealthAccent.activity()/.mind() -- those became @Composable
-        // functions in the 2026-08-22 dark-theme icon fix, and light()/
-        // dark() are plain non-composable functions that cannot call them.
-        // Each palette hardcodes its own correct value instead; the actual
-        // single source of truth for "what color is activity/mind" is now
-        // HealthAccent's @Composable accessors for direct call sites, and
-        // this literal duplication for the two BitPalette factories, kept
-        // deliberately identical to HealthAccent's own if/else so they
-        // cannot drift silently.
-        fun light(): BitPalette = BitPalette(
-            dark = false,
-            systemBackground = AugustColor.Canvas,
-            card = AugustColor.Surface,
-            text = AugustColor.Ink,
-            secondaryText = AugustColor.Muted,
-            stroke = AugustColor.BorderLight,
-            activity = AugustColor.InkSoft,
-            mind = AugustColor.InkSoft,
-            backgroundBrush = Brush.verticalGradient(listOf(AugustColor.Canvas, AugustColor.Canvas))
-        )
-        // dark(): activity/mind are Lime, matching HealthAccent's dark-mode
-        // value (~14.5:1 contrast against NavyRaised, contrast-checked, not
-        // eyeballed) -- see HealthAccent's own doc comment for the full
-        // rationale. systemBackground/card/text/secondaryText/stroke follow
-        // August's own dark-surface rule (section 3.1: "Navy or Dark Panel
-        // with white primary text and #BEC3D4 secondary text") -- see
-        // AugustColor's DarkPanel/AccentLight doc comments for how those
-        // specific values were derived and contrast-checked, since the
-        // source doc describes Navy as a component-level anchor, not a
-        // full app dark theme.
-        fun dark(): BitPalette = BitPalette(
-            dark = true,
-            systemBackground = AugustColor.Navy,
-            card = AugustColor.DarkPanel,
-            text = AugustColor.Surface,
-            secondaryText = AugustColor.DarkSecondaryText,
-            stroke = AugustColor.BorderDark,
-            activity = AugustColor.Lime,
-            mind = AugustColor.Lime,
-            backgroundBrush = Brush.verticalGradient(listOf(AugustColor.Navy, AugustColor.Navy))
-        )
+        fun from(scheme: androidx.compose.material3.ColorScheme): BitPalette {
+            val dark = scheme.background.luminance() < 0.3f
+            return BitPalette(
+                dark = dark,
+                systemBackground = scheme.background,
+                card = scheme.surface,
+                text = scheme.onSurface,
+                secondaryText = scheme.onSurfaceVariant,
+                stroke = if (dark) AugustColor.BorderDark else AugustColor.BorderLight,
+                activity = if (dark) AugustColor.Lime else AugustColor.InkSoft,
+                mind = if (dark) AugustColor.Lime else AugustColor.InkSoft,
+                backgroundBrush = Brush.verticalGradient(listOf(scheme.background, scheme.background))
+            )
+        }
     }
 }
 

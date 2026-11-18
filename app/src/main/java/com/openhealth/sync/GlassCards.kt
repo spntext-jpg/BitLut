@@ -1,6 +1,8 @@
 package com.openhealth.sync
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,7 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import com.openhealth.sync.ui.theme.AugustColor
 import com.openhealth.sync.ui.theme.AugustElevation
 import com.openhealth.sync.ui.theme.AugustRadius
 import com.openhealth.sync.ui.theme.AugustSpace
@@ -35,8 +36,8 @@ internal fun SoftCard(
     val shape = remember(hero) {
         RoundedCornerShape(if (hero) AugustRadius.Hero else AugustRadius.Card)
     }
-    val background = if (hero) AugustColor.NavyRaised else palette.card
-    val shadowElevation = if (hero) AugustElevation.HeroShadowElevation else AugustElevation.CardShadowElevation
+    val background = palette.card
+    val shadowElevation = if (hero) AugustElevation.HeroShadowElevation else androidx.compose.ui.unit.Dp(0f)
     val shadowColor = if (hero) AugustElevation.HeroShadowColor else AugustElevation.CardShadowColor
     val shadowAlpha = if (hero) AugustElevation.HeroShadowAlpha else AugustElevation.CardShadowAlpha
 
@@ -50,6 +51,7 @@ internal fun SoftCard(
             )
             .clip(shape)
             .background(background)
+            .border(1.dp, palette.stroke, shape)
             .padding(if (hero) AugustSpace.s28 else AugustSpace.s20),
         content = content
     )

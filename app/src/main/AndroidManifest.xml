@@ -12,6 +12,8 @@
     <!-- Health Connect strict Huawei-approved activity/basic sport sync scope:
          Huawei activity/basic sport -> Google Health. Optional dashboard-only
          reads are never required for sync. -->
+    <!-- Optional, requested only when supported; never required for Huawei writes. -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.WRITE_STEPS" />
     <uses-permission android:name="android.permission.health.READ_DISTANCE" />

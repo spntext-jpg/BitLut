@@ -161,13 +161,11 @@ internal object AugustMotion {
     const val MediumMs = 240
     const val NavigationMs = 280
 
-    const val PressSpringDampingRatio = 0.52f
-    const val PressSpringStiffness = 680f
-    const val DestinationPressScale = 0.955f
-    const val PrimaryPressScale = 0.94f
-    const val PressTranslationDp = 2.0f
-    const val DestinationPressTiltDegrees = 1.35f
-    const val SyncPressTiltDegrees = -1.15f
+    const val DestinationPressScale = 0.98f
+    const val PrimaryPressScale = 0.98f
+    const val PressTranslationDp = 0f
+    const val DestinationPressTiltDegrees = 0f
+    const val SyncPressTiltDegrees = 0f
     const val SyncIconPressRotationDegrees = -15f
 
     val StandardEasing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
@@ -344,6 +342,12 @@ internal val AugustTypography = Typography(
         fontWeight = FontWeight(450),
         fontSize = 12.sp,
         lineHeight = 19.sp,
+    ),
+    labelMedium = TextStyle(
+        fontFamily = AugustFont.Family,
+        fontWeight = FontWeight(650),
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
     ),
     labelLarge = TextStyle( // Caption (secondary descriptions)
         fontFamily = AugustFont.Family,

@@ -184,6 +184,10 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 return SyncAttemptOutcome.GracefulNoop
             }
 
+            if (!googleManager.canReadInBackground()) {
+                AppLogger.d(TAG, "Google source refresh deferred to foreground; optional background grant absent")
+                return SyncAttemptOutcome.GracefulNoop
+            }
             val freshSnapshot = refreshDashboardCacheAfterWrite(googleManager)
                 ?: return SyncAttemptOutcome.RetryableFailure(SyncDependency.GOOGLE, allowInlineRetry = false)
             updateAchievements(freshSnapshot)
@@ -414,6 +418,12 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
      */
     private suspend fun refreshDashboardCacheAfterWrite(googleManager: HealthConnectManager): GoogleDashboardSnapshot? {
         return try {
+            // WorkManager is a background context even when the UI initiated it.
+            // A denied optional read grant must not invalidate a successful export.
+            if (!googleManager.canReadInBackground()) {
+                AppLogger.d(TAG, "Dashboard read deferred to foreground; background grant absent")
+                return null
+            }
             val freshSnapshot = googleManager.readDashboardSnapshot()
             if (freshSnapshot != null) {
                 snapshotCache.save(freshSnapshot)

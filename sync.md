@@ -1,14 +1,23 @@
 # BitLut Sync Architecture
 
-Status: current as of 2026-09-16. This document is the complete technical
-record of how BitLut moves activity data from Huawei Health Kit into Google
-Health Connect, and of every architectural decision that got the pipeline to
-a state where a real third-party corporate wellness app now reliably
-has successfully imported and accepted BitLut-synced workouts. It complements, and in a few
-places supersedes, the narrower running notes in `CLAUDE.md`, `CONTEXT.md`,
-`SESSION_HANDOFF.md`, and `CHANGELOG.md` — those remain the token-efficient
-session-to-session continuity bridge; this file is the durable reference for
-*why the pipeline is built the way it is*.
+Status: updated 2026-11-18. Read the current recovery section below first. Sections 1–9 retain the detailed September/October architecture history; any older version numbers or per-session call counts there are superseded by the current section. Earlier successful corporate imports are historical evidence, not proof that the present corporate-reader regression is fixed.
+
+## Current recovery — November 2026
+
+1. **Client compatibility:** Health Connect `1.2.0-alpha06` intentionally replaces stable `1.1.0`; Google’s August 12 release fixes signature validation and pre-Android-14 intent handling, and August 26 updates provider certificates. This is a documented compatibility risk on APK-based providers, not proof of the individual incident. The real AAR metadata gate requires compile SDK 37 and AGP 9.1+, so this patch moves to compile SDK 37.0, AGP 9.1.1 and Gradle 9.3.1. Target remains 36 and min 26; Huawei runtime stays pinned. The external Kotlin/AGConnect integration uses the official temporary `android.builtInKotlin=false` / `android.newDsl=false` switches. No AAR metadata checks are disabled. See [official release notes](https://developer.android.com/jetpack/androidx/releases/health-connect).
+2. **Corrected source values:** continuous Distance/Floors/Elevation/ActiveCalories previously defaulted to record version 1, while raw imported Steps used wall-clock versions on every import. Both now persist value-sensitive monotonic versions without changing existing client IDs. Equal source values reuse a version; corrected values advance it even after a wall-clock rollback. Daily-step and workout version strategies remain.
+3. **Bounded IO:** up to 100 records per transaction; multiple complete workout bundles can share one transaction. A session and its session-scoped metrics are never split. Invalid-data batch failures get a bounded per-session fallback; permission failures propagate; quota/service/IO/binder failures stop the write cycle and use the existing WorkManager backoff instead of continuing every session or category. No recurring range deletes, new payload metrics or source spoofing.
+4. **Reads versus export:** optional background-read permission is requested only when the provider feature is available. It is never part of required export grants. Workers skip dashboard reads when absent; foreground completion can read directly. A successful export does not depend on a dashboard read. The user’s nutrition journal requires no health permission.
+5. **Observability:** Settings checks up to 100 actual BitLut-origin exercise records in the last seven days. It shows count, newest end time and whether more records exist. It performs no destructive reset and cannot inspect another app’s permissions or confirm that app imported data.
+6. **Dashboard accuracy:** the daily-step raw sum excludes `bitlut_exercise_steps_` records for the Huawei source; the authoritative daily summation already contains them. Session records remain available for workout consumers. Broader raw-record overlap/distance reconciliation is still a known limitation, not silently declared solved.
+
+The corporate app’s code and correlated logs were not supplied. React Native alone does not change Health Connect’s native schema. Its initialization, permissions, origin filters, pagination, time conversion, Changes token and background access must be checked independently; see `docs/HEALTH_CONNECT_RECOVERY.md` and its reader probe. Do not reset the user’s Health Connect store, forge origins, fabricate missing workout data or promise end-to-end recovery without device evidence.
+
+## Nutrition isolation
+
+`FoodCatalog` and `NutritionJournalPrefs` are independent of this pipeline. The 200 reference foods, user portions, calories, macros and target never enter `writeSnapshot`, Huawei scopes, Health Connect permissions or activity caches. The Today food card subscribes to the same private journal as Nutrition. See `docs/NUTRITION.md`.
+
+## Historical architecture reference
 
 ---
 
@@ -675,7 +684,7 @@ already stored — this is explicitly called out in the code because an
 earlier version of this pipeline **deleted** a record by ID before its
 first insert, which produced Health Connect's "invalid UID" error (you
 cannot delete something that was never inserted with that specific
-version). `WRITE_BATCH_SIZE = 400` chunks large batches to stay within
+version). `WRITE_BATCH_SIZE = 100` (400 before 2026-11-18) chunks large batches to stay within
 Health Connect's per-call practical limits. `SecurityException` invalidates
 the client cache (a stale reference is a plausible cause) and re-throws;
 any other exception is logged and returns `false` for that category, letting
@@ -821,7 +830,7 @@ constraint in 3.2.
 
 ### 4.14 2026-09-11 interoperability hardening: overlap hygiene and stable Health Connect client
 
-The production dependency is `androidx.health.connect:connect-client:1.1.0` stable. The earlier same-day Health Connect AAR failure was resolved by moving the complete Huawei/AppGallery production toolchain to Android 16 (`compileSdk 36.1`, `targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin `2.3.21`, AGConnect `1.9.6.300`) rather than upgrading Health Connect in isolation. A later GitHub Actions AAR gate showed that Compose 1.12 / Core 1.19 / Lifecycle 2.11 cross into API 37 / AGP 9.1 requirements; production therefore stays on the newest stable pre-API-37 AndroidX lane. Huawei device-side Health Kit stays on the repository-proven `com.huawei.hms:health:6.11.0.303`. This toolchain migration does not change workout serialization, permission roles, source attribution, or orchestration behavior.
+The September production dependency was `androidx.health.connect:connect-client:1.1.0` stable; November intentionally replaces it as described above. The earlier same-day Health Connect AAR failure was resolved by moving the complete Huawei/AppGallery production toolchain to Android 16 (`compileSdk 36.1`, `targetSdk 36`, AGP `8.13.2`, Gradle `8.13`, Kotlin `2.3.21`, AGConnect `1.9.6.300`) rather than upgrading Health Connect in isolation. A later GitHub Actions AAR gate showed that Compose 1.12 / Core 1.19 / Lifecycle 2.11 cross into API 37 / AGP 9.1 requirements; production therefore stays on the newest stable pre-API-37 AndroidX lane. Huawei device-side Health Kit stays on the repository-proven `com.huawei.hms:health:6.11.0.303`. This toolchain migration does not change workout serialization, permission roles, source attribution, or orchestration behavior.
 
 `writeActivitySessionsBatch()` still writes each workout as one interoperability-critical bundle (ExerciseSession + Distance/Steps when applicable + optional real ActiveCalories) with stable deterministic IDs/versions. Before writing, it now removes invalid intervals, resolves exact duplicates in favor of the richer session, then prevents non-identical overlaps by retaining the richer source session. It never clips or invents timestamps. This follows current Health Connect workout guidance, which identifies overlapping same-app sessions as a write-failure/conflict cause.
 

@@ -1,174 +1,25 @@
-# BitLut — Session Handoff
+# BitLut session handoff
 
-**Current handoff:** 2026-10-16
+Updated: 2026-11-18. Read `agents.md`, `context.md`, `design.md` and the current section of `sync.md` first.
 
-**Repository state:** 2026-09-11 modernization baseline plus the 2026-09-16 Health Connect permission/cache recovery, plus the 2026-09-25 GUI pass 2 (Apple Health alignment/CJM polish, Parts A+B+dead-code audit -- see CHANGELOG.md for the full breakdown), plus the 2026-10-08 OnePlus 7 Pro field-test fixes (adaptive number text, Google Health workouts, source-not-connected notice, refresh-aware sync indicator), plus the 2026-10-15/16 UI sprint (Today redesign from the mockup, four-tab navigation, Workouts tips, local Nutrition journal -- see CHANGELOG.md). Local verification uses `:app:compileDebugKotlin`, full assemble/lint remains in GitHub Actions.
+## Delivered source changes
 
-## Source of truth
+Health Connect certificate-fix client pin plus its AAR-required compile SDK 37.0 / AGP 9.1.1 / Gradle 9.3.1 migration (legacy Kotlin/DSL switches retained for Huawei), value-sensitive continuous/raw-step versions, bounded complete-workout transactions, whole-cycle provider failure deferral, optional background dashboard reads and a foreground-only bounded export diagnostic. Existing workout IDs, recording methods, overlap helpers, seven-day history, scope and lease remain. Huawei daily steps no longer count their own session-scoped duplicates in the dashboard.
 
-For the next session, use this order of authority:
+Shared Material theme roles replace the fixed dark hero/white-tile behavior; System/Light/Dark choices persist and update content/system-bar contrast. Navigation has restrained tweens, a larger-window rail and bounded content. Four tabs and the brand palette remain.
 
-1. current repository source;
-2. latest successful GitHub Actions release workflow;
-3. `SESSION_HANDOFF.md`;
-4. `CONTEXT.md`, `sync.md`, `design.md`, `CHANGELOG.md`;
-5. older historical notes only when they do not conflict with the above.
+Nutrition has 200 offline USDA-referenced foods/dishes, EN/RU search, gram scaling, calories/macros, custom entries, editing, delete/undo, historical days, optional user-defined kcal target and a Today card. Legacy journal values survive; unknown macros stay unknown. No nutrition export, network, account or backup.
 
-The 2026-09-11 migration is complete. Do not revert it from older handoff text or old one-shot patch scripts.
+Canonical documentation names are now `agents.md` and `context.md`. The historical sync document is preserved behind the current recovery section. Review `docs/VALIDATION_2026_11.md` for actual verification evidence and pending device gates.
 
-## Current production baseline
+AAR metadata and Kotlin compilation passed on the final JDK 17 / API 37.0 lane, and 10 unit tests passed. Build-only resource fixtures replaced binaries missing from Repomix; original branding, full lint/APK/release and device behavior remain unverified.
 
-- Android: `compileSdk 36.1`, `targetSdk 36`, `minSdk 26`.
-- AGP: `8.13.2`.
-- Gradle: `8.13`.
-- Kotlin / Compose plugin: `2.3.21`.
-- JDK: 17.
-- Huawei AGConnect plugin: `1.9.6.300`.
-- Huawei Health Kit: `6.11.0.303`.
-- Health Connect: stable `1.1.0`.
-- Compose BOM: `2026.06.01`.
-- AndroidX Core: `1.18.0`.
-- Lifecycle: `2.10.0`.
+## Continue from evidence
 
-This is intentional. Compose 1.12 / Core 1.19 / Lifecycle 2.11 crossed into the API 37 / AGP 9.1+ requirement. Do not upgrade those lines independently. A future AGP 9/API 37 move is a dedicated Huawei compatibility migration because AGP 9 changes the Kotlin integration model.
-
-## Verified workflow — keep this
-
-**Codespaces runs structural checks plus one Kotlin compile gate only.** Do not run local `assembleDebug` or `lintDebug`; the accepted local Gradle task is `:app:compileDebugKotlin` with the constrained options in `CLAUDE.md`.
-
-The working engineering flow is:
-
-```text
-Codespaces
-  patch script
-  -> built-in structural/XML/locale checks
-  -> git diff --check
-  -> :app:compileDebugKotlin
-  -> git status --short
-  -> commit / push
-
-GitHub Actions
-  AAR metadata compatibility
-  -> lintRelease
-  -> assembleRelease
-  -> signing / APK verification
-  -> artifact / release
-```
-
-This sequence is now the engineering contract. Keep full assembly and lint in GitHub Actions rather than moving them back into Codespaces.
-
-The release workflow should keep an early `checkReleaseAarMetadata` gate before lint/build so SDK/AGP incompatibility fails quickly. Lint reports should remain uploaded with `if: always()` so CI failures expose the full blocker set.
-
-## 2026-09-11 changes that are now landed
-
-### Android / dependency modernization
-
-- Migrated to Android 16 / API 36.1 on the last stable AGP 8.13 lane.
-- Updated Gradle, Kotlin, AGConnect, Health Connect and compatible AndroidX dependencies.
-- Migrated deprecated Kotlin compiler configuration to typed `kotlin.compilerOptions`.
-- Kept Huawei/AppGallery as the primary deployment/runtime constraint rather than chasing incompatible API 37 dependencies.
-
-### Sync hardening
-
-- Huawei → Health Connect export is gated by write permissions; dashboard reads are gated by read permissions.
-- WorkManager UI activity tracks actually `RUNNING` sync work, not merely `ENQUEUED`/`BLOCKED` periodic work.
-- Workout writes preserve deterministic IDs and coherent exercise-session bundles.
-- Overlapping Huawei sessions are normalized by retaining the richer real session; do not fabricate clipped sessions.
-- Session-scoped workout metrics remain the interoperability-critical contract for downstream readers.
-- 2026-09-10: workout bundle no longer includes elevation/total-calories (`ElevationGainedRecord`/`TotalCaloriesBurnedRecord`) -- session, Distance, Steps, plus optional real ActiveCalories only -- reducing per-workout Health Connect payload after a corporate reader reported "binder died"/rate-limit sync failures. Targeted reduction, not a confirmed fix; see `docs/BACKLOG.md`.
-- 2026-09-16 Health Connect recovery: removed obsolete `WRITE_TOTAL_CALORIES_BURNED` from the Huawei export gate/manifest, stopped transient/stale permission snapshots from refreshing the 30-second permission cache, persisted exact missing-permission diagnostics, and stopped dashboard-only calories/elevation from bumping workout `clientRecordVersion`.
-- 2026-09-16 downstream-churn follow-up: removed the recurring 7-day `StepsRecord` time-range delete that was deleting/recreating workout-scoped Steps every 30 minutes; daily Huawei totals now keep stable per-day versions, and Health Connect binder/IPC failures abort remaining writes and wait for WorkManager backoff instead of three rapid full-pipeline retries. Workout session serialization/metadata is unchanged.
-- 2026-09-16 (b) fallback-title language experiment: workout titles written to Health Connect (fallback only, used when Huawei supplies no name of its own) now always resolve in English via `HuaweiWorkoutTypeMapper.exportDisplayName()`, instead of following the device/app locale via `localizedDisplayName()`. Trigger: Paulo observed BitLut's fallback workout titles switched from English to Russian around the same time the corporate reader's "binder died" import failures began. Not yet confirmed as the root cause -- see `docs/BACKLOG.md`. Revert by pointing the two call sites (`HuaweiHealthManager.kt`, `HuaweiExportParser.kt`) back at `localizedDisplayName()`. BitLut's own dashboard display is untouched; it never called either function.
-- Dashboard cache consumers must preserve the midnight stale-cache guard; never reapply yesterday's daily totals as today's data.
-
-### August UI polish
-
-- Bottom navigation controls share the established sizing hierarchy and now use restrained spring micro-interactions: small compression, 2dp depth, tiny tilt and one short release tremor.
-- Static cards/content must remain non-bouncy.
-- The Today sync state renders immediately as a high-contrast August capsule in both themes.
-- UI-triggered sync has a minimum ~1.1s visual dwell so fast syncs/lease collisions cannot disappear between Compose frames.
-- Wording is `Sync in progress…` / `Идёт синхронизация…`.
-
-### Android 16 / lint cleanup
-
-- Compose locale reads now use observable configuration rather than `Locale.getDefault()` inside composables.
-- Directional Material icons use AutoMirrored variants where required.
-- Deprecated `LocalClipboardManager` usage was removed.
-- Observer parameter naming and annotation-target warnings were cleaned.
-- Deprecated manual system-bar color writes were removed; `enableEdgeToEdge()` remains the owner.
-- Do not introduce a lint baseline or suppress new lint failures merely to unblock CI.
-
-## 2026-10-08 OnePlus 7 Pro field-test fixes
-
-- Numbers that can outgrow their slot use `Text(autoSize = TextAutoSize.StepBased(...))` with `softWrap = false` -- never a character-count font table (that table, plus soft wrapping at the space in "7 842", caused the "7..." truncation). Applied to `HeroMetricBlock`, `MinimalMetricCard`, `SevenDayStat`.
-- Google Health = the renamed Fitbit app (`com.fitbit.FitbitMobile`), a different Health Connect origin from Google Fit (`com.google.android.apps.fitness`). Workout sessions (and per-workout aggregates) are read from both origins with 80%-overlap cross-origin de-duplication; daily totals still use the single Google Fit origin. Enum/storage value stays `google_fit`; only the label is "Google Health".
-- OPEN, needs a device log: whether this fully restores workouts. If still empty, the in-app log holds one line per process listing the origins that own exercise sessions in Health Connect (`GoogleHealthManager.logWorkoutOriginDiagnosticOnce`). Do not widen daily totals to a second origin without that evidence (double-count risk).
-- Explicit Sync tap on an unconnected source shows `SourceNoticeBanner` (top, auto-dismiss 5s, tap opens Settings); automatic syncs and the follow-up sync after choosing a source stay silent.
-- Summary capsule = `SyncUiState.isSyncing || DashboardUiState.isRefreshing`; orchestrator refreshes before completing; `MainActivity` refreshes from cache when a background sync stops running.
-- Not verified in the sandbox (no Android SDK): that `Text(autoSize = ...)`, `Icons.Rounded.CloudOff` and the other new APIs compile against the project's Compose BOM, and how any of this looks on screen. The user's Gradle build and eyes are the only gates.
-
-## 2026-10-15/16 UI sprint (four tabs)
-
-Planned in `docs/PRODUCT_ROADMAP.md`; the full breakdown is in CHANGELOG.md. State to know before touching the UI:
-
-- `MainTab` has four values (Today, Workouts, Nutrition, Settings). Every `when` over it must stay exhaustive: the label, press tilt and glyph in `GlassNavigation.kt`, and the screen switch in `FinalBitLutShell`.
-- Sync is not in the navbar. It is `AugustSyncAction` (48dp, Tangerine) inside `TodayPanelHeader`, which is passed as a `header` slot into `StepsHeroCard`, `DashboardLoadingCard` and `TodayHeaderCard`, so it exists in every Today state.
-- The hero's accent is Lime (goal pill, progress bar, tile icon chips). Tangerine is only the sync button and spinner, the source-not-connected notice and the Settings toggle.
-- Workouts and Nutrition live in `WorkoutsScreen.kt` and `NutritionScreen.kt`. The Nutrition journal is local-only (`NutritionJournalPrefs`: private SharedPreferences file, no Health Connect, no network, no backup). Giving it Health Connect nutrition records or any upload needs a new product/scope review and a privacy-policy update (CLAUDE.md, product boundary).
-- `PrimaryButton`, `SecondaryButton` and `MinimalHeader` are `internal` because the new screens reuse them.
-- None of this has been seen rendered yet: see the top item of `docs/BACKLOG.md`.
-
-## Huawei-specific constraints
-
-BitLut is **Huawei AppGallery / Huawei Health first**.
-
-Huawei device-side Health Kit calls may be sensitive to background/screen-off state. The existing WorkManager/retry design is intentionally preserved. Do not replace it with a foreground-service architecture without real Huawei-device evidence.
-
-Any future platform migration must regression-test at least:
-
-- Huawei authorization through HMS Core;
-- foreground manual sync;
-- background / screen-off behavior;
-- periodic catch-up;
-- recovery after Huawei Health/HMS restart;
-- Health Connect permissions and reconnect behavior;
-- downstream corporate-app workout import;
-- duplicate/overlap handling;
-- release installation from AppGallery-style APK flow.
-
-## UI rules to preserve
-
-- August palette: Navy, Lime, Tangerine, Purple, Inter Variable.
-- System light and dark themes both matter; do not validate only dark mode.
-- Lime is reserved for primary action emphasis.
-- Normal cards are flat/subtly outlined; hero depth remains restrained.
-- Buttons are pill-shaped with comfortable touch targets.
-- Navbar: four destinations (Today, Workouts, Nutrition, Settings) share one control height (56dp as of the 2026-09-25 GUI pass 2). Since 2026-10-15 there is no sync control in the navbar, so there is no width-based "primary" control any more.
-- Navbar selected-tab state is tint-only (`AugustColor.Lime` on icon+label) as of the 2026-09-25 GUI pass 2 -- no background pill. Don't reintroduce one without the project owner explicitly asking; this was a deliberate opt-in stylistic choice (tasks.md Part B3), not a default recommendation.
-- Dashboard-card visibility/order is controlled only by `DashboardCardLayoutPrefs`; `STREAK` was dropped from `DEFAULT_ORDER` (default-off, not deleted) in the 2026-09-25 pass -- the enum/composable/streak math are all still present.
-- Settings remains intentionally minimal.
-
-## Mandatory engineering guardrails
-
-- Think/write code, comments, identifiers and commits in English.
-- Make surgical changes; do not refactor unrelated working code.
-- Before deleting code, search all call sites/contracts/resources. Never infer dead code from a lexical scan alone.
-- Keep `values/strings.xml` and `values-ru/strings.xml` key parity in the same patch.
-- XML comments must not contain literal `--`.
-- Patch scripts must be idempotent, fail-closed, and use small symptom-based anchors.
-- Codespaces verification: patch checks + `git diff --check` + `:app:compileDebugKotlin` + `git status --short`; never local `assembleDebug`/`lintDebug`.
-- GitHub Actions is the full assemble/lint/release authority.
-- If CI fails, fix the underlying issue; do not weaken lint, metadata checks, signing checks, or release verification.
-- Do not include noisy `git diff -- ...` commands in delivery instructions.
-- Remove one-shot patch scripts after successful application.
-- Current source plus a green GitHub Actions run overrides stale historical documentation.
-
-## Next-session starting point
-
-First look at the 2026-10-15/16 UI sprint on a real phone, in light and dark themes, before building on it; the checklist is the top item in `docs/BACKLOG.md`.
-
-Start from the current `main` branch and the latest successful GitHub Actions run. GUI pass 2 (2026-09-25: Parts A+B+dead-code audit, see CHANGELOG.md) is complete and landed -- do not re-propose any of tasks.md's Part A/B items or redo the dead-code audit from scratch; if new dead code is suspected, verify against live call sites individually before touching anything (a first-pass automated sweep produced several false positives in the 2026-09-25 audit, including flagging `BitLutExpressiveTheme()` itself as unused when it's actually the app's root theme, invoked as a trailing lambda). The 2026-09-16 recovery patch targets a concrete obsolete Health Connect write-permission gate plus permission-cache/version-churn bugs found while investigating the downstream reader regression.
-
-If the corporate wellness app still cannot import after this patch, first verify Google Health is on 5.07+ and manually reconnect the downstream app to Health Connect if its connection was stranded by the 5.05 incident. Then capture the exact error time and a BitLut diagnostic log for the same window before changing workout serialization again.
-
-If the next task is UI-only, do not touch sync serialization. If it is sync-related, preserve the established Huawei-first permissions, stable IDs, overlap normalization, session-scoped metrics, and cache guards unless device evidence requires a change.
+- Run the supplied patch in the real Codespaces checkout. It refuses source drift/unrelated dirt, performs static/AAR checks and Kotlin compilation, commits only intended files, pushes normally, verifies the remote hash and only then deletes itself. Failure preserves it for retry.
+- Push/PR CI now runs unit tests, AAR metadata, lint and APK assembly. The signed release remains a separate manual workflow.
+- Re-test Huawei authorization, manual/background/screen-off sync and unchanged/corrected workout writes on Android 13 APK and Android 14+ platform providers.
+- Compare Settings → Shared workouts with Health Connect itself and a timestamped corporate-reader run. The corporate source/logs are absent: the incident remains open until this succeeds. The TypeScript probe is a reader-team aid, not deployed corporate code.
+- Verify live theme changes, both modes, Russian text, narrow phones, large fonts, keyboard, rail and midnight rollover on a real device. No screenshot/device validation is claimed by source inspection.
+- Review AppGallery declarations for the expanded local nutrition journal and optional background health reading before the next store release. Do not add biometrics or change Huawei scopes as part of that review.
+- Huawei scaling/calorie-scope console tasks remain in `docs/SCALING_ROADMAP.md`.

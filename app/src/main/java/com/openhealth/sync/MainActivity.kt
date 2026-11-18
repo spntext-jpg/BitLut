@@ -134,7 +134,7 @@ class MainActivity : ComponentActivity() {
         syncViewModel.refreshStatuses(force = true)
         dashboardViewModel.refresh(force = true)
 
-        if (!granted.containsAll(syncViewModel.googleManager.permissions)) {
+        if (!granted.containsAll(syncViewModel.googleManager.requiredPermissions())) {
             Toast.makeText(this, getString(R.string.toast_hc_permissions), Toast.LENGTH_LONG).show()
         }
     }
@@ -202,7 +202,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onRefresh = {
                         syncViewModel.refreshStatuses(force = true)
-                        dashboardViewModel.refreshFromCache()
+                        refreshDashboardAfterSync()
                     },
                     onRequestGoogle = { requestGoogleHealthPermissions() },
                     onRequestHuawei = { startHuaweiAuthorization() },
@@ -362,6 +362,23 @@ class MainActivity : ComponentActivity() {
      * callbacks are also lifecycle-scoped in this file.
      */
     // BITLUT_OBSERVE_BACKGROUND_SYNC_ACTIVITY_2026_08_31
+    private fun refreshDashboardAfterSync() {
+        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) return
+        lifecycleScope.launch {
+            try {
+                if (syncViewModel.googleManager.canReadInBackground()) {
+                    dashboardViewModel.refreshFromCache()
+                } else if (!dashboardViewModel.state.value.isRefreshing) {
+                    dashboardViewModel.refresh(force = true)
+                }
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                AppLogger.w("MainActivity", "Dashboard completion refresh deferred: ${error.javaClass.simpleName}")
+            }
+        }
+    }
+
     private fun observeBackgroundSyncActivity() {
         var backgroundSyncWasActive = false
         WorkManager.getInstance(applicationContext)
@@ -375,7 +392,7 @@ class MainActivity : ComponentActivity() {
                 // step that clears the indicator, so the capsule never ends before the
                 // numbers change.
                 if (backgroundSyncWasActive && !active) {
-                    dashboardViewModel.refreshFromCache()
+                    refreshDashboardAfterSync()
                 }
                 backgroundSyncWasActive = active
                 syncViewModel.setBackgroundSyncActive(active)
@@ -424,7 +441,7 @@ class MainActivity : ComponentActivity() {
                     AppLogger.i("MainActivity", "Skipping automatic launch sync: Health Connect permissions not granted yet")
                 },
                 onCompleted = { success -> syncViewModel.markSyncCompleted(success) },
-                onDashboardRefresh = { dashboardViewModel.refreshFromCache() }
+                onDashboardRefresh = { refreshDashboardAfterSync() }
             )
         }
     }
@@ -487,7 +504,7 @@ class MainActivity : ComponentActivity() {
                         requestGoogleHealthPermissions()
                     },
                     onCompleted = { success -> syncViewModel.markSyncCompleted(success) },
-                    onDashboardRefresh = { dashboardViewModel.refreshFromCache() }
+                    onDashboardRefresh = { refreshDashboardAfterSync() }
                 )
             } finally {
                 manualSyncTriggerInFlight.set(false)

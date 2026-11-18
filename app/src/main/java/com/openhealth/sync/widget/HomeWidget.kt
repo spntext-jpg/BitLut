@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit
  * Home screen widget (sprint 2026-07-14). One tile, on purpose: today's step
  * count, when it was last synced, and a tap-anywhere-to-sync action -- this
  * is the existing Today screen's headline number surfaced one tap closer,
- * not a second UI or a new data source. See CLAUDE.md for why nothing else
+ * not a second UI or a new data source. See agents.md for why nothing else
  * (sleep/HR/SpO2/stress, History, a chart) belongs here even in miniature.
  * Deliberately text-only, no icon: keeps this widget's Glance surface area
  * (and therefore its API-compatibility risk) as small as its scope.

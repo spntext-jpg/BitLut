@@ -2,127 +2,132 @@ package com.openhealth.sync.config
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import org.json.JSONArray
-import org.json.JSONException
 import org.json.JSONObject
 
-/** Meal slots of the Nutrition journal. Stored by [key], so reordering is safe. */
 enum class MealType(val key: String) {
-    BREAKFAST("breakfast"),
-    LUNCH("lunch"),
-    DINNER("dinner"),
-    SNACK("snack");
-
+    BREAKFAST("breakfast"), LUNCH("lunch"), DINNER("dinner"), SNACK("snack");
     companion object {
-        /** Unknown or missing keys fall back to SNACK instead of dropping the entry. */
-        fun fromKey(key: String?): MealType = values().firstOrNull { it.key == key } ?: SNACK
+        fun fromKey(key: String?): MealType = entries.firstOrNull { it.key == key } ?: SNACK
     }
 }
 
-/** One line of the journal. [epochDay] is the local calendar day (`LocalDate.toEpochDay()`). */
+/** Nutrients are a snapshot at logging time, never recomputed after a catalog update. */
 data class FoodEntry(
     val id: Long,
     val epochDay: Long,
     val meal: MealType,
     val name: String,
-    val kcal: Int
-)
+    val kcal: Double,
+    val grams: Double? = null,
+    val protein: Double? = null,
+    val fat: Double? = null,
+    val carbs: Double? = null,
+    val foodId: String? = null
+) {
+    val hasMacros: Boolean get() = protein != null && fat != null && carbs != null
+}
 
-/**
- * The Nutrition tab's food journal (stage 5 of docs/PRODUCT_ROADMAP.md).
- *
- * Local-only by design: entries are typed in by the person, live in this app's
- * private SharedPreferences file, are never uploaded, never written to Health
- * Connect (that would need a new permission) and are excluded from Android
- * backup (`android:allowBackup="false"`). It is a separate file from
- * `HuaweiConfig.PREFS_NAME`, so disconnecting or resetting the Huawei/Google
- * source never touches the journal.
- *
- * Data is small (a handful of entries per day), so the whole list is one JSON
- * array under one key. A corrupt value reads as an empty journal and is
- * replaced on the next write rather than crashing the tab.
- */
-class NutritionJournalPrefs(context: Context) {
-
-    private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(
-        PREFS_NAME,
-        Context.MODE_PRIVATE
-    )
-
-    fun loadAll(): List<FoodEntry> {
-        val raw = prefs.getString(KEY_ENTRIES, null) ?: return emptyList()
-        return try {
-            parse(raw)
-        } catch (_: JSONException) {
-            emptyList()
-        }
-    }
-
-    /** Adds one entry and returns the updated full list. Inputs are clamped to the limits below. */
-    fun add(meal: MealType, epochDay: Long, name: String, kcal: Int): List<FoodEntry> {
-        val current = loadAll()
-        val id = maxOf(System.currentTimeMillis(), (current.maxOfOrNull { it.id } ?: 0L) + 1L)
-        val entry = FoodEntry(
-            id = id,
-            epochDay = epochDay,
-            meal = meal,
-            name = name.trim().take(MAX_NAME_LENGTH),
-            kcal = kcal.coerceIn(MIN_KCAL, MAX_KCAL)
+data class NutritionTotals(
+    val kcal: Double,
+    val protein: Double,
+    val fat: Double,
+    val carbs: Double,
+    val unknownMacros: Int,
+    val entries: Int
+) {
+    companion object {
+        fun of(entries: List<FoodEntry>) = NutritionTotals(
+            kcal = entries.sumOf { it.kcal }, protein = entries.sumOf { it.protein ?: 0.0 },
+            fat = entries.sumOf { it.fat ?: 0.0 }, carbs = entries.sumOf { it.carbs ?: 0.0 },
+            unknownMacros = entries.count { !it.hasMacros }, entries = entries.size
         )
-        return (current + entry).also { save(it) }
     }
+}
 
-    /** Removes the entry with [id] and returns the updated full list. */
-    fun remove(id: Long): List<FoodEntry> {
-        return loadAll().filterNot { it.id == id }.also { save(it) }
-    }
+data class NutritionJournalState(val entries: List<FoodEntry> = emptyList(), val goalKcal: Int = 0, val storageError: Boolean = false)
 
-    private fun parse(raw: String): List<FoodEntry> {
-        val array = JSONArray(raw)
-        val result = ArrayList<FoodEntry>(array.length())
-        for (index in 0 until array.length()) {
-            val item = array.optJSONObject(index) ?: continue
-            val kcal = item.optInt(KEY_KCAL, 0)
-            if (kcal <= 0) continue
-            result.add(
-                FoodEntry(
-                    id = item.optLong(KEY_ID),
-                    epochDay = item.optLong(KEY_DAY),
-                    meal = MealType.fromKey(item.optString(KEY_MEAL)),
-                    name = item.optString(KEY_NAME),
-                    kcal = kcal
-                )
-            )
+/** Local only. Same preference file/key as the original journal; v1 entries migrate on read. */
+class NutritionJournalPrefs(context: Context) {
+    private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun loadAll(): List<FoodEntry> = decode(prefs.getString(KEY_ENTRIES, null) ?: "[]")
+
+    fun state(): Flow<NutritionJournalState> = callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> trySend(Unit) }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        trySend(Unit)
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }.map {
+        try {
+            NutritionJournalState(loadAll(), prefs.getInt("goal_kcal", 0))
+        } catch (_: Exception) {
+            // Fail closed: a damaged journal is never replaced with an empty one.
+            NutritionJournalState(storageError = true)
         }
-        return result
+    }.flowOn(Dispatchers.IO)
+
+    fun setGoal(goal: Int) {
+        require(goal in 0..MAX_KCAL)
+        check(prefs.edit().putInt("goal_kcal", goal).commit()) { "Nutrition goal could not be saved" }
     }
 
-    private fun save(entries: List<FoodEntry>) {
-        val array = JSONArray()
-        for (entry in entries) {
-            array.put(
-                JSONObject()
-                    .put(KEY_ID, entry.id)
-                    .put(KEY_DAY, entry.epochDay)
-                    .put(KEY_MEAL, entry.meal.key)
-                    .put(KEY_NAME, entry.name)
-                    .put(KEY_KCAL, entry.kcal)
-            )
-        }
-        prefs.edit().putString(KEY_ENTRIES, array.toString()).apply()
+    fun upsert(entry: FoodEntry) = synchronized(lock) {
+        validate(entry)
+        val current = loadAll()
+        val id = if (entry.id > 0) entry.id else maxOf(System.currentTimeMillis(), (current.maxOfOrNull { it.id } ?: 0) + 1)
+        val saved = entry.copy(id = id, name = entry.name.trim().take(MAX_NAME_LENGTH))
+        val updated = current.filterNot { it.id == id } + saved
+        check(prefs.edit().putString(KEY_ENTRIES, encode(updated)).commit()) { "Nutrition entry could not be saved" }
+    }
+
+    fun remove(id: Long) = synchronized(lock) {
+        val updated = loadAll().filterNot { it.id == id }
+        check(prefs.edit().putString(KEY_ENTRIES, encode(updated)).commit()) { "Nutrition entry could not be removed" }
     }
 
     companion object {
-        const val MIN_KCAL = 1
+        const val MIN_KCAL = 0
         const val MAX_KCAL = 9999
-        const val MAX_NAME_LENGTH = 60
-
+        const val MAX_NAME_LENGTH = 100
         private const val PREFS_NAME = "bitlut_nutrition_journal"
         private const val KEY_ENTRIES = "entries"
-        private const val KEY_ID = "id"
-        private const val KEY_DAY = "day"
-        private const val KEY_MEAL = "meal"
-        private const val KEY_NAME = "name"
-        private const val KEY_KCAL = "kcal"
+        private val lock = Any()
+
+        internal fun validate(entry: FoodEntry) {
+            require(entry.kcal.isFinite() && entry.kcal in 0.0..MAX_KCAL.toDouble())
+            require(entry.grams == null || entry.grams.isFinite() && entry.grams > 0 && entry.grams <= 5000)
+            require(listOf(entry.protein, entry.fat, entry.carbs).all { it == null || it.isFinite() && it in 0.0..5000.0 })
+            require(entry.grams == null || listOfNotNull(entry.protein, entry.fat, entry.carbs).sum() <= entry.grams + 0.5)
+        }
+
+        internal fun decode(raw: String): List<FoodEntry> {
+            val array = JSONArray(raw)
+            return (0 until array.length()).map { index ->
+                val item = array.getJSONObject(index)
+                fun optional(key: String) = if (!item.has(key) || item.isNull(key)) null else item.getDouble(key)
+                FoodEntry(
+                    id = item.getLong("id"), epochDay = item.getLong("day"),
+                    meal = MealType.fromKey(item.optString("meal")), name = item.optString("name"), kcal = item.getDouble("kcal"),
+                    grams = optional("grams"), protein = optional("protein"), fat = optional("fat"), carbs = optional("carbs"),
+                    foodId = item.optString("foodId").takeIf { it.isNotBlank() }
+                ).also(::validate)
+            }
+        }
+
+        internal fun encode(entries: List<FoodEntry>): String = JSONArray().apply {
+            entries.forEach { entry ->
+                validate(entry)
+                put(JSONObject().put("id", entry.id).put("day", entry.epochDay).put("meal", entry.meal.key)
+                    .put("name", entry.name).put("kcal", entry.kcal).put("grams", entry.grams)
+                    .put("protein", entry.protein).put("fat", entry.fat).put("carbs", entry.carbs).put("foodId", entry.foodId))
+            }
+        }.toString()
     }
 }

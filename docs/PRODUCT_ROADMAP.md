@@ -1,11 +1,15 @@
 # BitLut Product Roadmap
 
-Updated: 2026-10-16
+Updated: 2026-11-18
 
 Scope: the app's screen structure and UI direction. Scaling (Huawei user cap)
 lives in `docs/SCALING_ROADMAP.md`; sync/Health Connect bugs live in
 `docs/BACKLOG.md`. Source code is the source of truth; if this file and the
 code disagree, the code wins.
+
+## November delivery
+
+The October stages below are historical implementation notes. The November owner request supersedes the manual-only journal and permanent dark hero constraints: shared System/Light/Dark roles, 200 offline USDA foods, portion/macronutrient calculation, custom entries, editing, optional calorie target and Today totals are implemented. Optional feature-gated background activity reading supports existing dashboard refresh without blocking export. See `NUTRITION.md`, `GUI_AUDIT_2026_11.md` and `VALIDATION_2026_11.md`; device acceptance remains open. No nutrition export or new Huawei category is introduced.
 
 ## Direction
 
@@ -60,14 +64,14 @@ header (`AugustSyncAction`).
      no new dependency. Nothing is written to Health Connect (that would need a
      new permission, which the constraints above forbid), nothing is uploaded,
      and the app declares `allowBackup="false"`.
-   - `CLAUDE.md` (product boundary) and `docs/PRIVACY_POLICY.md` were updated in
+   - `agents.md` (product boundary) and `docs/PRIVACY_POLICY.md` were updated in
      this stage. Still to do by hand, outside the repo: review the AppGallery
      data declarations before the next store release.
    - No food database: manual entry only (name optional, calories 1 to 9999).
    - Left out on purpose: calorie goal, macros, search, editing an entry (delete
      and re-add instead), browsing forward past today.
 6. **Docs pass (done 2026-10-16).** `CHANGELOG.md`, `SESSION_HANDOFF.md`,
-   `CLAUDE.md`, `CONTEXT.md`, `design.md`, `README.md`, `docs/BACKLOG.md`. The
+   `agents.md`, `context.md`, `design.md`, `README.md`, `docs/BACKLOG.md`. The
    README screenshots were not regenerated: they need real captures.
 
 ## Open questions

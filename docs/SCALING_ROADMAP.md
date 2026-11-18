@@ -122,12 +122,10 @@ Source: [Turn Your App into a Handy Health Assistant](https://dev.to/hmosdevelop
 
 ### What this would fix
 
-Real per-workout active-calorie data, currently unavailable, causing
-`WorkoutCalorieEstimator`'s MET-formula estimate to be the only calorie
-figure BitLut can write (`sync.md` section 4.11). Both call sites
-(`GoogleHealthManager.kt`, `FinalBitLutShell.kt`) already prefer real
-Huawei data over the estimate wherever it's present, via a plain `?:`
-fallback — so adding this scope requires **no code restructuring**, only
+Real per-workout active-calorie data, currently unavailable, leaving the display-only MET estimate as a fallback where no measured
+workout calorie summary exists (`sync.md` section 4.11). BitLut does not
+export estimated workout calories. The display already prefers real
+Huawei data over its estimate — so adding this scope requires **no code restructuring**, only
 adding the scope to the request array and requesting it through the
 Huawei console alongside the existing five.
 

@@ -15,6 +15,10 @@ This document is the sprint contract for Huawei Health -> BitLut -> Android Heal
 | Activity record | Required | `ExerciseSessionRecord` | Export sessions with valid start/end time. |
 | Activity | Required | `ExerciseSessionRecord` or component records | Depends on Huawei payload granularity. |
 
+## November 2026 background-read role
+
+On providers exposing the background-reading feature, BitLut requests optional `READ_HEALTH_DATA_IN_BACKGROUND` to refresh already-authorized activity data from its worker. This adds no record category and never gates Huawei export. Denial keeps foreground reading available and skips worker dashboard reads. No nutrition permission is added; the food catalog/journal stays local. The Health Connect 1.2.0-alpha06 AAR requires compile SDK 37.0 / AGP 9.1.1 / Gradle 9.3.1; see `HEALTH_CONNECT_RECOVERY.md` for the deliberate preview and legacy Kotlin/DSL compatibility decisions.
+
 ## Current production policy
 
 - Huawei import is enabled in `FeatureFlags`.
@@ -74,5 +78,7 @@ BitLut's own dashboard display, which reads the live Huawei snapshot
 directly rather than what was written to Health Connect.
 
 ## Health Connect Activity Intensity
+
+The November 1.2.0-alpha06 pin is for certificate compatibility only and does not enable a new Activity Intensity export path.
 
 `ActivityIntensityRecord` is the correct Health Connect target for active-hours/moderate-to-vigorous activity, but it is not part of the stable 1.1.x API line. Enable it only after the project intentionally moves to the 1.2.x API line and verifies `FEATURE_ACTIVITY_INTENSITY` on target devices.

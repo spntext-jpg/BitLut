@@ -39,9 +39,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.reflect.KClass
 
 private const val TAG = "GoogleHealthManager"
-private const val WRITE_BATCH_SIZE = 400
+private const val WRITE_BATCH_SIZE = 100
 
-internal class HealthConnectTransportException(operation: String, cause: RemoteException) :
+internal class HealthConnectTransportException(operation: String, cause: Exception) :
     Exception("Health Connect transport failure during $operation: ${cause.message}", cause)
 private const val DASHBOARD_HISTORY_DAYS = 30
 private const val WORKOUT_DISTANCE_QUERY_PADDING_SECONDS = 2L * 60L * 60L
@@ -137,7 +137,15 @@ class GoogleHealthManager(
     private val workoutFilterPrefs: com.openhealth.sync.config.WorkoutFilterPrefs = com.openhealth.sync.config.WorkoutFilterPrefs(context)
 ) : HealthConnectManager {
 
-    private val zoneRules by lazy { ZoneId.systemDefault().rules }
+    private val metricVersionPrefs = context.getSharedPreferences("bitlut_metric_versions_v2", Context.MODE_PRIVATE)
+
+    private fun metricVersion(type: String, start: Long, end: Long, value: String): Long {
+        val key = "$type:$start:$end"
+        val stored = metricVersionPrefs.getString(key, null)
+        val next = com.openhealth.sync.util.StableRecordVersion.resolve(stored, value, System.currentTimeMillis())
+        if (next != stored) metricVersionPrefs.edit().putString(key, next).apply()
+        return next.substringBefore('|').toLong()
+    }
 
     // BITLUT_WORKOUT_INTEROP_V1
     // ExerciseSessionRecord intentionally does not carry distance/calorie/step
@@ -321,7 +329,46 @@ class GoogleHealthManager(
         }
     }
 
-    override val permissions: Set<String> = HealthPermissionPolicy.requestPermissions
+    override val permissions: Set<String>
+        get() {
+            val client = healthConnectClient ?: runCatching {
+                HealthConnectClient.getOrCreate(context)
+            }.getOrNull()
+            val available = client?.features?.getFeatureStatus(
+                androidx.health.connect.client.HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND
+            ) == androidx.health.connect.client.HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+            return HealthPermissionPolicy.requestPermissions + if (available) setOf(
+                androidx.health.connect.client.permission.HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
+            ) else emptySet()
+        }
+
+    override suspend fun canReadInBackground(): Boolean =
+        androidx.health.connect.client.permission.HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND in grantedPermissionsOrEmpty()
+
+    override suspend fun exportDiagnostic(): ExportDiagnostic {
+        val client = resolveClient() ?: return ExportDiagnostic(available = false)
+        val granted = grantedPermissionsOrEmpty()
+        val readPermission = androidx.health.connect.client.permission.HealthPermission
+            .getReadPermission(ExerciseSessionRecord::class)
+        if (readPermission !in granted) return ExportDiagnostic(available = true, canRead = false)
+        val response = client.readRecords(
+            ReadRecordsRequest(
+                recordType = ExerciseSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(Instant.now().minusSeconds(7 * 86400L), Instant.now()),
+                dataOriginFilter = setOf(DataOrigin(context.packageName)),
+                ascendingOrder = false,
+                pageSize = 100
+            )
+        )
+        return ExportDiagnostic(
+            available = true,
+            canRead = true,
+            workoutCount = response.records.size,
+            hasMore = !response.pageToken.isNullOrEmpty(),
+            newestEnd = response.records.maxOfOrNull { it.endTime.toEpochMilli() },
+            backgroundRead = canReadInBackground()
+        )
+    }
 
     override fun requiredPermissions(): Set<String> = HealthPermissionPolicy.syncPermissions
 
@@ -552,11 +599,11 @@ class GoogleHealthManager(
     suspend fun writeStepsBatch(records: List<StepData>): Boolean {
         val validSourceRecords = records
             .filter { it.count > 0 && it.startTimeMs < it.endTimeMs }
-        val rawImportVersion = System.currentTimeMillis()
         val valid = validSourceRecords.map {
             val start = Instant.ofEpochMilli(it.startTimeMs)
             val end = Instant.ofEpochMilli(it.endTimeMs)
-            val version = if (it.sourceId != null) dailyStepRecordVersion(it) else rawImportVersion
+            val version = if (it.sourceId != null) dailyStepRecordVersion(it) else
+                metricVersion("steps", it.startTimeMs, it.endTimeMs, it.count.toString())
             StepsRecord(
                 count = it.count,
                 startTime = start,
@@ -627,7 +674,7 @@ class GoogleHealthManager(
             label = "distance",
             records = records,
             recordType = DistanceRecord::class,
-            hasValue = { it.meters > 0.0 },
+            hasValue = { it.meters.isFinite() && it.meters > 0.0 },
             startTimeMs = { it.startTimeMs },
             endTimeMs = { it.endTimeMs },
             toRecord = { data, start, end ->
@@ -637,7 +684,10 @@ class GoogleHealthManager(
                     endTime = end,
                     startZoneOffset = offset(start),
                     endZoneOffset = offset(end),
-                    metadata = bitlutMetadata("distance", start.toEpochMilli(), end.toEpochMilli())
+                    metadata = bitlutMetadata(
+                        "distance", start.toEpochMilli(), end.toEpochMilli(),
+                        version = metricVersion("distance", data.startTimeMs, data.endTimeMs, data.meters.toString())
+                    )
                 )
             }
         )
@@ -647,7 +697,7 @@ class GoogleHealthManager(
             label = "floors",
             records = records,
             recordType = FloorsClimbedRecord::class,
-            hasValue = { it.floors > 0.0 },
+            hasValue = { it.floors.isFinite() && it.floors > 0.0 },
             startTimeMs = { it.startTimeMs },
             endTimeMs = { it.endTimeMs },
             toRecord = { data, start, end ->
@@ -657,7 +707,10 @@ class GoogleHealthManager(
                     endTime = end,
                     startZoneOffset = offset(start),
                     endZoneOffset = offset(end),
-                    metadata = bitlutMetadata("floors", start.toEpochMilli(), end.toEpochMilli())
+                    metadata = bitlutMetadata(
+                        "floors", start.toEpochMilli(), end.toEpochMilli(),
+                        version = metricVersion("floors", data.startTimeMs, data.endTimeMs, data.floors.toString())
+                    )
                 )
             }
         )
@@ -667,7 +720,7 @@ class GoogleHealthManager(
             label = "elevation",
             records = records,
             recordType = ElevationGainedRecord::class,
-            hasValue = { it.meters > 0.0 },
+            hasValue = { it.meters.isFinite() && it.meters > 0.0 },
             startTimeMs = { it.startTimeMs },
             endTimeMs = { it.endTimeMs },
             toRecord = { data, start, end ->
@@ -677,7 +730,10 @@ class GoogleHealthManager(
                     endTime = end,
                     startZoneOffset = offset(start),
                     endZoneOffset = offset(end),
-                    metadata = bitlutMetadata("elevation", start.toEpochMilli(), end.toEpochMilli())
+                    metadata = bitlutMetadata(
+                        "elevation", start.toEpochMilli(), end.toEpochMilli(),
+                        version = metricVersion("elevation", data.startTimeMs, data.endTimeMs, data.meters.toString())
+                    )
                 )
             }
         )
@@ -687,7 +743,7 @@ class GoogleHealthManager(
             label = "activeCalories",
             records = records,
             recordType = ActiveCaloriesBurnedRecord::class,
-            hasValue = { it.kilocalories > 0.0 },
+            hasValue = { it.kilocalories.isFinite() && it.kilocalories > 0.0 },
             startTimeMs = { it.startTimeMs },
             endTimeMs = { it.endTimeMs },
             toRecord = { data, start, end ->
@@ -697,7 +753,10 @@ class GoogleHealthManager(
                     endTime = end,
                     startZoneOffset = offset(start),
                     endZoneOffset = offset(end),
-                    metadata = bitlutMetadata("active_calories", start.toEpochMilli(), end.toEpochMilli())
+                    metadata = bitlutMetadata(
+                        "active_calories", start.toEpochMilli(), end.toEpochMilli(),
+                        version = metricVersion("active_calories", data.startTimeMs, data.endTimeMs, data.kilocalories.toString())
+                    )
                 )
             }
         )
@@ -919,6 +978,60 @@ class GoogleHealthManager(
 
         var allSucceeded = true
         var written = 0
+        val pending = mutableListOf<Record>()
+        var pendingSessions = 0
+
+        suspend fun flush() {
+            if (pending.isEmpty()) return
+            try {
+                // Never split a session from its sub-metrics. One transaction can
+                // hold multiple complete bundles, reducing binder calls and quota use.
+                client.insertRecords(pending.toList())
+                written += pendingSessions
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SecurityException) {
+                invalidateClientCache()
+                throw e
+            } catch (e: Exception) {
+                if (com.openhealth.sync.util.ProviderFailurePolicy.shouldDefer(e)) {
+                    invalidateClientCache()
+                    throw HealthConnectTransportException("workout batch", e)
+                }
+                // Only invalid-data failures get a bounded per-session fallback.
+                // Group by the real interval; no bundle or identity is synthesized.
+                if (e !is IllegalArgumentException) throw HealthConnectTransportException("workout batch", e)
+                for (bundle in pending.groupBy { record ->
+                    when (record) {
+                        is ExerciseSessionRecord -> record.startTime to record.endTime
+                        is DistanceRecord -> record.startTime to record.endTime
+                        is StepsRecord -> record.startTime to record.endTime
+                        is ActiveCaloriesBurnedRecord -> record.startTime to record.endTime
+                        else -> error("Unexpected workout record")
+                    }
+                }.values) {
+                    try {
+                        client.insertRecords(bundle)
+                        written += 1
+                    } catch (cancel: CancellationException) {
+                        throw cancel
+                    } catch (denied: SecurityException) {
+                        invalidateClientCache()
+                        throw denied
+                    } catch (failure: Exception) {
+                        if (com.openhealth.sync.util.ProviderFailurePolicy.shouldDefer(failure)) {
+                            invalidateClientCache()
+                            throw HealthConnectTransportException("workout fallback", failure)
+                        }
+                        if (failure !is IllegalArgumentException) throw HealthConnectTransportException("workout fallback", failure)
+                        allSucceeded = false
+                        AppLogger.e(TAG, "Rejected workout bundle: ${failure.javaClass.simpleName}")
+                    }
+                }
+            }
+            pending.clear()
+            pendingSessions = 0
+        }
 
         for (session in validSessions) {
             persistWorkoutSummary(session)
@@ -1048,32 +1161,12 @@ class GoogleHealthManager(
                 )
             }
 
-            try {
-                client.insertRecords(bundle)
-                written += 1
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: RemoteException) {
-                AppLogger.e(TAG, "Health Connect binder failed while writing activitySessions: ${e.message}", e)
-                invalidateClientCache()
-                throw HealthConnectTransportException("write activitySessions", e)
-            } catch (e: SecurityException) {
-                AppLogger.e(TAG, "write activitySessions denied by Health Connect: ${e.message}", e)
-                invalidateClientCache()
-                throw e
-            } catch (e: Exception) {
-                // One malformed/overlapping Huawei session must not prevent
-                // unrelated valid workouts in the same sync from being written.
-                allSucceeded = false
-                AppLogger.e(
-                    TAG,
-                    "Workout bundle write failed: start=${session.startTimeMs} end=${session.endTimeMs} " +
-                        "type=${session.exerciseType} error=${e.message}",
-                    e
-                )
-            }
+            if (pending.size + bundle.size > WRITE_BATCH_SIZE) flush()
+            pending += bundle
+            pendingSessions += 1
         }
 
+        flush()
         AppLogger.i(TAG, "Workout bundles written: $written/${validSessions.size}")
         return allSucceeded
     }
@@ -1117,6 +1210,10 @@ class GoogleHealthManager(
             invalidateClientCache()
             throw e
         } catch (e: Exception) {
+            if (com.openhealth.sync.util.ProviderFailurePolicy.shouldDefer(e)) {
+                invalidateClientCache()
+                throw HealthConnectTransportException("write $label", e)
+            }
             AppLogger.e(TAG, "write $label failed: ${e.message}", e)
             false
         }
@@ -1452,7 +1549,11 @@ class GoogleHealthManager(
             dataOriginFilter = origins
         ).forEach { record ->
             val date = record.startTime.atZone(zone).toLocalDate()
-            if (date in stepsByDay) stepsByDay[date] = (stepsByDay[date] ?: 0L) + record.count
+            // Huawei daily summation already includes its workout steps.
+            // Retain workout records for session readers without adding them twice here.
+            val sessionScoped = isHuaweiBridgeSourceSelected() &&
+                record.metadata.clientRecordId.orEmpty().startsWith("bitlut_exercise_steps_")
+            if (!sessionScoped && date in stepsByDay) stepsByDay[date] = (stepsByDay[date] ?: 0L) + record.count
             val startMs = record.startTime.toEpochMilli()
             val endMs = record.endTime.toEpochMilli()
             displayedWorkouts.forEach { session ->
@@ -1684,7 +1785,7 @@ class GoogleHealthManager(
      * Sequential (not parallel) by design: this only runs on an explicit,
      * infrequent user tap, so the ~3x daysBack Health Connect calls it makes
      * are not a rate-limit concern the way a call inside load() would be
-     * (see CLAUDE.md Gotcha 4) -- correctness and simplicity here matter
+     * (see agents.md Gotcha 4) -- correctness and simplicity here matter
      * more than shaving a second off a manual export.
      */
     suspend fun readDailyTotals(daysBack: Int = 30): List<DailyTotal> {
@@ -1953,5 +2054,5 @@ class GoogleHealthManager(
         device = bitlutRecordingDevice
     )
 
-    private fun offset(instant: Instant): ZoneOffset = zoneRules.getOffset(instant)
+    private fun offset(instant: Instant): ZoneOffset = ZoneId.systemDefault().rules.getOffset(instant)
 }

@@ -1,22 +1,21 @@
 # BitLut Backlog
 
-Updated: 2026-10-16
+Updated: 2026-11-18
 
 ## Highest priority
 
-- **Open verification: 2026-10-15/16 UI sprint, on a real phone, in light and dark themes.** None of it has been seen rendered. Check: (1) the navbar with four labels, including the Russian "Тренировки" on a narrow phone (labels shrink from 11sp to 9sp, then ellipsize), and the dumbbell and fork-and-knife glyph shapes; (2) the Today hero panel: greeting size next to the two 48dp buttons, the status line, and the white stat tiles on the dark hero in the dark theme (if they glare, change the tile background in `HeroStatTile`); (3) the 250dp loading skeleton against the real hero height (estimated, not measured); (4) the Nutrition add dialog with the keyboard open, deleting an entry, and day browsing; (5) the eight starter Workouts tips (`workout_tip_*`) for tone and accuracy. Before the next store release, also update the AppGallery data declarations for the local food journal.
-- **Open verification: Google Health workouts (2026-10-08, OnePlus 7 Pro).** Workout sessions are now read from Google Fit AND Google Health (`com.fitbit.FitbitMobile`) origins; confirm on the device that workouts appear. If not, read the one-time in-app log line listing the exercise-session origins in Health Connect and adjust the origin family from that evidence. Do not extend daily totals to a second origin without it.
-- **Open verification: corporate wellness app sync failures ("binder died" / rate-limit errors after ~2 minutes), reported late August/early September 2026.** In addition to the Google Health 5.05 connection regression (fixed in 5.07), code review found a concrete BitLut churn amplifier: every 30-minute daily-step reconcile deleted all BitLut `StepsRecord`s across the 7-day Huawei window, including workout-scoped Steps introduced on 2026-08-30, then recreated them. The 2026-09-16 v2 fix removes that range delete, gives unchanged daily totals stable versions, and defers Health Connect binder failures to WorkManager backoff. Phone verification is still required before calling this incident resolved; do not change workout serialization/metadata meanwhile.
-- **New candidate cause added to the same open investigation (2026-09-16 (b)): fallback workout-title language.** Paulo observed the corporate reader's failures coincide with BitLut's fallback workout titles (used only when Huawei supplies no name) switching from English to Russian text. As an experiment, `HuaweiWorkoutTypeMapper.exportDisplayName()` now always writes English fallback titles to Health Connect regardless of device locale, while the existing `localizedDisplayName()` (dashboard-only) is unchanged. Not yet confirmed -- awaiting a real-device retest with the corporate reader. If this does not resolve the failures, revert the two call sites in `HuaweiHealthManager.kt`/`HuaweiExportParser.kt` back to `localizedDisplayName()`.
-- **Scaling: submit Huawei Health Kit Verification** to lift the 100-user test-phase cap -- the top current scaling goal. See `docs/SCALING_ROADMAP.md` section 2 for the concrete action items (~15 working day review, no code changes required).
-- **Scaling: request `HEALTHKIT_CALORIES_READ`** scope for real per-workout active-calorie data -- Basic-tier, individual-developer-reachable, no Enterprise account needed. See `docs/SCALING_ROADMAP.md` section 3.
-- Add focused unit tests for `HuaweiWorkoutTypeMapper` and workout metric selection.
-- Add screenshot/UI tests for Summary, Settings, dashboard editor, light mode and dark mode.
-- Walking-steps undercount: awaiting a real-device diagnostic log showing `ActivitySummary.dataSummary`'s actual contents for a failing activity before attempting a structural fix (see `sync.md` section 8, `SESSION_HANDOFF.md`).
+- November recovery device acceptance remains open: compare actual BitLut-origin Health Connect records with a timestamped corporate-reader run. See `HEALTH_CONNECT_RECOVERY.md`; the corporate code/logs were not supplied.
+- Validate the deliberate Health Connect 1.2.0-alpha06 exception on Android 13 APK and Android 14+ platform providers, including Huawei auth, background export, permission denial and corrected source values.
+- Run push/PR CI and the device matrix in `VALIDATION_2026_11.md`; source checks do not establish rendering or corporate import.
+- Nutrition migration, decimal input, all macro states, offline catalog, edit/delete/undo and immediate Today totals need device acceptance. Review store declarations before release.
+- Review optional background-read declarations/consent and distinguish export success from cache freshness.
+- Historical fallbacks remain unresolved without new evidence: per-workout Huawei steps may be absent; the prior English-title experiment is not proof of a reader bug; Google daily origins still require device evidence before expansion.
+- Existing raw continuous Distance records may overlap workout records; broad distance deduplication is not claimed by this patch. Preserve exact session values and obtain real source intervals before changing representation.
+- Huawei verification/user-cap and calorie-scope console work remains in `SCALING_ROADMAP.md`.
 
 ## Nice to have
 
-- Nutrition follow-ups, only if wanted: a daily calorie goal, comparing eaten with burned calories, editing an entry, a food database (that would need a source and a privacy review).
+- Nutrition: profile long-term journal growth before introducing a transactional database; preserve history in any migration.
 - Workouts: replace or extend the starter tips; one `WorkoutTip` line plus two strings per language per tip.
 - Split `FinalBitLutShell.kt` into screen files only when there is a concrete maintenance benefit; do not refactor just for file size.
 - Revisit adaptive/large-screen layout after phone UI is stable.

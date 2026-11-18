@@ -12,7 +12,7 @@ import com.openhealth.sync.data.remote.HuaweiConfig
  *
  * ACTIVITY_RINGS was removed (2026-08): steps synced reliably, but Huawei's
  * per-category scope approval left activeCalories denied on real devices
- * far more often than not (see CLAUDE.md / HuaweiAuthFailureReason), and
+ * far more often than not (see agents.md / HuaweiAuthFailureReason), and
  * active-minutes only has data on days with a logged workout session rather
  * than ambient activity -- so in practice 2 of the 3 rings usually sat empty
  * regardless of how active the day actually was. A 3-ring visual promising

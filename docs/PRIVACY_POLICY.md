@@ -26,7 +26,11 @@ BitLut does not create mock steps, distance, workout sessions, elevation, or pla
 
 ## Nutrition journal
 
-The Nutrition tab lets you type in meals and calories yourself. These entries are stored only in BitLut's private storage on your device. BitLut does not upload them, does not write them to Android Health Connect, does not read them from Huawei Health, and does not include them in Android app backups. They are removed when you delete them in the app, clear BitLut's app data or uninstall BitLut.
+The Nutrition tab contains an offline reference catalog of 200 common foods and dishes. You can search it, enter portion weights, calculate calories and protein/fat/carbohydrates, add custom foods, edit your log and set an optional daily calorie target. Searches and calculations stay on the device. These entries are stored only in BitLut's private storage on your device. BitLut does not upload them, does not write them to Android Health Connect, does not read them from Huawei Health, and does not include them in Android app backups. They are removed when you delete them in the app, clear BitLut's app data or uninstall BitLut.
+
+## Optional background access
+
+On supported Health Connect versions BitLut may ask for permission to read already-authorized activity data in the background to refresh its dashboard. Denying it does not prevent Huawei data export. The shared-workout check reads a bounded set of BitLut-written exercise records locally; it cannot inspect another app or confirm corporate import.
 
 ## Local processing
 

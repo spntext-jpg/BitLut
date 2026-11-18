@@ -263,7 +263,7 @@ class HuaweiHealthManager(
             // authorization is only treated as fully denied if EVERY
             // category comes back denied with zero successes, which
             // re-throws below so SyncWorker's existing 50005 handling still
-            // fires correctly for that genuine case. See CLAUDE.md Gotcha 14.
+            // fires correctly for that genuine case. See agents.md Gotcha 14.
             var anySucceeded = false
             var anyScopeDenied = false
             val deniedCategories = mutableListOf<String>()

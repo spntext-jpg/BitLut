@@ -49,8 +49,8 @@ val hasReleaseSigning = releaseKeystorePath.isNotBlank() &&
 android {
     namespace = "com.openhealth.sync"
     compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
+        version = release(37) {
+            minorApiLevel = 0
         }
     }
 
@@ -132,6 +132,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3:material3-adaptive-navigation-suite")
@@ -151,9 +153,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     implementation("androidx.appcompat:appcompat:1.8.0")
 
-    // Android 16 production baseline: Health Connect can now stay on its stable
-    // production line without forcing a one-off toolchain exception.
-    implementation("androidx.health.connect:connect-client:1.1.0")
+    // Deliberate exception to the stable dependency lane: August 2026 provider
+    // certificate/signature fixes are only published in 1.2.0-alpha05/06.
+    // API 37.0 / AGP 9.1.1 are required by its AAR; keep Huawei runtime unchanged.
+    // Legacy DSL/Kotlin compatibility is explicit in gradle.properties.
+    implementation("androidx.health.connect:connect-client:1.2.0-alpha06")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
 
     // Keep the repository-proven Huawei device-side Health Kit artifact. Do not
