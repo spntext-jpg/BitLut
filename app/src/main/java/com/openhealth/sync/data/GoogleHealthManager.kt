@@ -302,7 +302,7 @@ class GoogleHealthManager(
             // already resolved the client while we were waiting.
             cachedClient.get()?.let { return@withLock it }
 
-            if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) {
+            if (HealthConnectSdkAvailability.read(context) != HealthConnectSdkAvailability.AVAILABLE) {
                 AppLogger.w(TAG, "Health Connect SDK is not available")
                 return@withLock null
             }
@@ -334,9 +334,7 @@ class GoogleHealthManager(
             val client = healthConnectClient ?: runCatching {
                 HealthConnectClient.getOrCreate(context)
             }.getOrNull()
-            val available = client?.features?.getFeatureStatus(
-                androidx.health.connect.client.HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND
-            ) == androidx.health.connect.client.HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+            val available = client != null && HealthConnectSdkAvailability.supportsBackgroundRead(client)
             return HealthPermissionPolicy.requestPermissions + if (available) setOf(
                 androidx.health.connect.client.permission.HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
             ) else emptySet()
@@ -373,7 +371,7 @@ class GoogleHealthManager(
     override fun requiredPermissions(): Set<String> = HealthPermissionPolicy.syncPermissions
 
     override fun getStatus(): HealthConnectStatus {
-        val sdkStatus = HealthConnectClient.getSdkStatus(context)
+        val sdkStatus = HealthConnectSdkAvailability.read(context)
         val installedPackage = findInstalledHcPackage()
 
         AppLogger.i(
@@ -382,9 +380,10 @@ class GoogleHealthManager(
         )
 
         return when (sdkStatus) {
-            HealthConnectClient.SDK_AVAILABLE -> HealthConnectStatus.AVAILABLE
-            HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> HealthConnectStatus.NEEDS_UPDATE
-            else -> if (installedPackage != null) HealthConnectStatus.NEEDS_UPDATE else HealthConnectStatus.NOT_INSTALLED
+            HealthConnectSdkAvailability.AVAILABLE -> HealthConnectStatus.AVAILABLE
+            HealthConnectSdkAvailability.UPDATE_REQUIRED -> HealthConnectStatus.NEEDS_UPDATE
+            HealthConnectSdkAvailability.UNAVAILABLE ->
+                if (installedPackage != null) HealthConnectStatus.NEEDS_UPDATE else HealthConnectStatus.NOT_INSTALLED
         }
     }
 
